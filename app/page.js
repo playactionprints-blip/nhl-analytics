@@ -1,13 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import App from '../PlayerCard';
 
+export const revalidate = 0;
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
 export default async function Home() {
-  const { data: players } = await supabase
+  const { data: players, error } = await supabase
     .from('players')
     .select('*')
     .order('pts', { ascending: false })
