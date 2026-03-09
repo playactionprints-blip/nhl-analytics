@@ -262,7 +262,7 @@ function RadarViz({ percentiles, color }) {
 function PlayerCard({ player }) {
   const [tab, setTab] = useState("overview");
   const accent = player.teamColor;
-  const ptsPer82 = Math.round((player.pts / player.gp) * 82);
+  const ptsPer82 = player.gp > 0 ? Math.round((player.pts / player.gp) * 82) : 0;
 
   const tabs = ["overview", "on-ice", "war / rapm"];
 
@@ -336,7 +336,7 @@ function PlayerCard({ player }) {
               {player.lastName}
             </div>
             <div style={{ marginTop: 5, fontSize: 11, color: "#4a6a88", fontFamily: "'DM Mono', monospace" }}>
-              {player.teamFull} · {player.age} yrs · {player.height} · {player.shoots}H
+              {player.teamFull}{player.age ? ` · ${player.age} yrs` : ''}{player.height ? ` · ${player.height}` : ''}{player.shoots ? ` · ${player.shoots}H` : ''}
             </div>
           </div>
         </div>
@@ -353,7 +353,7 @@ function PlayerCard({ player }) {
           textAlign: "center",
           zIndex: 2,
         }}>
-          <div style={{ fontSize: 20, fontWeight: 900, color: "#00e5a0", lineHeight: 1 }}>{player.war}</div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: "#00e5a0", lineHeight: 1 }}>{player.war ?? '—'}</div>
           <div style={{ fontSize: 9, color: "#00e5a088", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>WAR</div>
         </div>
       </div>
@@ -396,8 +396,8 @@ function PlayerCard({ player }) {
               <StatBox label="PTS" value={player.pts} highlight />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 20 }}>
-              <StatBox label="PPP"  value={player.ppp} />
-              <StatBox label="+/-"  value={`${player.plusMinus > 0 ? "+" : ""}${player.plusMinus}`} />
+              <StatBox label="PPP"  value={player.ppp ?? '—'} />
+              <StatBox label="+/-"  value={player.plusMinus != null ? `${player.plusMinus > 0 ? '+' : ''}${player.plusMinus}` : '—'} />
               <StatBox label="Pts/82" value={ptsPer82} highlight />
             </div>
 
@@ -430,7 +430,7 @@ function PlayerCard({ player }) {
               { label: "xGF% (Exp. Goals For)", value: player.xgf_pct, baseline: 50 },
               { label: "HDCF% (High Danger)", value: player.hdcf_pct, baseline: 50 },
               { label: "SCF% (Scoring Chances)", value: player.scf_pct, baseline: 50 },
-            ].map(stat => (
+            ].filter(stat => stat.value != null).map(stat => (
               <div key={stat.label} style={{ marginBottom: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                   <span style={{ fontSize: 11, color: "#8899aa", fontFamily: "'DM Mono', monospace" }}>{stat.label}</span>
@@ -471,14 +471,14 @@ function PlayerCard({ player }) {
           <div>
             {/* WAR breakdown */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 20 }}>
-              <StatBox label="Total WAR" value={player.war} highlight />
-              <StatBox label="Off WAR" value={player.war_off} />
-              <StatBox label="Def WAR" value={player.war_def} />
+              <StatBox label="Total WAR" value={player.war ?? '—'} highlight />
+              <StatBox label="Off WAR" value={player.war_off ?? '—'} />
+              <StatBox label="Def WAR" value={player.war_def ?? '—'} />
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 20 }}>
-              <StatBox label="RAPM Off" value={`+${player.rapm_off}`} />
-              <StatBox label="RAPM Def" value={`+${player.rapm_def}`} />
+              <StatBox label="RAPM Off" value={player.rapm_off != null ? `+${player.rapm_off}` : '—'} />
+              <StatBox label="RAPM Def" value={player.rapm_def != null ? `+${player.rapm_def}` : '—'} />
             </div>
 
             {/* WAR definitions */}
@@ -490,14 +490,16 @@ function PlayerCard({ player }) {
             </div>
 
             {/* WAR trend chart */}
-            <div>
-              <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14 }}>
-                WAR Trend (Last 4 Seasons)
+            {player.warTrend?.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14 }}>
+                  WAR Trend (Last 4 Seasons)
+                </div>
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  <WARTrendMini data={player.warTrend} color={accent} />
+                </div>
               </div>
-              <div style={{ display: "flex", justifyContent: "center" }}>
-                <WARTrendMini data={player.warTrend} color={accent} />
-              </div>
-            </div>
+            )}
 
             {/* Source tags */}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 20 }}>
@@ -540,9 +542,10 @@ function PlayerCard({ player }) {
 }
 
 // ── App Shell ───────────────────────────────────────────────────────────────
-export default function App() {
-  const [selectedId, setSelectedId] = useState(PLAYERS[0].id);
-  const player = PLAYERS.find(p => p.id === selectedId);
+export default function App({ players: propPlayers }) {
+  const DATA = propPlayers?.length ? propPlayers : PLAYERS;
+  const [selectedId, setSelectedId] = useState(DATA[0].id);
+  const player = DATA.find(p => p.id === selectedId) || DATA[0];
 
   return (
     <>
@@ -577,7 +580,7 @@ export default function App() {
 
         {/* Player selector */}
         <div style={{ display: "flex", gap: 10, marginBottom: 32, flexWrap: "wrap", justifyContent: "center" }}>
-          {PLAYERS.map(p => (
+          {DATA.map(p => (
             <button
               key={p.id}
               onClick={() => setSelectedId(p.id)}
