@@ -13,5 +13,16 @@ export default async function Home() {
     .order('pts', { ascending: false })
     .limit(25);
 
-  return <App players={players || []} />;
+  const safePlayers = (players || []).map(p => ({
+    ...p,
+    percentiles: p.percentiles || {},
+    warTrend: p.warTrend || [],
+    teamColor: p.teamColor || '#4a6a88',
+    initials: `${(p.first_name||'?')[0]}${(p.last_name||'?')[0]}`,
+    name: p.full_name,
+    firstName: p.first_name,
+    lastName: p.last_name,
+  }));
+
+  return <App players={safePlayers} />;
 }
