@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import PlayerCard from '../PlayerCard';
+import App from '../PlayerCard';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -7,12 +7,11 @@ const supabase = createClient(
 );
 
 export default async function Home() {
-  const { data: players, error } = await supabase
+  const { data: players } = await supabase
     .from('players')
     .select('*')
-    .limit(3);
+    .order('pts', { ascending: false })
+    .limit(25);
 
-  console.log('players:', players, 'error:', error);
-
-  return <PlayerCard />;
+  return <App players={players || []} />;
 }
