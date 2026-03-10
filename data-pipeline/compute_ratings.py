@@ -16,15 +16,37 @@ SEASON_WEIGHTS = {'25-26': 0.50, '24-25': 0.30, '23-24': 0.20}
 CURRENT_SEASON  = '25-26'
 
 # ── Fetch data ────────────────────────────────────────────────────────────────
-print("Fetching player_seasons...")
-ps_rows = sb.table('player_seasons').select(
-    'player_id,season,gp,toi,g,a1,a2,ixg,icf,tka,gva,xgf_pct,hdcf_pct,cf_pct,scf_pct,fow,fol'
-).execute().data
-print(f"  {len(ps_rows)} season rows")
+SEASONS = ['25-26', '24-25', '23-24']
+PS_COLS = 'player_id,season,gp,toi,g,a1,a2,ixg,icf,tka,gva,xgf_pct,hdcf_pct,cf_pct,scf_pct,fow,fol'
 
-print("Fetching players...")
+print("Fetching player_seasons (per-season to avoid row limit)...")
+ps_rows = []
+for s in SEASONS:
+    batch = sb.table('player_seasons').select(PS_COLS).eq('season', s).execute().data
+    ps_rows.extend(batch)
+    print(f"  {s}: {len(batch)} rows")
+print(f"  Total: {len(ps_rows)} season rows")
+
+print("Fetching players + RAPM...")
 player_info = {p['player_id']: p for p in
                sb.table('players').select('player_id,full_name,position').execute().data}
+
+# Fetch RAPM values (columns may not exist if build_rapm.py hasn't run yet)
+rapm_lookup = {}
+try:
+    rapm_rows = sb.table('players').select('player_id,rapm_off,rapm_def').execute().data
+    for r in rapm_rows:
+        if r.get('rapm_off') is not None or r.get('rapm_def') is not None:
+            rapm_lookup[r['player_id']] = {
+                'rapm_off': r.get('rapm_off'),
+                'rapm_def': r.get('rapm_def'),
+            }
+    print(f"  {len(rapm_lookup)} players with RAPM data")
+except Exception as e:
+    print(f"  RAPM columns not found — run build_rapm.py first ({e})")
+    print("  SQL to add columns:")
+    print("    alter table players add column if not exists rapm_off float8;")
+    print("    alter table players add column if not exists rapm_def float8;")
 
 
 def safe(v):
@@ -105,6 +127,7 @@ for pid, season_data in seasons_by_player.items():
         total_fo = fow + fol
         fo_pct   = (fow / total_fo * 100) if total_fo > 20 else None
 
+    rapm = rapm_lookup.get(pid, {})
     records.append({
         'player_id': pid,
         'full_name': info['full_name'],
@@ -120,6 +143,8 @@ for pid, season_data in seasons_by_player.items():
         'hdcf_pct':  round(hdcf_n / hdcf_d, 4) if hdcf_d > 0 else None,
         'cf_pct':    round(cf_n   / cf_d,   4) if cf_d   > 0 else None,
         'fo_pct':    fo_pct,
+        'rapm_off':  safe(rapm.get('rapm_off')),
+        'rapm_def':  safe(rapm.get('rapm_def')),
     })
 
 df = pd.DataFrame(records)
@@ -134,13 +159,15 @@ def pct_rank(series):
 def compute_group(subdf, is_defense):
     subdf = subdf.copy()
 
-    # Offensive rating — ixG/60 35%, A1/60 25%, Pts/60 20%, iCF/60 10%, xGF% 10%
+    # Offensive rating — ixG/60 30%, A1/60 22%, Pts/60 18%, iCF/60 10%, xGF% 10%, RAPM-off 10%
+    # Note: RAPM weight is conservative (10%) due to single-season data noise
     OFF_WEIGHTS = {
-        'ixg_60':  0.35,
-        'a1_60':   0.25,
-        'pts_60':  0.20,
-        'icf_60':  0.10,
-        'xgf_pct': 0.10,
+        'ixg_60':   0.30,
+        'a1_60':    0.22,
+        'pts_60':   0.18,
+        'icf_60':   0.10,
+        'xgf_pct':  0.10,
+        'rapm_off': 0.10,
     }
     for col in OFF_WEIGHTS:
         if col in subdf.columns:
@@ -157,14 +184,16 @@ def compute_group(subdf, is_defense):
 
     subdf['off_rating'] = subdf.apply(weighted_off, axis=1)
 
-    # Defensive rating — xGF% 30%, HDCF% 30%, CF% 15%, TKA/60 15%, GVA/60 inv 10%
+    # Defensive rating — xGF% 26%, HDCF% 26%, RAPM-def 15%, CF% 13%, TKA/60 12%, GVA/60 inv 8%
+    # Note: RAPM weight is conservative (15%) due to single-season data noise
     subdf['gva_inv'] = subdf['gva_60'] * -1
     DEF_WEIGHTS = {
-        'xgf_pct':  0.30,
-        'hdcf_pct': 0.30,
-        'cf_pct':   0.15,
-        'tka_60':   0.15,
-        'gva_inv':  0.10,
+        'xgf_pct':  0.26,
+        'hdcf_pct': 0.26,
+        'rapm_def': 0.15,
+        'cf_pct':   0.13,
+        'tka_60':   0.12,
+        'gva_inv':  0.08,
     }
     for col in DEF_WEIGHTS:
         if col in subdf.columns:
@@ -203,7 +232,7 @@ final    = pd.concat([forwards, defense])
 print(f"Ratings computed for {len(final)} players")
 
 # ── Leaderboards ──────────────────────────────────────────────────────────────
-print("\n--- TOP 15 OVERALL ---")
+print("\n--- TOP 15 OVERALL (with RAPM) ---")
 print(final[['full_name','position','off_rating','def_rating','overall_rating']]
       .sort_values('overall_rating', ascending=False).head(15).to_string())
 

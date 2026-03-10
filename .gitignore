@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+data-pipeline/data/stints_2526.csv
+data-pipeline/data/game_ids_2526.json
+data-pipeline/data/build_rapm_log.txt
+data-pipeline/data/failed_games_2526.json
+data-pipeline/__pycache__/
