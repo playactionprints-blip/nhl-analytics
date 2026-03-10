@@ -322,6 +322,50 @@ function PlayerCard({ player }) {
             </div>
           </div>
         )}
+
+        {!isGoalie && tab === "ratings" && (
+          <div>
+            {/* Overall rating — large centered number */}
+            <div style={{ textAlign:"center", marginBottom:24 }}>
+              <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Overall Rating</div>
+              <div style={{ fontSize:72, fontWeight:900, lineHeight:1, color: pctColor(player.overall_rating ?? 0) }}>
+                {player.overall_rating != null ? Math.round(player.overall_rating) : "—"}
+              </div>
+              <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", marginTop:4 }}>out of 100</div>
+            </div>
+
+            {/* Off / Def side by side */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:20 }}>
+              <StatBox label="Offensive Rating" value={player.off_rating != null ? Math.round(player.off_rating) : null} highlight />
+              <StatBox label="Defensive Rating" value={player.def_rating != null ? Math.round(player.def_rating) : null} />
+            </div>
+
+            {/* Three rating bars */}
+            {[
+              { label:"Overall",    value: player.overall_rating },
+              { label:"Offensive",  value: player.off_rating },
+              { label:"Defensive",  value: player.def_rating },
+            ].filter(r => r.value != null).map(r => (
+              <div key={r.label} style={{ marginBottom:14 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                  <span style={{ fontSize:11, color:"#8899aa", fontFamily:"'DM Mono',monospace" }}>{r.label}</span>
+                  <span style={{ fontSize:13, fontWeight:700, color:pctColor(r.value), fontFamily:"'DM Mono',monospace" }}>{r.value.toFixed(1)}</span>
+                </div>
+                <div style={{ height:8, background:"#1a2535", borderRadius:4, overflow:"hidden" }}>
+                  <div style={{ width:`${r.value}%`, height:"100%", background:`linear-gradient(90deg,${pctColor(r.value)}88,${pctColor(r.value)})`, borderRadius:4, transition:"width 0.8s cubic-bezier(0.22,1,0.36,1)" }} />
+                </div>
+              </div>
+            ))}
+
+            {/* Methodology note */}
+            <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px", marginTop:8 }}>
+              <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6 }}>Methodology</div>
+              <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>
+                Ratings are composite 0–100 scores derived from on-ice shot share, scoring rate, and contextual adjustments. Compared against position peers.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer */}
