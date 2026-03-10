@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip,
+         LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 
 // ── Team metadata ────────────────────────────────────────────────────────────
 const TEAM_COLOR = {
@@ -357,13 +358,31 @@ function PlayerCard({ player }) {
               </div>
             ))}
 
-            {/* Methodology note */}
-            <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px", marginTop:8 }}>
-              <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6 }}>Methodology</div>
-              <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>
-                Ratings are composite 0–100 scores derived from on-ice shot share, scoring rate, and contextual adjustments. Compared against position peers.
-              </p>
-            </div>
+            {/* Season trend chart */}
+            {(player.ratings_trend?.length > 1) && (
+              <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px", marginTop:8 }}>
+                <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:10 }}>3-Season Trend</div>
+                <div style={{ display:"flex", gap:14, marginBottom:8 }}>
+                  {[["Overall","#e8f4ff"],["Offensive","#00e5a0"],["Defensive","#f08040"]].map(([l,c]) => (
+                    <div key={l} style={{ display:"flex", alignItems:"center", gap:5 }}>
+                      <div style={{ width:16, height:2, background:c, borderRadius:1 }} />
+                      <span style={{ fontSize:9, color:"#5a7a99", fontFamily:"'DM Mono',monospace" }}>{l}</span>
+                    </div>
+                  ))}
+                </div>
+                <ResponsiveContainer width="100%" height={120}>
+                  <LineChart data={player.ratings_trend} margin={{ top:4, right:8, left:-24, bottom:0 }}>
+                    <CartesianGrid stroke="#1e2d40" strokeDasharray="3 3" />
+                    <XAxis dataKey="season" tick={{ fontSize:9, fill:"#5a7a99", fontFamily:"DM Mono,monospace" }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize:9, fill:"#5a7a99", fontFamily:"DM Mono,monospace" }} />
+                    <Tooltip contentStyle={{ background:"#0a1520", border:"1px solid #1e2d40", borderRadius:6, fontSize:11, fontFamily:"DM Mono,monospace" }} labelStyle={{ color:"#8899aa" }} itemStyle={{ padding:1 }} />
+                    <Line type="monotone" dataKey="overall"  stroke="#e8f4ff" strokeWidth={2} dot={{ r:3, fill:"#e8f4ff" }} name="Overall" />
+                    <Line type="monotone" dataKey="off"      stroke="#00e5a0" strokeWidth={2} dot={{ r:3, fill:"#00e5a0" }} name="Offensive" />
+                    <Line type="monotone" dataKey="def"      stroke="#f08040" strokeWidth={2} dot={{ r:3, fill:"#f08040" }} name="Defensive" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -395,11 +414,17 @@ function TeamGrid({ onSelectTeam, selectedTeam }) {
 }
 
 // ── Stats Table ───────────────────────────────────────────────────────────────
-function StatsTable({ players, onSelectPlayer, selectedId }) {
+function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
   const [sortKey, setSortKey] = useState('pts');
   const [sortDir, setSortDir] = useState('desc');
   const [posFilter, setPosFilter] = useState('S');
   const [tableSearch, setTableSearch] = useState('');
+  const [selectedSeason, setSelectedSeason] = useState('players'); // 'players' | '25-26' | '24-25' | '23-24'
+
+  // Use season-specific data when a historical season is selected
+  const activePlayers = selectedSeason === 'players'
+    ? players
+    : (seasonStats?.[selectedSeason] || []);
 
   const COLS = [
     { key:'full_name',      sortKey:'full_name',      label:'Player',  align:'left'   },
@@ -434,7 +459,7 @@ function StatsTable({ players, onSelectPlayer, selectedId }) {
     return parseInt(parts[0]) + (parseInt(parts[1]) || 0) / 60;
   }
 
-  const enriched = useMemo(() => players.map(p => ({ ...p, toi_min: parseToi(p.toi) })), [players]);
+  const enriched = useMemo(() => activePlayers.map(p => ({ ...p, toi_min: parseToi(p.toi) })), [activePlayers]);
 
   const filtered = useMemo(() => {
     let list = enriched;
@@ -495,6 +520,15 @@ function StatsTable({ players, onSelectPlayer, selectedId }) {
             </button>
           ))}
         </div>
+        {/* Season selector */}
+        <div style={{ display:'flex', gap:4 }}>
+          {[['players','Current'],['25-26','25–26'],['24-25','24–25'],['23-24','23–24']].map(([v,l]) => (
+            <button key={v} onClick={() => { setSelectedSeason(v); setSortKey(v==='players'?'pts':'pts'); }}
+              style={{ padding:'6px 12px', background:selectedSeason===v?'#334466':'#0d1825', border:`1px solid ${selectedSeason===v?'#5577aa':'#1e2d40'}`, borderRadius:6, color:selectedSeason===v?'#c8dff0':'#4a6a88', fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer', transition:'all 0.2s' }}>
+              {l}
+            </button>
+          ))}
+        </div>
         <span style={{ fontSize:11, color:'#2a4060', fontFamily:"'DM Mono',monospace" }}>{filtered.length} players</span>
       </div>
 
@@ -536,7 +570,7 @@ function StatsTable({ players, onSelectPlayer, selectedId }) {
 }
 
 // ── App Shell ────────────────────────────────────────────────────────────────
-export default function App({ players: propPlayers }) {
+export default function App({ players: propPlayers, seasonStats }) {
   const allPlayers = propPlayers?.length ? propPlayers : [];
   const [search, setSearch] = useState("");
   const [selectedTeam, setSelectedTeam] = useState(null);
@@ -613,6 +647,7 @@ export default function App({ players: propPlayers }) {
           <div style={{ width:"100%", maxWidth:1400, marginBottom:24 }}>
             <StatsTable
               players={allPlayers}
+              seasonStats={seasonStats}
               onSelectPlayer={p => setSelectedPlayer(prev => prev?.player_id === p.player_id ? null : p)}
               selectedId={selectedPlayer?.player_id}
             />
