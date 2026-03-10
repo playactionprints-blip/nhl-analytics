@@ -184,7 +184,7 @@ function PlayerCard({ player }) {
   const pts = player.pts ?? 0;
   const gp = player.gp ?? 0;
   const ptsPer82 = gp > 0 ? Math.round((pts / gp) * 82) : 0;
-  const tabs = isGoalie ? ["goalie stats"] : ["overview", "on-ice", "war / rapm"];
+  const tabs = isGoalie ? ["goalie stats"] : ["overview", "on-ice", "war / rapm", "ratings"];
 
   return (
     <div style={{ width:420, background:"linear-gradient(160deg,#0c1a28 0%,#081016 100%)", borderRadius:16, border:"1px solid #1e2d40", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
