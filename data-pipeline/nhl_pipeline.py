@@ -39,7 +39,7 @@ DATA_DIR.mkdir(exist_ok=True)
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
-CURRENT_SEASON = "20242025"
+CURRENT_SEASON = "20252026"
 
 # ── NHL API helpers ───────────────────────────────────────────────────────────
 
@@ -118,6 +118,52 @@ def get_player_stats(player_id: int) -> dict:
         "toi":  current.get("avgToi", "0:00"),
         "plus_minus": current.get("plusMinus", 0),
     }
+
+
+def fetch_all_stats():
+    """Fetch current-season stats for every player in Supabase and update the players table."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("✗ Set SUPABASE_URL and SUPABASE_KEY env vars first")
+        return
+
+    from supabase import create_client
+    import time
+    sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+    # Fetch all player IDs
+    all_players = sb.table("players").select("player_id,full_name").execute().data
+    print(f"Fetching stats for {len(all_players)} players (season {CURRENT_SEASON})...")
+
+    updated = skipped = errors = 0
+    for i, p in enumerate(all_players):
+        pid = p["player_id"]
+        try:
+            stats = get_player_stats(pid)
+            data = {
+                "gp":          stats["gp"],
+                "g":           stats["g"],
+                "a":           stats["a"],
+                "pts":         stats["pts"],
+                "toi":         stats["toi"],
+                "plus_minus":  stats["plus_minus"],
+                "shoots":      stats["shoots"],
+                "birth_date":  stats["birth_date"],
+                "nationality": stats["nationality"],
+                "height_cm":   stats["height_cm"],
+                "weight_kg":   stats["weight_kg"],
+            }
+            sb.table("players").update(data).eq("player_id", pid).execute()
+            updated += 1
+        except Exception as e:
+            errors += 1
+            if errors <= 5:
+                print(f"  ✗ {p['full_name']} ({pid}): {e}")
+
+        if (i + 1) % 50 == 0:
+            print(f"  {i + 1}/{len(all_players)} processed...")
+        time.sleep(0.05)  # gentle rate limit
+
+    print(f"\n✓ Done. Updated: {updated} | Errors: {errors}")
 
 
 def fetch_full_roster() -> pd.DataFrame:
@@ -296,6 +342,7 @@ create index if not exists players_position_idx on players(position);
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NHL Analytics Pipeline")
     parser.add_argument("--fetch-roster", action="store_true", help="Pull all active players from NHL API")
+    parser.add_argument("--fetch-stats",  action="store_true", help="Pull current-season stats for all players in Supabase")
     parser.add_argument("--merge",        action="store_true", help="Merge NHL data with NST + EH CSVs")
     parser.add_argument("--upload",       action="store_true", help="Upload merged data to Supabase")
     parser.add_argument("--schema",       action="store_true", help="Print Supabase SQL schema")
@@ -304,6 +351,8 @@ if __name__ == "__main__":
 
     if args.schema:
         print(SUPABASE_SQL)
+    elif args.fetch_stats:
+        fetch_all_stats()
     elif args.fetch_roster or args.all:
         fetch_full_roster()
         if args.all:
