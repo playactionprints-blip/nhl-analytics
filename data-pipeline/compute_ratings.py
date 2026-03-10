@@ -101,15 +101,29 @@ def compute_group(subdf, is_defense):
 
     subdf['off_rating'] = subdf.apply(weighted_off, axis=1)
 
-    # Defensive percentiles (invert gva so fewer = better)
+    # Defensive percentiles — weighted: xGF% 30%, HDCF% 30%, CF% 15%, TKA/60 15%, GVA/60 inv 10%
     subdf['gva_inv'] = subdf['gva_60'] * -1
-    def_cols = ['hdcf_pct', 'cf_pct', 'tka_60', 'gva_inv']
-    def_pcts = []
-    for col in def_cols:
+    DEF_WEIGHTS = {
+        'xgf_pct':  0.30,
+        'hdcf_pct': 0.30,
+        'cf_pct':   0.15,
+        'tka_60':   0.15,
+        'gva_inv':  0.10,
+    }
+    for col in DEF_WEIGHTS:
         if col in subdf.columns:
             subdf[f'dp_{col}'] = pct_rank(subdf[col])
-            def_pcts.append(f'dp_{col}')
-    subdf['def_rating'] = subdf[def_pcts].mean(axis=1, skipna=True).round(1)
+
+    def weighted_def(row):
+        total_w, total_v = 0.0, 0.0
+        for col, w in DEF_WEIGHTS.items():
+            v = row.get(f'dp_{col}')
+            if pd.notna(v):
+                total_v += v * w
+                total_w += w
+        return round(total_v / total_w, 1) if total_w > 0 else None
+
+    subdf['def_rating'] = subdf.apply(weighted_def, axis=1)
 
     # Faceoff bonus for centers (max +3)
     fo_bonus = pd.Series(0.0, index=subdf.index)
@@ -130,8 +144,12 @@ defense   = compute_group(df[df['position'] == 'D'], is_defense=True)
 final     = pd.concat([forwards, defense])
 
 print(f"Ratings computed for {len(final)} players")
+print("\n--- TOP 20 OVERALL ---")
 print(final[['full_name','position','off_rating','def_rating','overall_rating']]
       .sort_values('overall_rating', ascending=False).head(20).to_string())
+print("\n--- TOP 10 DEFENSIVE ---")
+print(final[['full_name','position','off_rating','def_rating','overall_rating']]
+      .sort_values('def_rating', ascending=False).head(10).to_string())
 
 updated = 0
 skipped = 0
