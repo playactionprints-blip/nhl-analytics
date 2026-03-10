@@ -394,6 +394,147 @@ function TeamGrid({ onSelectTeam, selectedTeam }) {
   );
 }
 
+// ── Stats Table ───────────────────────────────────────────────────────────────
+function StatsTable({ players, onSelectPlayer, selectedId }) {
+  const [sortKey, setSortKey] = useState('pts');
+  const [sortDir, setSortDir] = useState('desc');
+  const [posFilter, setPosFilter] = useState('S');
+  const [tableSearch, setTableSearch] = useState('');
+
+  const COLS = [
+    { key:'full_name',      sortKey:'full_name',      label:'Player',  align:'left'   },
+    { key:'team',           sortKey:'team',            label:'Team',    align:'left'   },
+    { key:'position',       sortKey:'position',        label:'Pos',     align:'center' },
+    { key:'gp',             sortKey:'gp',              label:'GP',      align:'right'  },
+    { key:'g',              sortKey:'g',               label:'G',       align:'right'  },
+    { key:'a',              sortKey:'a',               label:'A',       align:'right'  },
+    { key:'pts',            sortKey:'pts',             label:'PTS',     align:'right',  bold:true },
+    { key:'plus_minus',     sortKey:'plus_minus',      label:'+/-',     align:'right'  },
+    { key:'ppp',            sortKey:'ppp',             label:'PPP',     align:'right'  },
+    { key:'toi',            sortKey:'toi_min',         label:'TOI',     align:'right'  },
+    { key:'cf_pct',         sortKey:'cf_pct',          label:'CF%',     align:'right',  pctStat:true },
+    { key:'xgf_pct',        sortKey:'xgf_pct',         label:'xGF%',   align:'right',  pctStat:true },
+    { key:'hdcf_pct',       sortKey:'hdcf_pct',        label:'HDCF%',  align:'right',  pctStat:true },
+    { key:'scf_pct',        sortKey:'scf_pct',         label:'SCF%',   align:'right',  pctStat:true },
+    { key:'ixg',            sortKey:'ixg',             label:'ixG',     align:'right'  },
+    { key:'icf',            sortKey:'icf',             label:'iCF',     align:'right'  },
+    { key:'tka',            sortKey:'tka',             label:'TKA',     align:'right'  },
+    { key:'gva',            sortKey:'gva',             label:'GVA',     align:'right'  },
+    { key:'blk',            sortKey:'blk',             label:'BLK',     align:'right'  },
+    { key:'hits',           sortKey:'hits',            label:'HITS',    align:'right'  },
+    { key:'off_rating',     sortKey:'off_rating',      label:'OFF',     align:'right',  bold:true, rating:true },
+    { key:'def_rating',     sortKey:'def_rating',      label:'DEF',     align:'right',  bold:true, rating:true },
+    { key:'overall_rating', sortKey:'overall_rating',  label:'OVR',     align:'right',  bold:true, rating:true },
+    { key:'war',            sortKey:'war',             label:'WAR',     align:'right'  },
+  ];
+
+  function parseToi(toi) {
+    if (!toi) return null;
+    const parts = String(toi).split(':');
+    return parseInt(parts[0]) + (parseInt(parts[1]) || 0) / 60;
+  }
+
+  const enriched = useMemo(() => players.map(p => ({ ...p, toi_min: parseToi(p.toi) })), [players]);
+
+  const filtered = useMemo(() => {
+    let list = enriched;
+    if (posFilter === 'S') list = list.filter(p => p.position !== 'G');
+    else if (posFilter === 'F') list = list.filter(p => ['C','L','R'].includes(p.position));
+    else if (posFilter === 'D') list = list.filter(p => p.position === 'D');
+    else if (posFilter === 'G') list = list.filter(p => p.position === 'G');
+    if (tableSearch.trim()) {
+      const q = tableSearch.toLowerCase();
+      list = list.filter(p => (p.full_name||'').toLowerCase().includes(q) || (p.team||'').toLowerCase().includes(q));
+    }
+    return [...list].sort((a, b) => {
+      const av = a[sortKey], bv = b[sortKey];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
+      return sortDir === 'desc' ? -cmp : cmp;
+    });
+  }, [enriched, posFilter, tableSearch, sortKey, sortDir]);
+
+  function handleSort(sk) {
+    if (sortKey === sk) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    else { setSortKey(sk); setSortDir('desc'); }
+  }
+
+  function fmtCell(p, col) {
+    const v = p[col.key];
+    if (v == null) return '—';
+    if (col.key === 'plus_minus') return v > 0 ? `+${v}` : `${v}`;
+    if (col.pctStat) return typeof v === 'number' ? v.toFixed(1) : v;
+    if (col.rating) return typeof v === 'number' ? Math.round(v) : v;
+    if (col.key === 'ixg' || col.key === 'war') return typeof v === 'number' ? v.toFixed(1) : v;
+    return v;
+  }
+
+  function cellColor(p, col) {
+    const v = p[col.key];
+    if (v == null) return '#2a4060';
+    if (col.pctStat) return statColor(v);
+    if (col.rating) return pctColor(v);
+    if (col.key === 'full_name') return '#c8dff0';
+    if (col.key === 'team') return TEAM_COLOR[v] || '#4a6a88';
+    return '#6a8aaa';
+  }
+
+  return (
+    <div style={{ width:'100%' }}>
+      <div style={{ display:'flex', gap:12, marginBottom:14, alignItems:'center', flexWrap:'wrap' }}>
+        <input type="text" placeholder="Filter players or teams..." value={tableSearch}
+          onChange={e => setTableSearch(e.target.value)}
+          style={{ padding:'8px 16px', background:'#0d1825', border:'1px solid #1e2d40', borderRadius:8, color:'#e8f4ff', fontSize:14, fontFamily:"'Barlow Condensed',sans-serif", outline:'none', width:260 }} />
+        <div style={{ display:'flex', gap:4 }}>
+          {[['S','Skaters'],['F','Forwards'],['D','Defense'],['G','Goalies'],['All','All']].map(([v,l]) => (
+            <button key={v} onClick={() => setPosFilter(v)}
+              style={{ padding:'6px 14px', background:posFilter===v?'#0080FF':'#0d1825', border:`1px solid ${posFilter===v?'#0080FF':'#1e2d40'}`, borderRadius:6, color:posFilter===v?'white':'#4a6a88', fontSize:12, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer', transition:'all 0.2s' }}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <span style={{ fontSize:11, color:'#2a4060', fontFamily:"'DM Mono',monospace" }}>{filtered.length} players</span>
+      </div>
+
+      <div style={{ overflowX:'auto', border:'1px solid #1e2d40', borderRadius:10 }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:"'DM Mono',monospace", fontSize:12, minWidth:1400 }}>
+          <thead>
+            <tr style={{ background:'#0a1520' }}>
+              <th style={{ padding:'9px 8px', color:'#2a4060', fontSize:10, fontWeight:400, width:36, borderBottom:'1px solid #1e2d40', textAlign:'center' }}>#</th>
+              {COLS.map(col => (
+                <th key={col.key} onClick={() => handleSort(col.sortKey)}
+                  style={{ padding:'9px 10px', textAlign:col.align, borderBottom:'1px solid #1e2d40', color:sortKey===col.sortKey?'#c8dff0':'#3a5a78', fontSize:10, fontWeight:700, letterSpacing:'0.07em', textTransform:'uppercase', cursor:'pointer', whiteSpace:'nowrap', userSelect:'none', background:sortKey===col.sortKey?'#0d1825':'transparent' }}>
+                  {col.label}{sortKey===col.sortKey ? (sortDir==='desc'?' ↓':' ↑') : ''}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((p, i) => {
+              const isSelected = selectedId === p.player_id;
+              return (
+                <tr key={p.player_id} onClick={() => onSelectPlayer(p)}
+                  style={{ borderBottom:'1px solid #0a1218', cursor:'pointer', background: isSelected ? '#0d2a1a' : i%2===0 ? '#080e17' : '#060b12' }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#0d1825'; }}
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? '#0d2a1a' : i%2===0 ? '#080e17' : '#060b12'; }}>
+                  <td style={{ padding:'6px 8px', textAlign:'center', color:'#2a4060', fontSize:10 }}>{i+1}</td>
+                  {COLS.map(col => (
+                    <td key={col.key} style={{ padding:'6px 10px', textAlign:col.align, color:cellColor(p,col), fontWeight:col.bold && p[col.key] != null ? 700 : 400, whiteSpace:col.key==='full_name'?'nowrap':'normal', fontSize:col.key==='full_name'?13:12, fontFamily:col.key==='full_name'?"'Barlow Condensed',sans-serif":"'DM Mono',monospace" }}>
+                      {fmtCell(p, col)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── App Shell ────────────────────────────────────────────────────────────────
 export default function App({ players: propPlayers }) {
   const allPlayers = propPlayers?.length ? propPlayers : [];
@@ -413,7 +554,7 @@ export default function App({ players: propPlayers }) {
     return list.slice(0, 50);
   }, [allPlayers, selectedTeam, search]);
 
-  const displayPlayer = selectedPlayer || filtered[0] || null;
+  const displayPlayer = browseMode === 'table' ? selectedPlayer : (selectedPlayer || filtered[0] || null);
 
   return (
     <>
@@ -440,7 +581,7 @@ export default function App({ players: propPlayers }) {
 
         {/* Mode toggle */}
         <div style={{ display:"flex", gap:0, marginBottom:20, background:"#0d1825", border:"1px solid #1e2d40", borderRadius:10, overflow:"hidden" }}>
-          {[["search","🔍 Search Players"],["teams","🏒 Browse by Team"]].map(([mode,label]) => (
+          {[["search","🔍 Search Players"],["teams","🏒 Browse by Team"],["table","📊 Stats Table"]].map(([mode,label]) => (
             <button key={mode} onClick={() => setBrowseMode(mode)} style={{ padding:"10px 24px", background:browseMode===mode?"#0080FF":"transparent", border:"none", color:browseMode===mode?"white":"#4a6a88", fontSize:13, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer", transition:"all 0.2s", letterSpacing:"0.03em" }}>
               {label}
             </button>
@@ -467,7 +608,19 @@ export default function App({ players: propPlayers }) {
           </div>
         )}
 
-        {/* Player list */}
+        {/* Stats table mode */}
+        {browseMode === "table" && (
+          <div style={{ width:"100%", maxWidth:1400, marginBottom:24 }}>
+            <StatsTable
+              players={allPlayers}
+              onSelectPlayer={p => setSelectedPlayer(prev => prev?.player_id === p.player_id ? null : p)}
+              selectedId={selectedPlayer?.player_id}
+            />
+          </div>
+        )}
+
+        {/* Player list (search/teams modes only) */}
+        {browseMode !== "table" && (
         <div style={{ display:"flex", gap:8, marginBottom:28, flexWrap:"wrap", justifyContent:"center", maxWidth:800 }}>
           {filtered.map(p => {
             const color = TEAM_COLOR[p.team] || "#4a6a88";
@@ -479,6 +632,7 @@ export default function App({ players: propPlayers }) {
             );
           })}
         </div>
+        )}
 
         {/* Card */}
         {displayPlayer && (
@@ -487,7 +641,7 @@ export default function App({ players: propPlayers }) {
           </div>
         )}
 
-        {filtered.length === 0 && (
+        {browseMode !== "table" && filtered.length === 0 && (
           <div style={{ color:"#2a4060", fontFamily:"'DM Mono',monospace", fontSize:13, marginTop:40 }}>
             No players found. Try a different search.
           </div>
