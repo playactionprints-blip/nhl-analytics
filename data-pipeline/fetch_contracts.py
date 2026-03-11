@@ -84,10 +84,17 @@ for i, (sid, info) in enumerate(spotrac_players.items()):
             if key not in d:
                 d[key] = val.strip()
 
-        avg_raw = d.get('Average Salary', '')
-        cap_m = re.search(r'\$([0-9,]+)', avg_raw)
-        if cap_m:
-            info['cap_hit'] = int(cap_m.group(1).replace(',', ''))
+        # Use the "Cap Hit" card (correct for ELC contracts where AAV != cap hit).
+        # Average Salary is the AAV and may include bonus pools (e.g. Bedard $4.45M AAV vs $950K cap).
+        cap_card = re.search(
+            r'card-title[^>]*>[^<]*Cap Hit[^<]*</h\d>\s*<p class="card-text[^"]*"[^>]*>\s*\$([0-9,]+)',
+            r.text, re.S
+        )
+        if not cap_card:
+            # fallback: prose "carrying a cap hit of $X"
+            cap_card = re.search(r'cap hit of \$([0-9,]+)', r.text, re.I)
+        if cap_card:
+            info['cap_hit'] = int(cap_card.group(1).replace(',', ''))
 
         fa_raw = d.get('Free Agent', '').strip()
         fa_m = re.match(r'(20\d\d)(?:\s*/\s*(UFA|RFA|ELC))?', fa_raw)
