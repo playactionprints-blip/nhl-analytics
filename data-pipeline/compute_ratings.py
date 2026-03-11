@@ -17,7 +17,7 @@ CURRENT_SEASON  = '25-26'
 
 # ── Fetch data ────────────────────────────────────────────────────────────────
 SEASONS = ['25-26', '24-25', '23-24']
-PS_COLS = 'player_id,season,gp,toi,g,a1,a2,ixg,icf,tka,gva,xgf_pct,hdcf_pct,cf_pct,scf_pct,fow,fol'
+PS_COLS = 'player_id,season,gp,toi,g,a1,a2,ixg,icf,tka,gva,xgf_pct,hdcf_pct,cf_pct,scf_pct,fow,fol,cf_pct_pk'
 
 print("Fetching player_seasons (per-season to avoid row limit)...")
 ps_rows = []
@@ -27,7 +27,7 @@ for s in SEASONS:
     print(f"  {s}: {len(batch)} rows")
 print(f"  Total: {len(ps_rows)} season rows")
 
-print("Fetching players + RAPM...")
+print("Fetching players + RAPM + finishing/PP data...")
 player_info = {p['player_id']: p for p in
                sb.table('players').select('player_id,full_name,position').execute().data}
 
@@ -47,6 +47,21 @@ except Exception as e:
     print("  SQL to add columns:")
     print("    alter table players add column if not exists rapm_off float8;")
     print("    alter table players add column if not exists rapm_def float8;")
+
+# Fetch finishing_pct and toi_pp (populated by upload_nst_splits.py)
+extra_lookup = {}
+try:
+    extra_rows = sb.table('players').select('player_id,finishing_pct,toi_pp').execute().data
+    for r in extra_rows:
+        fp  = r.get('finishing_pct')
+        tpp = r.get('toi_pp')
+        if fp is not None or tpp is not None:
+            extra_lookup[r['player_id']] = {'finishing_pct': fp, 'toi_pp': tpp}
+    fp_count  = sum(1 for v in extra_lookup.values() if v.get('finishing_pct') is not None)
+    tpp_count = sum(1 for v in extra_lookup.values() if v.get('toi_pp') is not None)
+    print(f"  {fp_count} players with finishing_pct, {tpp_count} with toi_pp")
+except Exception as e:
+    print(f"  Could not fetch finishing_pct/toi_pp ({e}) — run upload_nst_splits.py first")
 
 
 def safe(v):
@@ -79,8 +94,8 @@ for pid, season_data in seasons_by_player.items():
     # Accumulators for weighted raw stats
     w_toi60 = 0.0
     w_g = w_a1 = w_ixg = w_icf = w_tka = w_gva = w_pts = 0.0
-    xgf_n = hdcf_n = cf_n = 0.0
-    xgf_d = hdcf_d = cf_d = 0.0
+    xgf_n = hdcf_n = cf_n = cf_pk_n = 0.0
+    xgf_d = hdcf_d = cf_d = cf_pk_d = 0.0
 
     for season_key, row in season_data.items():
         w   = SEASON_WEIGHTS.get(season_key, 0.0)
@@ -115,6 +130,11 @@ for pid, season_data in seasons_by_player.items():
             cf_n += w * t60 * cf
             cf_d += w * t60
 
+        cf_pk = safe(row.get('cf_pct_pk'))
+        if cf_pk is not None:
+            cf_pk_n += w * t60 * cf_pk
+            cf_pk_d += w * t60
+
     if w_toi60 <= 0:
         continue
 
@@ -127,24 +147,28 @@ for pid, season_data in seasons_by_player.items():
         total_fo = fow + fol
         fo_pct   = (fow / total_fo * 100) if total_fo > 20 else None
 
-    rapm = rapm_lookup.get(pid, {})
+    rapm  = rapm_lookup.get(pid, {})
+    extra = extra_lookup.get(pid, {})
     records.append({
-        'player_id': pid,
-        'full_name': info['full_name'],
-        'position':  pos,
-        'goals_60':  round(w_g    / w_toi60, 4),
-        'pts_60':    round(w_pts  / w_toi60, 4),
-        'ixg_60':    round(w_ixg  / w_toi60, 4),
-        'a1_60':     round(w_a1   / w_toi60, 4),
-        'icf_60':    round(w_icf  / w_toi60, 4),
-        'tka_60':    round(w_tka  / w_toi60, 4),
-        'gva_60':    round(w_gva  / w_toi60, 4),
-        'xgf_pct':   round(xgf_n  / xgf_d,  4) if xgf_d  > 0 else None,
-        'hdcf_pct':  round(hdcf_n / hdcf_d, 4) if hdcf_d > 0 else None,
-        'cf_pct':    round(cf_n   / cf_d,   4) if cf_d   > 0 else None,
-        'fo_pct':    fo_pct,
-        'rapm_off':  safe(rapm.get('rapm_off')),
-        'rapm_def':  safe(rapm.get('rapm_def')),
+        'player_id':     pid,
+        'full_name':     info['full_name'],
+        'position':      pos,
+        'goals_60':      round(w_g    / w_toi60, 4),
+        'pts_60':        round(w_pts  / w_toi60, 4),
+        'ixg_60':        round(w_ixg  / w_toi60, 4),
+        'a1_60':         round(w_a1   / w_toi60, 4),
+        'icf_60':        round(w_icf  / w_toi60, 4),
+        'tka_60':        round(w_tka  / w_toi60, 4),
+        'gva_60':        round(w_gva  / w_toi60, 4),
+        'xgf_pct':       round(xgf_n  / xgf_d,  4) if xgf_d  > 0 else None,
+        'hdcf_pct':      round(hdcf_n / hdcf_d, 4) if hdcf_d > 0 else None,
+        'cf_pct':        round(cf_n   / cf_d,   4) if cf_d   > 0 else None,
+        'cf_pct_pk':     round(cf_pk_n / cf_pk_d, 4) if cf_pk_d > 0 else None,
+        'fo_pct':        fo_pct,
+        'finishing_pct': safe(extra.get('finishing_pct')),
+        'toi_pp':        safe(extra.get('toi_pp')),
+        'rapm_off':      safe(rapm.get('rapm_off')),
+        'rapm_def':      safe(rapm.get('rapm_def')),
     })
 
 df = pd.DataFrame(records)
@@ -159,15 +183,18 @@ def pct_rank(series):
 def compute_group(subdf, is_defense):
     subdf = subdf.copy()
 
-    # Offensive rating — ixG/60 33%, A1/60 25%, Pts/60 20%, iCF/60 11%, xGF% 11%
+    # Offensive rating — ixG/60 33%, A1/60 25%, Pts/60 10%, iCF/60 11%,
+    #                    xGF% 11%, finishing_pct 10%
+    # pts_60 reduced from 20%→10% to make room for finishing_pct.
     # RAPM excluded: home-built single-season RAPM is too noisy (~50% game coverage)
     # to reliably rank elite players — Kucherov ranks 15th pct, Megna #1.
     OFF_WEIGHTS = {
-        'ixg_60':  0.33,
-        'a1_60':   0.25,
-        'pts_60':  0.20,
-        'icf_60':  0.11,
-        'xgf_pct': 0.11,
+        'ixg_60':        0.33,
+        'a1_60':         0.25,
+        'pts_60':        0.10,
+        'icf_60':        0.11,
+        'xgf_pct':       0.11,
+        'finishing_pct': 0.10,
     }
     for col in OFF_WEIGHTS:
         if col in subdf.columns:
@@ -184,15 +211,18 @@ def compute_group(subdf, is_defense):
 
     subdf['off_rating'] = subdf.apply(weighted_off, axis=1)
 
-    # Defensive rating — xGF% 31%, HDCF% 31%, CF% 15%, TKA/60 14%, GVA/60 inv 9%
+    # Defensive rating — xGF% 31%, HDCF% 31%, CF% 5v5 5%, TKA/60 14%,
+    #                    GVA/60 inv 9%, CF% PK 10%
+    # CF% 5v5 reduced from 15%→5% to add CF% PK at 10% (PK deployment = elite defenders).
     # RAPM excluded: same reason as above.
     subdf['gva_inv'] = subdf['gva_60'] * -1
     DEF_WEIGHTS = {
-        'xgf_pct':  0.31,
-        'hdcf_pct': 0.31,
-        'cf_pct':   0.15,
-        'tka_60':   0.14,
-        'gva_inv':  0.09,
+        'xgf_pct':   0.31,
+        'hdcf_pct':  0.31,
+        'cf_pct':    0.05,
+        'tka_60':    0.14,
+        'gva_inv':   0.09,
+        'cf_pct_pk': 0.10,
     }
     for col in DEF_WEIGHTS:
         if col in subdf.columns:
@@ -228,22 +258,37 @@ forwards = compute_group(df[df['position'] != 'D'], is_defense=False)
 defense  = compute_group(df[df['position'] == 'D'], is_defense=True)
 final    = pd.concat([forwards, defense])
 
+# PP deployment bonus — max +3 points to overall_rating based on toi_pp rank
+# across ALL skaters (reflects coach trust in offensive deployment)
+if 'toi_pp' in final.columns and final['toi_pp'].notna().any():
+    pp_bonus = (pct_rank(final['toi_pp']) / 100 * 3).fillna(0.0)
+    final['overall_rating'] = (final['overall_rating'] + pp_bonus).round(1)
+    pp_players = final['toi_pp'].notna().sum()
+    print(f"PP bonus applied ({pp_players} players with toi_pp data)")
+
 print(f"Ratings computed for {len(final)} players")
 
 # ── Leaderboards ──────────────────────────────────────────────────────────────
-print("\n--- TOP 15 OVERALL (with RAPM) ---")
+print("\n--- TOP 20 OVERALL ---")
 print(final[['full_name','position','off_rating','def_rating','overall_rating']]
-      .sort_values('overall_rating', ascending=False).head(15).to_string())
+      .sort_values('overall_rating', ascending=False).head(20).to_string())
 
 print("\n--- TOP 10 OFFENSIVE FORWARDS ---")
 fwds = final[final['position'].isin(['C','L','R'])]
-print(fwds[['full_name','position','off_rating','ixg_60','a1_60','pts_60']]
+print(fwds[['full_name','position','off_rating','ixg_60','a1_60','finishing_pct']]
       .sort_values('off_rating', ascending=False).head(10).to_string())
 
 print("\n--- TOP 10 DEFENSIVE DEFENSEMEN ---")
 dmen = final[final['position'] == 'D']
-print(dmen[['full_name','position','def_rating','xgf_pct','hdcf_pct','cf_pct']]
+print(dmen[['full_name','position','def_rating','xgf_pct','hdcf_pct','cf_pct_pk']]
       .sort_values('def_rating', ascending=False).head(10).to_string())
+
+# Tkachuk brothers check
+tkachuk_rows = final[final['full_name'].str.contains('Tkachuk', case=False, na=False)]
+if not tkachuk_rows.empty:
+    print("\n--- TKACHUK BROTHERS ---")
+    print(tkachuk_rows[['full_name','position','off_rating','def_rating','overall_rating',
+                         'finishing_pct']].to_string())
 
 # ── Upload to players table ───────────────────────────────────────────────────
 updated = 0
