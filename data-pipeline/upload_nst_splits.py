@@ -217,8 +217,9 @@ for row in finishing_rows:
     ixg  = safe_float(row.get('ixg'))
     if pid not in skater_ids:
         continue
-    if g is not None and ixg is not None and ixg > 2.0:
-        # ixg > 2.0 min to filter out tiny sample noise
+    if g is not None and ixg is not None and ixg > 5.0:
+        # ixg > 5.0 floor: filters defensemen with 2-3 ixG who distort the leaderboard
+        # Players below threshold get finishing_pct = NULL (excluded from off rating)
         finishing[pid] = g / ixg
 
 if finishing:
@@ -250,7 +251,17 @@ if finishing:
         ratio = finishing.get(pid, 0)
         print(f"  {info.get('full_name','?'):<25}  {ratio:>9.3f}  {pct:>6.1f}")
 
-    print(f"\nUploading finishing_pct for {len(finishing_pcts)} players...")
+    # NULL out all skaters first, then set values only for those above threshold.
+    # This clears stale values from any previous run with a lower threshold.
+    print(f"\nClearing old finishing_pct for all skaters...")
+    cleared = 0
+    for p in all_players:
+        if p.get('position') != 'G':
+            sb.table('players').update({'finishing_pct': None}).eq('player_id', p['player_id']).execute()
+            cleared += 1
+    print(f"  Cleared {cleared} skaters")
+
+    print(f"Uploading finishing_pct for {len(finishing_pcts)} qualifying players (ixG > 5.0)...")
     f_done = 0
     for pid, pct in finishing_pcts.items():
         sb.table('players').update({'finishing_pct': pct}).eq('player_id', pid).execute()

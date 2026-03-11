@@ -186,6 +186,9 @@ def compute_group(subdf, is_defense):
     # Offensive rating — ixG/60 33%, A1/60 25%, Pts/60 10%, iCF/60 11%,
     #                    xGF% 11%, finishing_pct 10%
     # pts_60 reduced from 20%→10% to make room for finishing_pct.
+    # finishing_pct is NULL for players with ixG ≤ 5.0 (low-volume, noisy sample).
+    # weighted_off() skips NULL components and renormalises by total_w, so those
+    # players are not penalised — their 10% is redistributed to the other inputs.
     # RAPM excluded: home-built single-season RAPM is too noisy (~50% game coverage)
     # to reliably rank elite players — Kucherov ranks 15th pct, Megna #1.
     OFF_WEIGHTS = {
