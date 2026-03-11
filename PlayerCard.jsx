@@ -182,6 +182,15 @@ function PlayerCard({ player }) {
   const firstName = player.first_name || player.firstName || "";
   const lastName = player.last_name || player.lastName || "";
   const isGoalie = (player.position || "").toUpperCase() === "G";
+  const age = (() => {
+    const bd = player.birth_date;
+    if (!bd) return player.age ?? null;
+    const today = new Date();
+    const birth = new Date(bd);
+    let a = today.getFullYear() - birth.getFullYear();
+    if (today < new Date(today.getFullYear(), birth.getMonth(), birth.getDate())) a--;
+    return a;
+  })();
   const pts = player.pts ?? 0;
   const gp = player.gp ?? 0;
   const ptsPer82 = gp > 0 ? Math.round((pts / gp) * 82) : 0;
@@ -206,7 +215,7 @@ function PlayerCard({ player }) {
           <div style={{ flex:1 }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
               <span style={{ fontSize:11, color:accent, fontFamily:"'DM Mono',monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
-                {player.jersey ? `#${player.jersey}` : ""}{player.position ? ` · ${player.position}` : ""}
+                {player.jersey ? `#${player.jersey}` : ""}{player.position ? ` · ${player.position}` : ""}{age ? ` · ${age} yrs` : ""}
               </span>
             </div>
             <div style={{ fontSize:26, fontWeight:800, color:"#e8f4ff", lineHeight:1, letterSpacing:"-0.5px" }}>{firstName}</div>
@@ -261,10 +270,23 @@ function PlayerCard({ player }) {
               <StatBox label="+/-" value={player.plus_minus != null ? `${player.plus_minus > 0 ? "+" : ""}${player.plus_minus}` : null} />
               <StatBox label="Pts/82" value={ptsPer82 || null} highlight />
             </div>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:player.contract_info?.cap_hit ? 8 : 16, padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
               <span style={{ fontSize:11, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Avg TOI</span>
               <span style={{ fontSize:20, fontWeight:800, color:accent }}>{player.toi || "—"}</span>
             </div>
+            {player.contract_info?.cap_hit && (
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+                <span style={{ fontSize:11, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Cap Hit</span>
+                <div style={{ textAlign:"right" }}>
+                  <span style={{ fontSize:20, fontWeight:800, color:accent }}>${(player.contract_info.cap_hit / 1_000_000).toFixed(2)}M</span>
+                  {player.contract_info.expiry && (
+                    <span style={{ display:"block", fontSize:10, color:"#4a6a88", fontFamily:"'DM Mono',monospace" }}>
+                      {player.contract_info.expiry}{player.contract_info.years_remaining != null ? ` · ${player.contract_info.years_remaining}yr rem.` : ""}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             <div style={{ marginBottom:4 }}>
               <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Percentile Profile vs. Forwards</div>
               <RadarViz percentiles={player.percentiles} color={accent} />
