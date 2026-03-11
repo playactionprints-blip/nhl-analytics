@@ -159,15 +159,15 @@ def pct_rank(series):
 def compute_group(subdf, is_defense):
     subdf = subdf.copy()
 
-    # Offensive rating — ixG/60 30%, A1/60 22%, Pts/60 18%, iCF/60 10%, xGF% 10%, RAPM-off 10%
-    # Note: RAPM weight is conservative (10%) due to single-season data noise
+    # Offensive rating — ixG/60 33%, A1/60 25%, Pts/60 20%, iCF/60 11%, xGF% 11%
+    # RAPM excluded: home-built single-season RAPM is too noisy (~50% game coverage)
+    # to reliably rank elite players — Kucherov ranks 15th pct, Megna #1.
     OFF_WEIGHTS = {
-        'ixg_60':   0.30,
-        'a1_60':    0.22,
-        'pts_60':   0.18,
-        'icf_60':   0.10,
-        'xgf_pct':  0.10,
-        'rapm_off': 0.10,
+        'ixg_60':  0.33,
+        'a1_60':   0.25,
+        'pts_60':  0.20,
+        'icf_60':  0.11,
+        'xgf_pct': 0.11,
     }
     for col in OFF_WEIGHTS:
         if col in subdf.columns:
@@ -184,16 +184,15 @@ def compute_group(subdf, is_defense):
 
     subdf['off_rating'] = subdf.apply(weighted_off, axis=1)
 
-    # Defensive rating — xGF% 26%, HDCF% 26%, RAPM-def 15%, CF% 13%, TKA/60 12%, GVA/60 inv 8%
-    # Note: RAPM weight is conservative (15%) due to single-season data noise
+    # Defensive rating — xGF% 31%, HDCF% 31%, CF% 15%, TKA/60 14%, GVA/60 inv 9%
+    # RAPM excluded: same reason as above.
     subdf['gva_inv'] = subdf['gva_60'] * -1
     DEF_WEIGHTS = {
-        'xgf_pct':  0.26,
-        'hdcf_pct': 0.26,
-        'rapm_def': 0.15,
-        'cf_pct':   0.13,
-        'tka_60':   0.12,
-        'gva_inv':  0.08,
+        'xgf_pct':  0.31,
+        'hdcf_pct': 0.31,
+        'cf_pct':   0.15,
+        'tka_60':   0.14,
+        'gva_inv':  0.09,
     }
     for col in DEF_WEIGHTS:
         if col in subdf.columns:
