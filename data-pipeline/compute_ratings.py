@@ -34,12 +34,14 @@ player_info = {p['player_id']: p for p in
 # Fetch RAPM values (columns may not exist if build_rapm.py hasn't run yet)
 rapm_lookup = {}
 try:
-    rapm_rows = sb.table('players').select('player_id,rapm_off,rapm_def').execute().data
+    rapm_rows = sb.table('players').select('player_id,rapm_off,rapm_def,rapm_off_pct,rapm_def_pct').execute().data
     for r in rapm_rows:
         if r.get('rapm_off') is not None or r.get('rapm_def') is not None:
             rapm_lookup[r['player_id']] = {
-                'rapm_off': r.get('rapm_off'),
-                'rapm_def': r.get('rapm_def'),
+                'rapm_off':     r.get('rapm_off'),
+                'rapm_def':     r.get('rapm_def'),
+                'rapm_off_pct': r.get('rapm_off_pct'),
+                'rapm_def_pct': r.get('rapm_def_pct'),
             }
     print(f"  {len(rapm_lookup)} players with RAPM data")
 except Exception as e:
@@ -169,6 +171,8 @@ for pid, season_data in seasons_by_player.items():
         'toi_pp':        safe(extra.get('toi_pp')),
         'rapm_off':      safe(rapm.get('rapm_off')),
         'rapm_def':      safe(rapm.get('rapm_def')),
+        'rapm_off_pct':  safe(rapm.get('rapm_off_pct')),
+        'rapm_def_pct':  safe(rapm.get('rapm_def_pct')),
     })
 
 df = pd.DataFrame(records)
@@ -183,20 +187,17 @@ def pct_rank(series):
 def compute_group(subdf, is_defense):
     subdf = subdf.copy()
 
-    # Offensive rating — ixG/60 33%, A1/60 25%, Pts/60 10%, iCF/60 11%,
-    #                    xGF% 11%, finishing_pct 10%
-    # pts_60 reduced from 20%→10% to make room for finishing_pct.
-    # finishing_pct is NULL for players with ixG ≤ 5.0 (low-volume, noisy sample).
-    # weighted_off() skips NULL components and renormalises by total_w, so those
-    # players are not penalised — their 10% is redistributed to the other inputs.
-    # RAPM excluded: home-built single-season RAPM is too noisy (~50% game coverage)
-    # to reliably rank elite players — Kucherov ranks 15th pct, Megna #1.
+    # Offensive rating — ixG/60 35%, A1/60 25%, Pts/60 10%, iCF/60 10%,
+    #                    xGF% 10%, finishing_pct 10%
+    # RAPM_off excluded: ridge RAPM with alpha=100 shrinks elite players toward zero
+    # (McDavid/Kucherov score ~52nd pct because they face tougher competition).
+    # Adding it at any meaningful weight displaces McDavid/MacKinnon from the top.
     OFF_WEIGHTS = {
-        'ixg_60':        0.33,
+        'ixg_60':        0.35,
         'a1_60':         0.25,
         'pts_60':        0.10,
-        'icf_60':        0.11,
-        'xgf_pct':       0.11,
+        'icf_60':        0.10,
+        'xgf_pct':       0.10,
         'finishing_pct': 0.10,
     }
     for col in OFF_WEIGHTS:
@@ -214,18 +215,21 @@ def compute_group(subdf, is_defense):
 
     subdf['off_rating'] = subdf.apply(weighted_off, axis=1)
 
-    # Defensive rating — xGF% 31%, HDCF% 31%, CF% 5v5 5%, TKA/60 14%,
-    #                    GVA/60 inv 9%, CF% PK 10%
-    # CF% 5v5 reduced from 15%→5% to add CF% PK at 10% (PK deployment = elite defenders).
-    # RAPM excluded: same reason as above.
+    # Defensive rating — xGF% 27%, HDCF% 27%, RAPM_def 10%, TKA/60 14%,
+    #                    CF% PK 10%, GVA/60 inv 9%, CF% 5v5 3%
+    # rapm_def_pct added at 10% — a small individual-level signal to supplement
+    # the on-ice% metrics. Defensive RAPM is more reliable than offensive RAPM
+    # (Josi=91st, Raddysh=89th — both sensible). xgf_pct/hdcf_pct reduced from
+    # 31%→27% each to make room; cf_pct reduced 5%→3%.
     subdf['gva_inv'] = subdf['gva_60'] * -1
     DEF_WEIGHTS = {
-        'xgf_pct':   0.31,
-        'hdcf_pct':  0.31,
-        'cf_pct':    0.05,
-        'tka_60':    0.14,
-        'gva_inv':   0.09,
-        'cf_pct_pk': 0.10,
+        'xgf_pct':      0.27,
+        'hdcf_pct':     0.27,
+        'cf_pct':       0.03,
+        'tka_60':       0.14,
+        'gva_inv':      0.09,
+        'cf_pct_pk':    0.10,
+        'rapm_def_pct': 0.10,
     }
     for col in DEF_WEIGHTS:
         if col in subdf.columns:
