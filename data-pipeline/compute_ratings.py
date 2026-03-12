@@ -275,6 +275,69 @@ if 'toi_pp' in final.columns and final['toi_pp'].notna().any():
 
 print(f"Ratings computed for {len(final)} players")
 
+# ── WAR Computation ────────────────────────────────────────────────────────────
+print("\nComputing WAR...")
+
+GOALS_PER_WIN     = 6.0
+REPLACEMENT_LEVEL = -0.15   # xG/60 below average = replacement level
+PP_AVG_XGF_PER_60 = 2.8    # league avg PP xGF/60
+PK_AVG_XGA_PER_60 = 2.4    # league avg PK xGA/60
+
+# Fetch current-season TOI splits and PP/PK xG (populated by upload_nst_splits.py)
+splits_rows   = sb.table('players').select(
+    'player_id,toi_5v5,toi_pp,toi_pk,xgf_pp,xga_pk').execute().data
+splits_lookup = {r['player_id']: r for r in splits_rows}
+
+war_data = {}   # player_id → dict of WAR components (or {} if missing RAPM/splits)
+for _, row in final.iterrows():
+    pid        = row['player_id']
+    sp         = splits_lookup.get(pid, {})
+    rapm_off_v = safe(row.get('rapm_off'))
+    rapm_def_v = safe(row.get('rapm_def'))
+    toi_5v5    = safe(sp.get('toi_5v5'))   # minutes
+    toi_pp_sp  = safe(sp.get('toi_pp'))    # minutes
+    toi_pk_sp  = safe(sp.get('toi_pk'))    # minutes
+    xgf_pp_v   = safe(sp.get('xgf_pp'))
+    xga_pk_v   = safe(sp.get('xga_pk'))
+
+    if rapm_off_v is None or rapm_def_v is None or not toi_5v5:
+        war_data[pid] = {}
+        continue
+
+    h5     = toi_5v5 / 60.0
+    ev_off = (rapm_off_v - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
+    ev_def = (rapm_def_v - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
+
+    pp_war = 0.0
+    if toi_pp_sp and toi_pp_sp > 0 and xgf_pp_v is not None:
+        pp_war = (xgf_pp_v / toi_pp_sp * 60 - PP_AVG_XGF_PER_60) * (toi_pp_sp / 60.0) / GOALS_PER_WIN
+
+    pk_war = 0.0
+    if toi_pk_sp and toi_pk_sp > 0 and xga_pk_v is not None:
+        pk_war = (PK_AVG_XGA_PER_60 - xga_pk_v / toi_pk_sp * 60) * (toi_pk_sp / 60.0) / GOALS_PER_WIN
+
+    war_data[pid] = {
+        'war_ev_off': round(ev_off, 2),
+        'war_ev_def': round(ev_def, 2),
+        'war_pp':     round(pp_war, 2),
+        'war_pk':     round(pk_war, 2),
+        'war_total':  round(ev_off + ev_def + pp_war + pk_war, 2),
+    }
+
+# Print top-20 WAR leaderboard
+name_pos = {row['player_id']: (row['full_name'], row['position']) for _, row in final.iterrows()}
+war_list = sorted(
+    [(pid, d) for pid, d in war_data.items() if d.get('war_total') is not None],
+    key=lambda x: x[1]['war_total'], reverse=True
+)
+print(f"\n--- TOP 20 WAR ---")
+print(f"  {'Player':<26}  {'Pos':>3}  {'EV Off':>7}  {'EV Def':>7}  {'PP':>6}  {'PK':>6}  {'Total':>7}")
+print(f"  {'-'*26}  {'-'*3}  {'-'*7}  {'-'*7}  {'-'*6}  {'-'*6}  {'-'*7}")
+for pid, d in war_list[:20]:
+    name, pos = name_pos.get(pid, ('?', '?'))
+    print(f"  {name:<26}  {pos:>3}  {d['war_ev_off']:>7.2f}  {d['war_ev_def']:>7.2f}"
+          f"  {d['war_pp']:>6.2f}  {d['war_pk']:>6.2f}  {d['war_total']:>7.2f}")
+
 # ── Leaderboards ──────────────────────────────────────────────────────────────
 print("\n--- TOP 20 OVERALL ---")
 print(final[['full_name','position','off_rating','def_rating','overall_rating']]
@@ -315,6 +378,15 @@ for _, row in final.iterrows():
         'def_rating':     None if pd.isna(dff) else float(dff),
         'overall_rating': None if pd.isna(ovr) else float(ovr),
     }
+    war = war_data.get(row['player_id'], {})
+    if war:
+        data.update({
+            'war_total':  war.get('war_total'),
+            'war_ev_off': war.get('war_ev_off'),
+            'war_ev_def': war.get('war_ev_def'),
+            'war_pp':     war.get('war_pp'),
+            'war_pk':     war.get('war_pk'),
+        })
     result = sb.table('players').update(data).eq('player_id', row['player_id']).execute()
     if result.data:
         updated += 1

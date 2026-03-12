@@ -77,6 +77,36 @@ function StatBox({ label, value, highlight }) {
   );
 }
 
+function RapmBox({ label, value, pct, subtitle }) {
+  const color = value != null ? (value >= 0 ? "#00e5a0" : "#e05050") : "#4a6a88";
+  const sign  = value != null && value >= 0 ? "+" : "";
+  return (
+    <div style={{ background:"#0d1825", border:`1px solid ${color}44`, borderRadius:6, padding:"10px 12px" }}>
+      <div style={{ fontSize:10, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>{label}</div>
+      <div style={{ fontSize:20, fontWeight:800, color, fontFamily:"'Barlow Condensed',sans-serif", lineHeight:1 }}>
+        {value != null ? `${sign}${value.toFixed(4)}` : "—"}
+      </div>
+      <div style={{ fontSize:9, color:"#5a7a99", fontFamily:"'DM Mono',monospace", marginTop:3 }}>{subtitle}</div>
+      {pct != null && (
+        <>
+          <div style={{ fontSize:10, color, fontFamily:"'DM Mono',monospace", marginTop:4 }}>
+            {Math.round(pct)}th percentile among skaters
+          </div>
+          <div style={{ height:4, background:"#1a2535", borderRadius:2, marginTop:5, position:"relative", overflow:"hidden" }}>
+            <div style={{ position:"absolute", left:"50%", top:0, bottom:0, width:1, background:"#2a3d55", zIndex:1 }} />
+            <div style={{
+              position:"absolute",
+              left:  pct >= 50 ? "50%" : `${pct}%`,
+              width: pct >= 50 ? `${pct - 50}%` : `${50 - pct}%`,
+              height:"100%", background:color, opacity:0.8, borderRadius:2,
+            }} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function RadarViz({ percentiles, color }) {
   const entries = Object.entries(percentiles || {});
   if (!entries.length) return (
@@ -237,7 +267,7 @@ function PlayerCard({ player }) {
             </>
           ) : (
             <>
-              <div style={{ fontSize:20, fontWeight:900, color:"#00e5a0", lineHeight:1 }}>{player.war ?? "—"}</div>
+              <div style={{ fontSize:20, fontWeight:900, color:"#00e5a0", lineHeight:1 }}>{player.war_total != null ? player.war_total.toFixed(1) : "—"}</div>
               <div style={{ fontSize:9, color:"#00e5a088", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em" }}>WAR</div>
             </>
           )}
@@ -325,21 +355,34 @@ function PlayerCard({ player }) {
 
         {!isGoalie && tab === "war / rapm" && (
           <div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:20 }}>
-              <StatBox label="Total WAR" value={player.war} highlight />
-              <StatBox label="Off WAR" value={player.war_off} />
-              <StatBox label="Def WAR" value={player.war_def} />
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:20 }}>
-              <StatBox label="RAPM Off" value={player.rapm_off != null ? `+${player.rapm_off}` : null} />
-              <StatBox label="RAPM Def" value={player.rapm_def != null ? `+${player.rapm_def}` : null} />
+            {/* WAR boxes — colored by total WAR magnitude */}
+            {(() => {
+              const wt = player.war_total;
+              const wtColor = wt == null ? "#4a6a88" : wt > 2.0 ? "#00e5a0" : wt >= 0.5 ? "#f0c040" : "#e05050";
+              return (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:16 }}>
+                  <div style={{ background:wt != null ? `${wtColor}12` : "#0d1825", border:`1px solid ${wt != null ? `${wtColor}55` : "#1e2d40"}`, borderRadius:6, padding:"10px 12px", textAlign:"center" }}>
+                    <div style={{ fontSize:22, fontWeight:800, color:wtColor, fontFamily:"'Barlow Condensed',sans-serif", lineHeight:1 }}>
+                      {wt != null ? wt.toFixed(2) : "—"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#5a7a99", marginTop:3, fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Total WAR</div>
+                  </div>
+                  <StatBox label="EV Off WAR" value={player.war_ev_off != null ? player.war_ev_off.toFixed(2) : null} />
+                  <StatBox label="EV Def WAR" value={player.war_ev_def != null ? player.war_ev_def.toFixed(2) : null} />
+                </div>
+              );
+            })()}
+            {/* RAPM boxes with percentile + centered bar */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:16 }}>
+              <RapmBox label="RAPM OFF" value={player.rapm_off} pct={player.rapm_off_pct} subtitle="xG/60 above avg" />
+              <RapmBox label="RAPM DEF" value={player.rapm_def} pct={player.rapm_def_pct} subtitle="xG/60 above avg" />
             </div>
             <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px", marginBottom:16 }}>
-              <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>What is WAR?</div>
-              <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>Wins Above Replacement estimates how many wins a player contributes vs. a replacement-level player. Source: Evolving-Hockey.</p>
+              <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>About These Metrics</div>
+              <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>WAR (Wins Above Replacement) estimates how many wins a player contributes above a replacement-level player, combining 5v5, power play, and penalty kill contributions. RAPM (Regularized Adjusted Plus-Minus) measures individual impact in xG per 60 minutes at 5v5, controlling for teammates and opponents. Both metrics built from NHL play-by-play data.</p>
             </div>
             <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-              {["Evolving-Hockey","Natural Stat Trick","NHL API"].map(src => (
+              {["Natural Stat Trick","NHL API","Custom RAPM Model"].map(src => (
                 <span key={src} style={{ fontSize:9, padding:"3px 8px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:20, color:"#3a5a78", fontFamily:"'DM Mono',monospace" }}>{src}</span>
               ))}
             </div>
@@ -472,7 +515,7 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
     { key:'off_rating',     sortKey:'off_rating',      label:'OFF',     align:'right',  bold:true, rating:true },
     { key:'def_rating',     sortKey:'def_rating',      label:'DEF',     align:'right',  bold:true, rating:true },
     { key:'overall_rating', sortKey:'overall_rating',  label:'OVR',     align:'right',  bold:true, rating:true },
-    { key:'war',            sortKey:'war',             label:'WAR',     align:'right'  },
+    { key:'war_total',      sortKey:'war_total',       label:'WAR',     align:'right'  },
   ];
 
   function parseToi(toi) {
@@ -514,7 +557,7 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
     if (col.key === 'plus_minus') return v > 0 ? `+${v}` : `${v}`;
     if (col.pctStat) return typeof v === 'number' ? v.toFixed(1) : v;
     if (col.rating) return typeof v === 'number' ? Math.round(v) : v;
-    if (col.key === 'ixg' || col.key === 'war') return typeof v === 'number' ? v.toFixed(1) : v;
+    if (col.key === 'ixg' || col.key === 'war_total') return typeof v === 'number' ? v.toFixed(1) : v;
     return v;
   }
 
