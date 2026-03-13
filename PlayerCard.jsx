@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip,
          LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 
@@ -611,10 +612,15 @@ function TeamGrid({ onSelectTeam, selectedTeam }) {
         All Teams
       </button>
       {ALL_TEAMS.map(abbr => (
-        <button key={abbr} onClick={() => onSelectTeam(abbr)} style={{ padding:"6px 10px", background:selectedTeam===abbr?`${TEAM_COLOR[abbr]}22`:"#0d1825", border:`1px solid ${selectedTeam===abbr?TEAM_COLOR[abbr]:"#1e2d40"}`, borderRadius:8, cursor:"pointer", transition:"all 0.2s", display:"flex", alignItems:"center", gap:6, boxShadow:selectedTeam===abbr?`0 2px 12px ${TEAM_COLOR[abbr]}44`:"none" }}>
-          <TeamLogo abbr={abbr} size={24} />
-          <span style={{ fontSize:11, fontWeight:700, color:selectedTeam===abbr?TEAM_COLOR[abbr]:"#4a6a88", fontFamily:"'Barlow Condensed',sans-serif" }}>{abbr}</span>
-        </button>
+        <div key={abbr} style={{ display:"flex", alignItems:"center", gap:2 }}>
+          <button onClick={() => onSelectTeam(abbr)} style={{ padding:"6px 10px", background:selectedTeam===abbr?`${TEAM_COLOR[abbr]}22`:"#0d1825", border:`1px solid ${selectedTeam===abbr?TEAM_COLOR[abbr]:"#1e2d40"}`, borderRadius:"8px 0 0 8px", cursor:"pointer", transition:"all 0.2s", display:"flex", alignItems:"center", gap:6, boxShadow:selectedTeam===abbr?`0 2px 12px ${TEAM_COLOR[abbr]}44`:"none" }}>
+            <TeamLogo abbr={abbr} size={24} />
+            <span style={{ fontSize:11, fontWeight:700, color:selectedTeam===abbr?TEAM_COLOR[abbr]:"#4a6a88", fontFamily:"'Barlow Condensed',sans-serif" }}>{abbr}</span>
+          </button>
+          <Link href={`/team/${abbr}`} title={`${TEAM_FULL[abbr]} team page`} style={{ padding:"6px 7px", background:"#0a1218", border:`1px solid #1e2d40`, borderLeft:"none", borderRadius:"0 8px 8px 0", display:"flex", alignItems:"center", textDecoration:"none" }}>
+            <span style={{ fontSize:11, color:"#2a4060" }}>↗</span>
+          </Link>
+        </div>
       ))}
     </div>
   );
@@ -896,3 +902,5 @@ export default function App({ players: propPlayers, seasonStats }) {
     </>
   );
 }
+
+export { PlayerCard };
