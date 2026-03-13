@@ -802,7 +802,7 @@ export default function App({ players: propPlayers, seasonStats }) {
     return list.slice(0, 50);
   }, [allPlayers, selectedTeam, search]);
 
-  const displayPlayer = browseMode === 'table' ? selectedPlayer : (selectedPlayer || filtered[0] || null);
+  const displayPlayer = selectedPlayer;
 
   return (
     <>
@@ -816,7 +816,8 @@ export default function App({ players: propPlayers, seasonStats }) {
         ::-webkit-scrollbar-track { background:#0d1825; }
         ::-webkit-scrollbar-thumb { background:#1e2d40; border-radius:2px; }
         @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-        .pc-modal-close-row { display:none; }
+        .pc-modal-backdrop { display:none; }
+        .pc-modal-close-btn { display:none; }
         @media (max-width:639px) {
           .app-outer { padding:16px 10px 40px !important; }
           .app-h1 { font-size:28px !important; letter-spacing:-0.5px !important; }
@@ -828,8 +829,9 @@ export default function App({ players: propPlayers, seasonStats }) {
           .pc-tabs-bar { overflow-x:auto !important; -webkit-overflow-scrolling:touch; }
           .pc-stat-grid-4 { grid-template-columns:repeat(2,1fr) !important; }
           .tbl-col-hide { display:none !important; }
-          .pc-modal-wrapper { position:fixed !important; inset:0 !important; z-index:200 !important; background:rgba(0,9,15,0.92) !important; display:flex !important; flex-direction:column !important; align-items:center !important; padding:12px !important; overflow-y:auto !important; }
-          .pc-modal-close-row { display:flex !important; justify-content:flex-end !important; width:calc(100vw - 24px) !important; max-width:420px !important; margin-bottom:8px !important; }
+          .pc-modal-backdrop { display:block !important; position:fixed !important; inset:0 !important; z-index:199 !important; background:rgba(0,9,15,0.85) !important; }
+          .pc-modal-close-btn { display:flex !important; align-items:center !important; justify-content:center !important; position:fixed !important; top:16px !important; right:16px !important; z-index:201 !important; min-width:44px !important; min-height:44px !important; width:44px !important; height:44px !important; border-radius:22px !important; background:#1a2535 !important; border:1px solid #2a3d55 !important; color:#e8f4ff !important; font-size:20px !important; cursor:pointer !important; line-height:1 !important; }
+          .pc-modal-wrapper { position:fixed !important; inset:0 !important; z-index:200 !important; display:flex !important; flex-direction:column !important; align-items:center !important; padding:70px 12px 24px !important; overflow-y:auto !important; background:transparent !important; }
         }
       `}</style>
 
@@ -900,14 +902,15 @@ export default function App({ players: propPlayers, seasonStats }) {
 
         {/* Card */}
         {displayPlayer && (
-          <div className="pc-modal-wrapper" onClick={e => { if (e.target === e.currentTarget) setSelectedPlayer(null); }}>
-            <div className="pc-modal-close-row">
-              <button onClick={() => setSelectedPlayer(null)} style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:6, color:"#8899aa", fontSize:12, padding:"6px 14px", cursor:"pointer", fontFamily:"'DM Mono',monospace" }}>✕ Close</button>
+          <>
+            <div className="pc-modal-backdrop" onClick={() => setSelectedPlayer(null)} />
+            <button className="pc-modal-close-btn" onClick={() => setSelectedPlayer(null)} aria-label="Close">✕</button>
+            <div className="pc-modal-wrapper" onClick={e => { if (e.target === e.currentTarget) setSelectedPlayer(null); }}>
+              <div style={{ animation:"fadeUp 0.4s ease" }}>
+                <PlayerCard key={displayPlayer.player_id} player={displayPlayer} />
+              </div>
             </div>
-            <div style={{ animation:"fadeUp 0.4s ease" }}>
-              <PlayerCard key={displayPlayer.player_id} player={displayPlayer} />
-            </div>
-          </div>
+          </>
         )}
 
         {browseMode !== "table" && filtered.length === 0 && (
