@@ -234,18 +234,18 @@ function PlayerCard({ player }) {
   const tabs = isGoalie ? ["goalie stats"] : ["overview", "on-ice", "war / rapm", "ratings"];
 
   return (
-    <div style={{ width:420, background:"linear-gradient(160deg,#0c1a28 0%,#081016 100%)", borderRadius:16, border:"1px solid #1e2d40", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
+    <div className="pc-card" style={{ width:420, background:"linear-gradient(160deg,#0c1a28 0%,#081016 100%)", borderRadius:16, border:"1px solid #1e2d40", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
       {/* Top accent bar */}
       <div style={{ height:3, background:`linear-gradient(90deg,${accent},${accent}88,transparent)` }} />
 
       {/* Header */}
       <div style={{ padding:"20px 24px 16px", background:`linear-gradient(135deg,${accent}22 0%,transparent 60%)`, borderBottom:"1px solid #1a2535", position:"relative", overflow:"hidden" }}>
         {/* Jersey number watermark */}
-        <div style={{ position:"absolute", right:-8, top:-10, fontSize:110, fontWeight:900, color:`${accent}18`, lineHeight:1, fontFamily:"'Barlow Condensed',sans-serif", userSelect:"none", letterSpacing:"-4px" }}>
+        <div className="pc-jersey" style={{ position:"absolute", right:-8, top:-10, fontSize:110, fontWeight:900, color:`${accent}18`, lineHeight:1, fontFamily:"'Barlow Condensed',sans-serif", userSelect:"none", letterSpacing:"-4px" }}>
           {player.jersey || ""}
         </div>
 
-        <div style={{ display:"flex", gap:14, alignItems:"flex-start", position:"relative", zIndex:1 }}>
+        <div className="pc-header-row" style={{ display:"flex", gap:14, alignItems:"flex-start", position:"relative", zIndex:1 }}>
           {/* Headshot */}
           <PlayerAvatar player={player} size={72} />
 
@@ -266,7 +266,7 @@ function PlayerCard({ player }) {
         </div>
 
         {/* WAR / position badge top right */}
-        <div style={{ position:"absolute", top:20, right:24, background:"#00e5a015", border:"1px solid #00e5a044", borderRadius:8, padding:"6px 12px", textAlign:"center", zIndex:2 }}>
+        <div className="pc-war-badge" style={{ position:"absolute", top:20, right:24, background:"#00e5a015", border:"1px solid #00e5a044", borderRadius:8, padding:"6px 12px", textAlign:"center", zIndex:2 }}>
           {isGoalie ? (
             <>
               <div style={{ fontSize:14, fontWeight:900, color:"#00e5a0", lineHeight:1 }}>G</div>
@@ -282,7 +282,7 @@ function PlayerCard({ player }) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display:"flex", borderBottom:"1px solid #1a2535" }}>
+      <div className="pc-tabs-bar" style={{ display:"flex", borderBottom:"1px solid #1a2535" }}>
         {tabs.map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ flex:1, padding:"10px 0", background:"none", border:"none", borderBottom:tab===t?`2px solid ${accent}`:"2px solid transparent", color:tab===t?"#e8f4ff":"#3a5a78", fontSize:10, fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", cursor:"pointer", transition:"all 0.2s", fontWeight:tab===t?700:400, marginBottom:-1 }}>
             {t}
@@ -296,7 +296,7 @@ function PlayerCard({ player }) {
 
         {!isGoalie && tab === "overview" && (
           <div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:16 }}>
+            <div className="pc-stat-grid-4" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:16 }}>
               <StatBox label="GP" value={player.gp} />
               <StatBox label="G" value={player.g} />
               <StatBox label="A" value={player.a} />
@@ -641,27 +641,27 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
 
   const COLS = [
     { key:'full_name',      sortKey:'full_name',      label:'Player',  align:'left'   },
-    { key:'team',           sortKey:'team',            label:'Team',    align:'left'   },
-    { key:'position',       sortKey:'position',        label:'Pos',     align:'center' },
-    { key:'gp',             sortKey:'gp',              label:'GP',      align:'right'  },
-    { key:'g',              sortKey:'g',               label:'G',       align:'right'  },
-    { key:'a',              sortKey:'a',               label:'A',       align:'right'  },
+    { key:'team',           sortKey:'team',            label:'Team',    align:'left',   mobileHide:true },
+    { key:'position',       sortKey:'position',        label:'Pos',     align:'center', mobileHide:true },
+    { key:'gp',             sortKey:'gp',              label:'GP',      align:'right',  mobileHide:true },
+    { key:'g',              sortKey:'g',               label:'G',       align:'right',  mobileHide:true },
+    { key:'a',              sortKey:'a',               label:'A',       align:'right',  mobileHide:true },
     { key:'pts',            sortKey:'pts',             label:'PTS',     align:'right',  bold:true },
-    { key:'plus_minus',     sortKey:'plus_minus',      label:'+/-',     align:'right'  },
-    { key:'ppp',            sortKey:'ppp',             label:'PPP',     align:'right'  },
-    { key:'toi',            sortKey:'toi_min',         label:'TOI',     align:'right'  },
-    { key:'cf_pct',         sortKey:'cf_pct',          label:'CF%',     align:'right',  pctStat:true },
-    { key:'xgf_pct',        sortKey:'xgf_pct',         label:'xGF%',   align:'right',  pctStat:true },
-    { key:'hdcf_pct',       sortKey:'hdcf_pct',        label:'HDCF%',  align:'right',  pctStat:true },
-    { key:'scf_pct',        sortKey:'scf_pct',         label:'SCF%',   align:'right',  pctStat:true },
-    { key:'ixg',            sortKey:'ixg',             label:'ixG',     align:'right'  },
-    { key:'icf',            sortKey:'icf',             label:'iCF',     align:'right'  },
-    { key:'tka',            sortKey:'tka',             label:'TKA',     align:'right'  },
-    { key:'gva',            sortKey:'gva',             label:'GVA',     align:'right'  },
-    { key:'blk',            sortKey:'blk',             label:'BLK',     align:'right'  },
-    { key:'hits',           sortKey:'hits',            label:'HITS',    align:'right'  },
-    { key:'off_rating',     sortKey:'off_rating',      label:'OFF',     align:'right',  bold:true, rating:true },
-    { key:'def_rating',     sortKey:'def_rating',      label:'DEF',     align:'right',  bold:true, rating:true },
+    { key:'plus_minus',     sortKey:'plus_minus',      label:'+/-',     align:'right',  mobileHide:true },
+    { key:'ppp',            sortKey:'ppp',             label:'PPP',     align:'right',  mobileHide:true },
+    { key:'toi',            sortKey:'toi_min',         label:'TOI',     align:'right',  mobileHide:true },
+    { key:'cf_pct',         sortKey:'cf_pct',          label:'CF%',     align:'right',  pctStat:true, mobileHide:true },
+    { key:'xgf_pct',        sortKey:'xgf_pct',         label:'xGF%',   align:'right',  pctStat:true, mobileHide:true },
+    { key:'hdcf_pct',       sortKey:'hdcf_pct',        label:'HDCF%',  align:'right',  pctStat:true, mobileHide:true },
+    { key:'scf_pct',        sortKey:'scf_pct',         label:'SCF%',   align:'right',  pctStat:true, mobileHide:true },
+    { key:'ixg',            sortKey:'ixg',             label:'ixG',     align:'right',  mobileHide:true },
+    { key:'icf',            sortKey:'icf',             label:'iCF',     align:'right',  mobileHide:true },
+    { key:'tka',            sortKey:'tka',             label:'TKA',     align:'right',  mobileHide:true },
+    { key:'gva',            sortKey:'gva',             label:'GVA',     align:'right',  mobileHide:true },
+    { key:'blk',            sortKey:'blk',             label:'BLK',     align:'right',  mobileHide:true },
+    { key:'hits',           sortKey:'hits',            label:'HITS',    align:'right',  mobileHide:true },
+    { key:'off_rating',     sortKey:'off_rating',      label:'OFF',     align:'right',  bold:true, rating:true, mobileHide:true },
+    { key:'def_rating',     sortKey:'def_rating',      label:'DEF',     align:'right',  bold:true, rating:true, mobileHide:true },
     { key:'overall_rating', sortKey:'overall_rating',  label:'OVR',     align:'right',  bold:true, rating:true },
     { key:'war_total',      sortKey:'war_total',       label:'WAR',     align:'right'  },
   ];
@@ -752,6 +752,7 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
               <th style={{ padding:'9px 8px', color:'#2a4060', fontSize:10, fontWeight:400, width:36, borderBottom:'1px solid #1e2d40', textAlign:'center' }}>#</th>
               {COLS.map(col => (
                 <th key={col.key} onClick={() => handleSort(col.sortKey)}
+                  className={col.mobileHide ? "tbl-col-hide" : ""}
                   style={{ padding:'9px 10px', textAlign:col.align, borderBottom:'1px solid #1e2d40', color:sortKey===col.sortKey?'#c8dff0':'#3a5a78', fontSize:10, fontWeight:700, letterSpacing:'0.07em', textTransform:'uppercase', cursor:'pointer', whiteSpace:'nowrap', userSelect:'none', background:sortKey===col.sortKey?'#0d1825':'transparent' }}>
                   {col.label}{sortKey===col.sortKey ? (sortDir==='desc'?' ↓':' ↑') : ''}
                 </th>
@@ -768,7 +769,7 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
                   onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? '#0d2a1a' : i%2===0 ? '#080e17' : '#060b12'; }}>
                   <td style={{ padding:'6px 8px', textAlign:'center', color:'#2a4060', fontSize:10 }}>{i+1}</td>
                   {COLS.map(col => (
-                    <td key={col.key} style={{ padding:'6px 10px', textAlign:col.align, color:cellColor(p,col), fontWeight:col.bold && p[col.key] != null ? 700 : 400, whiteSpace:col.key==='full_name'?'nowrap':'normal', fontSize:col.key==='full_name'?13:12, fontFamily:col.key==='full_name'?"'Barlow Condensed',sans-serif":"'DM Mono',monospace" }}>
+                    <td key={col.key} className={col.mobileHide ? "tbl-col-hide" : ""} style={{ padding:'6px 10px', textAlign:col.align, color:cellColor(p,col), fontWeight:col.bold && p[col.key] != null ? 700 : 400, whiteSpace:col.key==='full_name'?'nowrap':'normal', fontSize:col.key==='full_name'?13:12, fontFamily:col.key==='full_name'?"'Barlow Condensed',sans-serif":"'DM Mono',monospace" }}>
                       {fmtCell(p, col)}
                     </td>
                   ))}
@@ -815,21 +816,36 @@ export default function App({ players: propPlayers, seasonStats }) {
         ::-webkit-scrollbar-track { background:#0d1825; }
         ::-webkit-scrollbar-thumb { background:#1e2d40; border-radius:2px; }
         @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+        .pc-modal-close-row { display:none; }
+        @media (max-width:639px) {
+          .app-outer { padding:16px 10px 40px !important; }
+          .app-h1 { font-size:28px !important; letter-spacing:-0.5px !important; }
+          .app-mode-btn { padding:8px 10px !important; font-size:11px !important; }
+          .pc-card { width:calc(100vw - 24px) !important; }
+          .pc-header-row { flex-direction:column !important; align-items:center !important; gap:8px !important; }
+          .pc-jersey { font-size:70px !important; }
+          .pc-war-badge { top:10px !important; right:10px !important; padding:4px 8px !important; }
+          .pc-tabs-bar { overflow-x:auto !important; -webkit-overflow-scrolling:touch; }
+          .pc-stat-grid-4 { grid-template-columns:repeat(2,1fr) !important; }
+          .tbl-col-hide { display:none !important; }
+          .pc-modal-wrapper { position:fixed !important; inset:0 !important; z-index:200 !important; background:rgba(0,9,15,0.92) !important; display:flex !important; flex-direction:column !important; align-items:center !important; padding:12px !important; overflow-y:auto !important; }
+          .pc-modal-close-row { display:flex !important; justify-content:flex-end !important; width:calc(100vw - 24px) !important; max-width:420px !important; margin-bottom:8px !important; }
+        }
       `}</style>
 
-      <div style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)", display:"flex", flexDirection:"column", alignItems:"center", padding:"40px 20px", fontFamily:"'Barlow Condensed',sans-serif" }}>
+      <div className="app-outer" style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)", display:"flex", flexDirection:"column", alignItems:"center", padding:"40px 20px", fontFamily:"'Barlow Condensed',sans-serif" }}>
 
         {/* Header */}
         <div style={{ marginBottom:28, textAlign:"center" }}>
           <div style={{ fontSize:11, color:"#2a5070", letterSpacing:"0.2em", textTransform:"uppercase", fontFamily:"'DM Mono',monospace", marginBottom:8 }}>NHL Analytics</div>
-          <h1 style={{ fontSize:42, fontWeight:900, color:"#e8f4ff", letterSpacing:"-1px", lineHeight:1 }}>Player Cards</h1>
+          <h1 className="app-h1" style={{ fontSize:42, fontWeight:900, color:"#e8f4ff", letterSpacing:"-1px", lineHeight:1 }}>Player Cards</h1>
           <div style={{ fontSize:12, color:"#2a4060", fontFamily:"'DM Mono',monospace", marginTop:6 }}>WAR · RAPM · On-Ice Shot Rates · Percentile Rankings</div>
         </div>
 
         {/* Mode toggle */}
         <div style={{ display:"flex", gap:0, marginBottom:20, background:"#0d1825", border:"1px solid #1e2d40", borderRadius:10, overflow:"hidden" }}>
           {[["search","🔍 Search Players"],["teams","🏒 Browse by Team"],["table","📊 Stats Table"]].map(([mode,label]) => (
-            <button key={mode} onClick={() => setBrowseMode(mode)} style={{ padding:"10px 24px", background:browseMode===mode?"#0080FF":"transparent", border:"none", color:browseMode===mode?"white":"#4a6a88", fontSize:13, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer", transition:"all 0.2s", letterSpacing:"0.03em" }}>
+            <button key={mode} onClick={() => setBrowseMode(mode)} className="app-mode-btn" style={{ padding:"10px 24px", background:browseMode===mode?"#0080FF":"transparent", border:"none", color:browseMode===mode?"white":"#4a6a88", fontSize:13, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer", transition:"all 0.2s", letterSpacing:"0.03em" }}>
               {label}
             </button>
           ))}
@@ -884,8 +900,13 @@ export default function App({ players: propPlayers, seasonStats }) {
 
         {/* Card */}
         {displayPlayer && (
-          <div style={{ animation:"fadeUp 0.4s ease" }}>
-            <PlayerCard key={displayPlayer.player_id} player={displayPlayer} />
+          <div className="pc-modal-wrapper" onClick={e => { if (e.target === e.currentTarget) setSelectedPlayer(null); }}>
+            <div className="pc-modal-close-row">
+              <button onClick={() => setSelectedPlayer(null)} style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:6, color:"#8899aa", fontSize:12, padding:"6px 14px", cursor:"pointer", fontFamily:"'DM Mono',monospace" }}>✕ Close</button>
+            </div>
+            <div style={{ animation:"fadeUp 0.4s ease" }}>
+              <PlayerCard key={displayPlayer.player_id} player={displayPlayer} />
+            </div>
           </div>
         )}
 
