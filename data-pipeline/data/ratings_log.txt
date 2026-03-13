@@ -1,0 +1,115 @@
+Fetching player_seasons (per-season to avoid row limit)...
+  25-26: 628 rows
+  24-25: 641 rows
+  23-24: 641 rows
+  Total: 1910 season rows
+Fetching players + RAPM + finishing/PP data...
+  741 players with RAPM data
+  393 players with finishing_pct, 646 with toi_pp
+Processing 678 qualified skaters (3-season weighted)
+PP bonus applied (617 players with toi_pp data)
+Ratings computed for 678 players
+
+Computing WAR...
+
+--- TOP 20 WAR ---
+  Player                      Pos   EV Off   EV Def      PP      PK    Total
+  --------------------------  ---  -------  -------  ------  ------  -------
+  Nathan MacKinnon              C     9.57    11.89    4.86    0.01    26.33
+  Nikita Kucherov               R     9.93    10.28    4.89   -0.00    25.10
+  Connor McDavid                C     9.42    10.91    5.73   -0.99    25.08
+  Kirill Kaprizov               L     5.36    10.79    5.51    0.01    21.66
+  Jordan Eberle                 R     8.17     7.93    3.57   -0.04    19.63
+  Artemi Panarin                L     7.19     7.26    4.36    0.00    18.81
+  Jake Guentzel                 C     5.79     8.09    5.20   -1.42    17.66
+  David Pastrnak                R     6.05     6.94    4.13   -0.10    17.02
+  John Tavares                  C     5.24     8.29    3.08    0.01    16.61
+  Mathew Barzal                 C     7.35     5.61    3.57    0.03    16.55
+  Ross Colton                   C     6.83     9.24    0.40    0.02    16.48
+  Jason Robertson               L     7.78     2.88    5.60   -0.01    16.25
+  Wyatt Johnston                C     3.28     8.39    5.31   -0.97    16.01
+  Alex DeBrincat                R     4.26     6.40    5.28   -0.01    15.92
+  Nick Suzuki                   C     5.57     6.67    4.14   -0.75    15.63
+  Sebastian Aho                 C     4.38     8.34    3.98   -1.08    15.62
+  Jesper Bratt                  L     5.17     6.41    4.48   -0.69    15.37
+  Brandon Hagel                 L     5.85     8.89    2.34   -2.56    14.52
+  Alexis Lafrenière             L     7.77     4.13    2.59   -0.01    14.48
+  Auston Matthews               C     6.67     6.25    2.81   -1.32    14.41
+
+--- TOP 20 OVERALL ---
+            full_name position  off_rating  def_rating  overall_rating
+347    Connor McDavid        C        93.0        82.7            95.3
+491  Nathan MacKinnon        C        94.9        83.7            94.0
+3     Nikita Kucherov        R        94.8        83.6            93.9
+222   Matthew Tkachuk        L        91.4        85.9            91.2
+312     Brady Tkachuk        L        88.6        87.5            90.5
+229      Quinn Hughes        D        89.3        84.9            89.9
+430   Kirill Kaprizov        L        89.1        79.1            88.6
+598     Zach Werenski        D        96.9        77.3            88.6
+41      Jake Guentzel        C        86.5        83.5            88.4
+80      Sidney Crosby        C        91.6        74.5            88.1
+234   Jason Robertson        L        88.4        77.5            87.5
+81     David Pastrnak        R        90.3        72.8            87.1
+453        Matt Boldy        L        88.3        75.2            86.7
+193     Evan Bouchard        D        92.4        76.6            86.6
+192       Jack Hughes        C        87.2        79.2            86.6
+614    Mattias Ekholm        D        90.6        80.8            86.5
+462        Mark Stone        R        85.9        80.6            86.3
+49         Roman Josi        D        87.2        80.8            86.2
+28     Artemi Panarin        L        85.0        80.4            86.2
+20     Darren Raddysh        D        82.1        84.1            86.0
+
+--- TOP 10 OFFENSIVE FORWARDS ---
+            full_name position  off_rating  ixg_60   a1_60  finishing_pct
+491  Nathan MacKinnon        C        94.9  1.2597  1.7658           91.6
+3     Nikita Kucherov        R        94.8  1.2353  2.0714           85.5
+347    Connor McDavid        C        93.0  1.4253  1.9881           51.1
+80      Sidney Crosby        C        91.6  1.2802  1.1940           92.6
+222   Matthew Tkachuk        L        91.4  1.6624  1.4717           44.5
+81     David Pastrnak        R        90.3  1.3086  1.7707           60.1
+311     Brandon Hagel        L        89.3  1.3548  1.2022           63.6
+430   Kirill Kaprizov        L        89.1  1.4808  1.1715           64.9
+312     Brady Tkachuk        L        88.6  1.8312  1.0796           28.5
+234   Jason Robertson        L        88.4  1.2613  0.8647           72.0
+
+--- TOP 10 DEFENSIVE DEFENSEMEN ---
+           full_name position  def_rating  xgf_pct  hdcf_pct  cf_pct_pk
+229     Quinn Hughes        D        84.9  61.8249   60.1641    22.2200
+398   Jakob Chychrun        D        84.2  57.2861   57.5446    30.0000
+20    Darren Raddysh        D        84.1  58.1552   58.3744    19.8743
+383   Jacob Moverare        D        81.3  54.7949   57.5328        NaN
+62    Josh Morrissey        D        81.0  57.6017   59.0288    24.5112
+49        Roman Josi        D        80.8  57.9762   59.0785    16.7521
+614   Mattias Ekholm        D        80.8  55.4341   57.6337    14.7933
+361   Damon Severson        D        80.3  53.0351   52.4174    19.6674
+169  Dougie Hamilton        D        79.8  58.6244   59.3194    20.4858
+90     Morgan Rielly        D        79.1  54.4340   55.8343    15.7559
+
+--- TKACHUK BROTHERS ---
+           full_name position  off_rating  def_rating  overall_rating  finishing_pct
+222  Matthew Tkachuk        L        91.4        85.9            91.2           44.5
+312    Brady Tkachuk        L        88.6        87.5            90.5           28.5
+
+Done. Updated: 678 | Skipped: 0
+
+--- COMPUTING GOALIE RATINGS ---
+SQL migration (run in Supabase editor if columns don't exist):
+  alter table players add column if not exists sv_pct_pct float8;
+  alter table players add column if not exists gaa_pct float8;
+  alter table players add column if not exists win_pct_pct float8;
+  alter table players add column if not exists shutout_pct float8;
+Qualified goalies: 66 (≥10 GP)
+
+--- TOP 10 GOALIES ---
+              full_name  gp  wins  save_pct       gaa  shutouts  overall_rating
+13      Scott Wedgewood  36    25  0.917943  2.159637         2            96.3
+29   Andrei Vasilevskiy  44    30  0.914261  2.286873         2            93.0
+10     Filip Gustavsson  41    24  0.914137  2.464234         4            92.6
+34         Ilya Sorokin  40    24  0.913495  2.508938         6            91.0
+12  Mackenzie Blackwood  28    18  0.908419  2.417416         3            87.4
+16        Casey DeSmith  24    14  0.911765  2.282735         1            87.0
+30            Alex Lyon  31    18  0.913734  2.652251         2            84.5
+74      Igor Shesterkin  40    21  0.912000  2.502897         1            82.2
+38        Tristan Jarry  14     9  0.909091  2.664200         1            81.3
+53       Logan Thompson  45    22  0.911403  2.437434         2            81.1
+Goalie ratings uploaded: 66 | failed: 0

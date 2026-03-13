@@ -1,0 +1,243 @@
+Loaded player_id_patch: 13 entries
+============================================================
+xG Model Pipeline — 3-season build
+============================================================
+
+Step 1 — Scrape shot events
+----------------------------------------
+  Cleared checkpoint — starting fresh NHL API v1 scrape
+
+  Scraping 23-24 from NHL API v1...
+  Loaded 1312 game IDs from game_ids_2324.json
+  23-24: 1312 games remaining (1312 total)
+  23-24 — 50/1312 games | shots so far: 4,459
+  23-24 — 100/1312 games | shots so far: 8,743
+  Checkpoint: 8,743 shots → shots_checkpoint.csv
+  23-24 — 150/1312 games | shots so far: 13,364
+  23-24 — 200/1312 games | shots so far: 17,737
+  Checkpoint: 17,737 total shots → shots_checkpoint.csv
+  23-24 — 250/1312 games | shots so far: 22,221
+  23-24 — 300/1312 games | shots so far: 26,551
+  Checkpoint: 26,551 total shots → shots_checkpoint.csv
+  23-24 — 350/1312 games | shots so far: 30,935
+  23-24 — 400/1312 games | shots so far: 35,409
+  Checkpoint: 35,409 total shots → shots_checkpoint.csv
+  23-24 — 450/1312 games | shots so far: 39,885
+  23-24 — 500/1312 games | shots so far: 44,327
+  Checkpoint: 44,327 total shots → shots_checkpoint.csv
+  23-24 — 550/1312 games | shots so far: 48,691
+  23-24 — 600/1312 games | shots so far: 53,101
+  Checkpoint: 53,101 total shots → shots_checkpoint.csv
+  23-24 — 650/1312 games | shots so far: 57,439
+  23-24 — 700/1312 games | shots so far: 61,929
+  Checkpoint: 61,929 total shots → shots_checkpoint.csv
+  23-24 — 750/1312 games | shots so far: 66,175
+  23-24 — 800/1312 games | shots so far: 70,485
+  Checkpoint: 70,485 total shots → shots_checkpoint.csv
+  23-24 — 850/1312 games | shots so far: 74,929
+  23-24 — 900/1312 games | shots so far: 79,443
+  Checkpoint: 79,443 total shots → shots_checkpoint.csv
+  23-24 — 950/1312 games | shots so far: 83,944
+  23-24 — 1000/1312 games | shots so far: 88,254
+  Checkpoint: 88,254 total shots → shots_checkpoint.csv
+  23-24 — 1050/1312 games | shots so far: 92,689
+  23-24 — 1100/1312 games | shots so far: 96,991
+  Checkpoint: 96,991 total shots → shots_checkpoint.csv
+  23-24 — 1150/1312 games | shots so far: 101,343
+  23-24 — 1200/1312 games | shots so far: 105,706
+  Checkpoint: 105,706 total shots → shots_checkpoint.csv
+  23-24 — 1250/1312 games | shots so far: 110,144
+  23-24 — 1300/1312 games | shots so far: 114,409
+  Checkpoint: 114,409 total shots → shots_checkpoint.csv
+  23-24 — 1312/1312 games | shots so far: 115,446
+  Checkpoint: 115,446 total shots → shots_checkpoint.csv
+
+  Scraping 24-25 from NHL API v1...
+  Loaded 1312 game IDs from game_ids_2425.json
+  24-25: 1312 games remaining (1312 total)
+  24-25 — 50/1312 games | shots so far: 4,301
+  24-25 — 100/1312 games | shots so far: 8,661
+  Checkpoint: 124,107 total shots → shots_checkpoint.csv
+  24-25 — 150/1312 games | shots so far: 13,054
+  24-25 — 200/1312 games | shots so far: 17,294
+  Checkpoint: 132,740 total shots → shots_checkpoint.csv
+  24-25 — 250/1312 games | shots so far: 21,559
+  24-25 — 300/1312 games | shots so far: 25,790
+  Checkpoint: 141,236 total shots → shots_checkpoint.csv
+  24-25 — 350/1312 games | shots so far: 30,058
+  24-25 — 400/1312 games | shots so far: 34,358
+  Checkpoint: 149,804 total shots → shots_checkpoint.csv
+  24-25 — 450/1312 games | shots so far: 38,525
+  24-25 — 500/1312 games | shots so far: 42,683
+  Checkpoint: 158,129 total shots → shots_checkpoint.csv
+  24-25 — 550/1312 games | shots so far: 46,706
+  24-25 — 600/1312 games | shots so far: 51,090
+  Checkpoint: 166,536 total shots → shots_checkpoint.csv
+  24-25 — 650/1312 games | shots so far: 55,453
+  24-25 — 700/1312 games | shots so far: 59,658
+  Checkpoint: 175,104 total shots → shots_checkpoint.csv
+  24-25 — 750/1312 games | shots so far: 64,059
+  24-25 — 800/1312 games | shots so far: 68,410
+  Checkpoint: 183,856 total shots → shots_checkpoint.csv
+  24-25 — 850/1312 games | shots so far: 72,759
+  24-25 — 900/1312 games | shots so far: 77,284
+  Checkpoint: 192,730 total shots → shots_checkpoint.csv
+  24-25 — 950/1312 games | shots so far: 81,583
+  24-25 — 1000/1312 games | shots so far: 85,985
+  Checkpoint: 201,431 total shots → shots_checkpoint.csv
+  24-25 — 1050/1312 games | shots so far: 90,255
+  24-25 — 1100/1312 games | shots so far: 94,381
+  Checkpoint: 209,827 total shots → shots_checkpoint.csv
+  24-25 — 1150/1312 games | shots so far: 98,656
+  24-25 — 1200/1312 games | shots so far: 102,984
+  Checkpoint: 218,430 total shots → shots_checkpoint.csv
+  24-25 — 1250/1312 games | shots so far: 107,279
+  24-25 — 1300/1312 games | shots so far: 111,715
+  Checkpoint: 227,161 total shots → shots_checkpoint.csv
+  24-25 — 1312/1312 games | shots so far: 112,745
+  Checkpoint: 228,191 total shots → shots_checkpoint.csv
+
+  Scraping 25-26 from NHL API v1...
+  Loaded 1076 game IDs from game_ids_2526.json
+  25-26: 1076 games remaining (1076 total)
+  25-26 — 50/1076 games | shots so far: 4,299
+  25-26 — 100/1076 games | shots so far: 8,503
+  Checkpoint: 236,694 total shots → shots_checkpoint.csv
+  25-26 — 150/1076 games | shots so far: 12,856
+  25-26 — 200/1076 games | shots so far: 17,138
+  Checkpoint: 245,329 total shots → shots_checkpoint.csv
+  25-26 — 250/1076 games | shots so far: 21,378
+  25-26 — 300/1076 games | shots so far: 25,656
+  Checkpoint: 253,847 total shots → shots_checkpoint.csv
+  25-26 — 350/1076 games | shots so far: 29,950
+  25-26 — 400/1076 games | shots so far: 34,276
+  Checkpoint: 262,467 total shots → shots_checkpoint.csv
+  25-26 — 450/1076 games | shots so far: 38,597
+  25-26 — 500/1076 games | shots so far: 43,028
+  Checkpoint: 271,219 total shots → shots_checkpoint.csv
+  25-26 — 550/1076 games | shots so far: 47,222
+  25-26 — 600/1076 games | shots so far: 51,622
+  Checkpoint: 279,813 total shots → shots_checkpoint.csv
+  25-26 — 650/1076 games | shots so far: 55,884
+  25-26 — 700/1076 games | shots so far: 60,345
+  Checkpoint: 288,536 total shots → shots_checkpoint.csv
+  25-26 — 750/1076 games | shots so far: 64,552
+  25-26 — 800/1076 games | shots so far: 68,915
+  Checkpoint: 297,106 total shots → shots_checkpoint.csv
+  25-26 — 850/1076 games | shots so far: 73,144
+  25-26 — 900/1076 games | shots so far: 77,464
+  Checkpoint: 305,655 total shots → shots_checkpoint.csv
+  25-26 — 950/1076 games | shots so far: 81,791
+  25-26 — 1000/1076 games | shots so far: 86,135
+  Checkpoint: 314,326 total shots → shots_checkpoint.csv
+  25-26 — 1050/1076 games | shots so far: 89,608
+  25-26 — 1076/1076 games | shots so far: 89,608
+  Checkpoint: 317,799 total shots → shots_checkpoint.csv
+
+  Total shots saved: 317,302 → shots_all_seasons.csv
+    23-24: 115,266 shots | 8266 goals (7.17%)
+    24-25: 112,563 shots | 8066 goals (7.17%)
+    25-26: 89,473 shots | 6607 goals (7.38%)
+
+Step 2 — Feature engineering
+  Noise filter: removed 8,794 shots (2.8%)  → 308,508 remaining
+  Features added. Shape: (308508, 30)
+  5v5: 241,834 shots  (6.10% goals)
+  PP: 24,760 shots  (9.79% goals)
+  PK: 22,528 shots  (9.56% goals)
+
+Step 3 — Train XGBoost models
+----------------------------------------
+
+  Training 5v5: 241,834 shots (14,761 goals = 6.10%)
+  5v5 AUC (23-24+24-25 → 25-26): 0.8342
+  Saved → /Users/cspeedie/Desktop/nhl-analytics/data-pipeline/data/xg_model_5v5.json
+
+  Training PP: 24,760 shots (2,423 goals = 9.79%)
+  PP AUC (23-24+24-25 → 25-26): 0.7563
+  Saved → /Users/cspeedie/Desktop/nhl-analytics/data-pipeline/data/xg_model_PP.json
+
+  Training PK: 22,528 shots (2,154 goals = 9.56%)
+  PK AUC (23-24+24-25 → 25-26): 0.7777
+  Saved → /Users/cspeedie/Desktop/nhl-analytics/data-pipeline/data/xg_model_PK.json
+
+============================================================
+VALIDATION
+============================================================
+
+Calibration (predicted xG vs actual goals):
+  Season    Strength    Shots    Pred xG    Goals    Ratio
+  --------  ------  -------  ---------  -------  -------
+  23-24     5v5      87,237    29746.0     5320    5.591 ← OFF
+  23-24     PP        9,419     3593.1      922    3.897 ← OFF
+  23-24     PK        8,638     3178.6      808    3.934 ← OFF
+  24-25     5v5      86,972    29570.7     5228    5.656 ← OFF
+  24-25     PP        8,246     3174.7      826    3.843 ← OFF
+  24-25     PK        7,376     2727.2      728    3.746 ← OFF
+  25-26     5v5      67,625    23648.2     4213    5.613 ← OFF
+  25-26     PP        7,095     2748.9      675    4.072 ← OFF
+  25-26     PK        6,514     2491.4      618    4.031 ← OFF
+  ⚠ Some calibration ratios are outside ±10% — review model
+
+Feature importance (top 5 per model):
+  5v5:
+    score_state                  0.3929
+    distance                     0.1692
+    period_cat                   0.1182
+    is_rush                      0.0773
+    angle                        0.0673
+  PP:
+    score_state                  0.3000
+    period_cat                   0.1452
+    distance                     0.1018
+    is_rush                      0.0682
+    is_behind_net                0.0626
+  ⚠ PP: distance/angle not in top-2 — check coordinates
+  PK:
+    score_state                  0.3259
+    is_rush                      0.1090
+    distance                     0.1004
+    period_cat                   0.0945
+    seconds_since_prior          0.0603
+  ⚠ PK: distance/angle not in top-2 — check coordinates
+
+Sample predictions (sanity check):
+  Tip-in 8ft straight on (expect 0.30-0.50)
+    dist=8.0ft  angle=0.0°  xG=0.3017
+  Slap shot blue line 60ft (expect 0.02-0.06)
+    dist=60.0ft  angle=0.0°  xG=0.1912
+  Rebound slot 15ft (expect 0.20-0.40)
+    dist=15.8ft  angle=18.4°  xG=0.4204
+
+============================================================
+STEP 5 — Update stints xG
+============================================================
+  Noise filter: removed 8,794 shots (2.8%)  → 308,508 remaining
+  5v5 shots: 241,834 | mean xG: 0.3434
+
+  25-26: 90,131 stints, 67,625 shots
+  Backed up original → stints_2526_old_xg.csv
+  Updated stints_2526.csv  total xG: 17870.2
+
+  24-25: 119,056 stints, 86,972 shots
+  Backed up original → stints_2425_old_xg.csv
+  Updated stints_2425.csv  total xG: 22965.0
+
+  23-24: 118,500 stints, 87,237 shots
+  Backed up original → stints_2324_old_xg.csv
+  Updated stints_2324.csv  total xG: 23407.8
+
+✓ Stints updated. Re-run build_rapm.py then compute_ratings.py.
+
+============================================================
+Step 6 — Re-run RAPM and ratings
+============================================================
+
+Next commands to run:
+    python3 build_rapm.py
+    python3 compute_ratings.py
+
+Compare new leaderboard to current:
+  Current top-4: Raddysh D #1 (94.6), MacKinnon C #2 (92.7),
+                 McDavid C #3 (92.6), Kucherov R #4 (91.1)
+

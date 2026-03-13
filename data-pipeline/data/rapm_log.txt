@@ -1,0 +1,187 @@
+Loaded player_id_patch: 13 entries
+============================================================
+RAPM Pipeline — 3-season build  [TEST_MODE=False]
+  Tip: delete a season's game_ids_XXXX.json to refresh its IDs.
+============================================================
+
+============================================================
+Season 25-26  (weight ×1.0)
+============================================================
+Step 1 — Game IDs for 25-26
+  Loaded 1076 game IDs from cache (game_ids_2526.json)
+  Total: 1076 games
+
+Step 2 — Stints for 25-26
+  Resuming from stints_2526.csv: 1022 games done, 91490 stints loaded
+  Processing 54 remaining games (2 batches of 50)...
+Scraping the schedule between 2025-09-01 and 2026-3-13...please give it a moment
+Scraping Schedule:   0%|          | 0/28 [00:00<?, ?it/s]Scraping Schedule:   4%|▎         | 1/28 [00:01<00:36,  1.33s/it]Scraping Schedule:   7%|▋         | 2/28 [00:02<00:33,  1.29s/it]Scraping Schedule:  11%|█         | 3/28 [00:03<00:32,  1.31s/it]Scraping Schedule:  14%|█▍        | 4/28 [00:05<00:31,  1.31s/it]Scraping Schedule:  18%|█▊        | 5/28 [00:06<00:29,  1.30s/it]Scraping Schedule:  21%|██▏       | 6/28 [00:08<00:31,  1.41s/it]Scraping Schedule:  25%|██▌       | 7/28 [00:09<00:28,  1.37s/it]Scraping Schedule:  29%|██▊       | 8/28 [00:10<00:27,  1.37s/it]Scraping Schedule:  32%|███▏      | 9/28 [00:12<00:26,  1.39s/it]Scraping Schedule:  36%|███▌      | 10/28 [00:13<00:24,  1.37s/it]Scraping Schedule:  39%|███▉      | 11/28 [00:14<00:23,  1.39s/it]Scraping Schedule:  43%|████▎     | 12/28 [00:16<00:21,  1.37s/it]Scraping Schedule:  46%|████▋     | 13/28 [00:17<00:21,  1.42s/it]Scraping Schedule:  50%|█████     | 14/28 [00:19<00:19,  1.39s/it]Scraping Schedule:  54%|█████▎    | 15/28 [00:20<00:17,  1.36s/it]Scraping Schedule:  57%|█████▋    | 16/28 [00:21<00:15,  1.28s/it]Scraping Schedule:  61%|██████    | 17/28 [00:22<00:14,  1.28s/it]Scraping Schedule:  64%|██████▍   | 18/28 [00:24<00:13,  1.34s/it]Scraping Schedule:  68%|██████▊   | 19/28 [00:25<00:11,  1.33s/it]Scraping Schedule:  71%|███████▏  | 20/28 [00:26<00:10,  1.34s/it]Scraping Schedule:  75%|███████▌  | 21/28 [00:28<00:09,  1.39s/it]Scraping Schedule:  79%|███████▊  | 22/28 [00:29<00:08,  1.38s/it]Scraping Schedule:  82%|████████▏ | 23/28 [00:31<00:06,  1.35s/it]Scraping Schedule:  86%|████████▌ | 24/28 [00:32<00:05,  1.39s/it]Scraping Schedule:  89%|████████▉ | 25/28 [00:33<00:04,  1.36s/it]Scraping Schedule:  93%|█████████▎| 26/28 [00:35<00:02,  1.36s/it]Scraping Schedule:  96%|█████████▋| 27/28 [00:36<00:01,  1.34s/it]Scraping Schedule: 100%|██████████| 28/28 [00:37<00:00,  1.32s/it]Scraping Schedule: 100%|██████████| 28/28 [00:37<00:00,  1.35s/it]
+Scraping Game  2025020060 2025-10-15
+Scraping Game  2025020075 2025-10-17
+Scraping Game  2025020092 2025-10-19
+Scraping Game  2025020107 2025-10-21
+Scraping Game  2025020267 2025-11-12
+Scraping Game  2025020327 2025-11-20
+Scraping Game  2025020344 2025-11-22
+Scraping Game  2025020358 2025-11-24
+Scraping Game  2025020372 2025-11-26
+Scraping Game  2025020565 2025-12-21
+Scraping Game  2025020680 2026-01-07
+Scraping Game  2025020696 2026-01-09
+Scraping Game  2025020714 2026-01-11
+Scraping Game  2025020733 2026-01-13
+Scraping Game  2025020790 2026-01-21
+Scraping Game  2025020914 2026-02-25
+Scraping Game  2025020932 2026-02-27
+Scraping Game  2025020949 2026-03-01
+Scraping Game  2025021041 2026-03-13
+Scraping Game  2025021042 2026-03-13
+
+Players missing IDs:
+  - JOSEPH VELENO 2025020372
+  - TONY DEANGELO 2025021041
+
+  Batch 1/2  (50/54 games) | stints so far: 91,490
+Scraping the schedule between 2025-09-01 and 2026-3-13...please give it a moment
+Scraping Schedule:   0%|          | 0/28 [00:00<?, ?it/s]Scraping Schedule:   4%|▎         | 1/28 [00:01<00:33,  1.22s/it]Scraping Schedule:   7%|▋         | 2/28 [00:02<00:31,  1.22s/it]Scraping Schedule:  11%|█         | 3/28 [00:04<00:34,  1.38s/it]Scraping Schedule:  14%|█▍        | 4/28 [00:05<00:32,  1.37s/it]Scraping Schedule:  18%|█▊        | 5/28 [00:06<00:30,  1.34s/it]Scraping Schedule:  21%|██▏       | 6/28 [00:07<00:29,  1.33s/it]Scraping Schedule:  25%|██▌       | 7/28 [00:09<00:29,  1.39s/it]Scraping Schedule:  29%|██▊       | 8/28 [00:10<00:27,  1.37s/it]Scraping Schedule:  32%|███▏      | 9/28 [00:12<00:25,  1.36s/it]Scraping Schedule:  36%|███▌      | 10/28 [00:13<00:23,  1.33s/it]Scraping Schedule:  39%|███▉      | 11/28 [00:14<00:22,  1.35s/it]Scraping Schedule:  43%|████▎     | 12/28 [00:16<00:21,  1.34s/it]Scraping Schedule:  46%|████▋     | 13/28 [00:17<00:20,  1.34s/it]Scraping Schedule:  50%|█████     | 14/28 [00:18<00:18,  1.32s/it]Scraping Schedule:  54%|█████▎    | 15/28 [00:20<00:17,  1.34s/it]Scraping Schedule:  57%|█████▋    | 16/28 [00:21<00:15,  1.32s/it]Scraping Schedule:  61%|██████    | 17/28 [00:22<00:14,  1.32s/it]Scraping Schedule:  64%|██████▍   | 18/28 [00:23<00:13,  1.30s/it]Scraping Schedule:  68%|██████▊   | 19/28 [00:25<00:11,  1.32s/it]Scraping Schedule:  71%|███████▏  | 20/28 [00:26<00:10,  1.31s/it]Scraping Schedule:  75%|███████▌  | 21/28 [00:27<00:09,  1.31s/it]Scraping Schedule:  79%|███████▊  | 22/28 [00:29<00:07,  1.30s/it]Scraping Schedule:  82%|████████▏ | 23/28 [00:30<00:06,  1.28s/it]Scraping Schedule:  86%|████████▌ | 24/28 [00:31<00:05,  1.30s/it]Scraping Schedule:  89%|████████▉ | 25/28 [00:33<00:04,  1.40s/it]Scraping Schedule:  93%|█████████▎| 26/28 [00:34<00:02,  1.42s/it]Scraping Schedule:  96%|█████████▋| 27/28 [00:36<00:01,  1.40s/it]Scraping Schedule: 100%|██████████| 28/28 [00:37<00:00,  1.31s/it]Scraping Schedule: 100%|██████████| 28/28 [00:37<00:00,  1.33s/it]
+  Batch 2/2 failed: 'NoneType' object has no attribute 'empty'
+  36 games could not be processed
+  Total stints: 91,490 → stints_2526.csv
+  91,490 stints loaded for 25-26
+
+============================================================
+Season 24-25  (weight ×0.7)
+============================================================
+Step 1 — Game IDs for 24-25
+  Loaded 1312 game IDs from cache (game_ids_2425.json)
+  Total: 1312 games
+
+Step 2 — Stints for 24-25
+  Resuming from stints_2425.csv: 1309 games done, 119056 stints loaded
+  Processing 3 remaining games (1 batches of 50)...
+Scraping the schedule between 2024-09-01 and 2025-08-31...please give it a moment
+Scraping Schedule:   0%|          | 0/53 [00:00<?, ?it/s]Scraping Schedule:   2%|▏         | 1/53 [00:01<01:03,  1.22s/it]Scraping Schedule:   4%|▍         | 2/53 [00:02<01:02,  1.23s/it]Scraping Schedule:   6%|▌         | 3/53 [00:03<01:02,  1.24s/it]Scraping Schedule:   8%|▊         | 4/53 [00:05<01:01,  1.27s/it]Scraping Schedule:   9%|▉         | 5/53 [00:06<01:00,  1.26s/it]Scraping Schedule:  11%|█▏        | 6/53 [00:07<01:00,  1.28s/it]Scraping Schedule:  13%|█▎        | 7/53 [00:08<00:59,  1.30s/it]Scraping Schedule:  15%|█▌        | 8/53 [00:10<01:00,  1.34s/it]Scraping Schedule:  17%|█▋        | 9/53 [00:11<01:00,  1.38s/it]Scraping Schedule:  19%|█▉        | 10/53 [00:13<00:58,  1.37s/it]Scraping Schedule:  21%|██        | 11/53 [00:14<00:57,  1.38s/it]Scraping Schedule:  23%|██▎       | 12/53 [00:15<00:55,  1.36s/it]Scraping Schedule:  25%|██▍       | 13/53 [00:17<00:54,  1.36s/it]Scraping Schedule:  26%|██▋       | 14/53 [00:18<00:53,  1.38s/it]Scraping Schedule:  28%|██▊       | 15/53 [00:20<00:52,  1.39s/it]Scraping Schedule:  30%|███       | 16/53 [00:21<00:50,  1.36s/it]Scraping Schedule:  32%|███▏      | 17/53 [00:22<00:48,  1.36s/it]Scraping Schedule:  34%|███▍      | 18/53 [00:24<00:47,  1.34s/it]Scraping Schedule:  36%|███▌      | 19/53 [00:25<00:45,  1.33s/it]Scraping Schedule:  38%|███▊      | 20/53 [00:26<00:43,  1.32s/it]Scraping Schedule:  40%|███▉      | 21/53 [00:27<00:42,  1.33s/it]Scraping Schedule:  42%|████▏     | 22/53 [00:29<00:42,  1.36s/it]Scraping Schedule:  43%|████▎     | 23/53 [00:30<00:40,  1.35s/it]Scraping Schedule:  45%|████▌     | 24/53 [00:32<00:39,  1.37s/it]Scraping Schedule:  47%|████▋     | 25/53 [00:33<00:37,  1.34s/it]Scraping Schedule:  49%|████▉     | 26/53 [00:34<00:37,  1.39s/it]Scraping Schedule:  51%|█████     | 27/53 [00:36<00:36,  1.41s/it]Scraping Schedule:  53%|█████▎    | 28/53 [00:37<00:34,  1.39s/it]Scraping Schedule:  55%|█████▍    | 29/53 [00:39<00:33,  1.39s/it]Scraping Schedule:  57%|█████▋    | 30/53 [00:40<00:32,  1.41s/it]Scraping Schedule:  58%|█████▊    | 31/53 [00:41<00:31,  1.41s/it]Scraping Schedule:  60%|██████    | 32/53 [00:43<00:29,  1.42s/it]Scraping Schedule:  62%|██████▏   | 33/53 [00:44<00:27,  1.38s/it]Scraping Schedule:  64%|██████▍   | 34/53 [00:46<00:25,  1.35s/it]Scraping Schedule:  66%|██████▌   | 35/53 [00:47<00:23,  1.32s/it]Scraping Schedule:  68%|██████▊   | 36/53 [00:48<00:22,  1.34s/it]Scraping Schedule:  70%|██████▉   | 37/53 [00:49<00:21,  1.34s/it]Scraping Schedule:  72%|███████▏  | 38/53 [00:51<00:19,  1.32s/it]Scraping Schedule:  74%|███████▎  | 39/53 [00:52<00:18,  1.34s/it]Scraping Schedule:  75%|███████▌  | 40/53 [00:53<00:17,  1.32s/it]Scraping Schedule:  77%|███████▋  | 41/53 [00:55<00:16,  1.34s/it]Scraping Schedule:  79%|███████▉  | 42/53 [00:56<00:14,  1.34s/it]Scraping Schedule:  81%|████████  | 43/53 [00:57<00:13,  1.32s/it]Scraping Schedule:  83%|████████▎ | 44/53 [00:59<00:11,  1.29s/it]Scraping Schedule:  85%|████████▍ | 45/53 [01:00<00:10,  1.27s/it]Scraping Schedule:  87%|████████▋ | 46/53 [01:01<00:08,  1.26s/it]Scraping Schedule:  89%|████████▊ | 47/53 [01:02<00:07,  1.25s/it]Scraping Schedule:  91%|█████████ | 48/53 [01:04<00:06,  1.24s/it]Scraping Schedule:  92%|█████████▏| 49/53 [01:05<00:04,  1.25s/it]Scraping Schedule:  94%|█████████▍| 50/53 [01:06<00:03,  1.25s/it]Scraping Schedule:  96%|█████████▌| 51/53 [01:07<00:02,  1.24s/it]Scraping Schedule:  98%|█████████▊| 52/53 [01:09<00:01,  1.24s/it]Scraping Schedule: 100%|██████████| 53/53 [01:10<00:00,  1.24s/it]Scraping Schedule: 100%|██████████| 53/53 [01:10<00:00,  1.33s/it]
+Scraping Game  2024020934 2025-02-27
+Scraping Game  2024021243 2025-04-08
+Scraping Game  2024021257 2025-04-10
+
+Players missing IDs:
+  - JURAJ SLAFKOVSKY 2024020934
+  - MIKEY EYSSIMONT 2024021243
+  - JOSH MAHURA 2024021243
+  - SAM MONTEMBEAULT 20934
+  - nan 20934
+
+  Batch 1/1  (3/3 games) | stints so far: 119,056
+  Total stints: 119,056 → stints_2425.csv
+  119,056 stints loaded for 24-25
+
+============================================================
+Season 23-24  (weight ×0.5)
+============================================================
+Step 1 — Game IDs for 23-24
+  Loaded 1312 game IDs from cache (game_ids_2324.json)
+  Total: 1312 games
+
+Step 2 — Stints for 23-24
+  Resuming from stints_2324.csv: 1310 games done, 118782 stints loaded
+  Processing 2 remaining games (1 batches of 50)...
+Scraping the schedule between 2023-09-01 and 2024-08-31...please give it a moment
+Scraping Schedule:   0%|          | 0/53 [00:00<?, ?it/s]Scraping Schedule:   2%|▏         | 1/53 [00:01<01:05,  1.25s/it]Scraping Schedule:   4%|▍         | 2/53 [00:02<01:04,  1.25s/it]Scraping Schedule:   6%|▌         | 3/53 [00:03<01:02,  1.26s/it]Scraping Schedule:   8%|▊         | 4/53 [00:05<01:02,  1.27s/it]Scraping Schedule:   9%|▉         | 5/53 [00:06<01:02,  1.31s/it]Scraping Schedule:  11%|█▏        | 6/53 [00:07<01:01,  1.30s/it]Scraping Schedule:  13%|█▎        | 7/53 [00:09<01:00,  1.31s/it]Scraping Schedule:  15%|█▌        | 8/53 [00:10<00:58,  1.30s/it]Scraping Schedule:  17%|█▋        | 9/53 [00:11<00:57,  1.31s/it]Scraping Schedule:  19%|█▉        | 10/53 [00:12<00:56,  1.31s/it]Scraping Schedule:  21%|██        | 11/53 [00:14<00:55,  1.33s/it]Scraping Schedule:  23%|██▎       | 12/53 [00:15<00:54,  1.33s/it]Scraping Schedule:  25%|██▍       | 13/53 [00:17<00:53,  1.33s/it]Scraping Schedule:  26%|██▋       | 14/53 [00:18<00:51,  1.32s/it]Scraping Schedule:  28%|██▊       | 15/53 [00:19<00:50,  1.33s/it]Scraping Schedule:  30%|███       | 16/53 [00:21<00:49,  1.34s/it]Scraping Schedule:  32%|███▏      | 17/53 [00:22<00:47,  1.33s/it]Scraping Schedule:  34%|███▍      | 18/53 [00:23<00:47,  1.36s/it]Scraping Schedule:  36%|███▌      | 19/53 [00:25<00:45,  1.35s/it]Scraping Schedule:  38%|███▊      | 20/53 [00:26<00:44,  1.34s/it]Scraping Schedule:  40%|███▉      | 21/53 [00:27<00:42,  1.34s/it]Scraping Schedule:  42%|████▏     | 22/53 [00:29<00:40,  1.31s/it]Scraping Schedule:  43%|████▎     | 23/53 [00:30<00:39,  1.30s/it]Scraping Schedule:  45%|████▌     | 24/53 [00:31<00:38,  1.32s/it]Scraping Schedule:  47%|████▋     | 25/53 [00:32<00:36,  1.31s/it]Scraping Schedule:  49%|████▉     | 26/53 [00:34<00:36,  1.34s/it]Scraping Schedule:  51%|█████     | 27/53 [00:35<00:34,  1.32s/it]Scraping Schedule:  53%|█████▎    | 28/53 [00:36<00:33,  1.33s/it]Scraping Schedule:  55%|█████▍    | 29/53 [00:38<00:31,  1.32s/it]Scraping Schedule:  57%|█████▋    | 30/53 [00:39<00:30,  1.33s/it]Scraping Schedule:  58%|█████▊    | 31/53 [00:40<00:29,  1.33s/it]Scraping Schedule:  60%|██████    | 32/53 [00:42<00:27,  1.33s/it]Scraping Schedule:  62%|██████▏   | 33/53 [00:43<00:26,  1.33s/it]Scraping Schedule:  64%|██████▍   | 34/53 [00:44<00:25,  1.33s/it]Scraping Schedule:  66%|██████▌   | 35/53 [00:46<00:23,  1.33s/it]Scraping Schedule:  68%|██████▊   | 36/53 [00:47<00:22,  1.31s/it]Scraping Schedule:  70%|██████▉   | 37/53 [00:48<00:21,  1.33s/it]Scraping Schedule:  72%|███████▏  | 38/53 [00:50<00:20,  1.38s/it]Scraping Schedule:  74%|███████▎  | 39/53 [00:51<00:18,  1.35s/it]Scraping Schedule:  75%|███████▌  | 40/53 [00:52<00:17,  1.32s/it]Scraping Schedule:  77%|███████▋  | 41/53 [00:54<00:15,  1.30s/it]Scraping Schedule:  79%|███████▉  | 42/53 [00:55<00:14,  1.29s/it]Scraping Schedule:  81%|████████  | 43/53 [00:56<00:12,  1.27s/it]Scraping Schedule:  83%|████████▎ | 44/53 [00:57<00:11,  1.26s/it]Scraping Schedule:  85%|████████▍ | 45/53 [00:59<00:09,  1.24s/it]Scraping Schedule:  87%|████████▋ | 46/53 [01:00<00:08,  1.24s/it]Scraping Schedule:  89%|████████▊ | 47/53 [01:01<00:07,  1.24s/it]Scraping Schedule:  91%|█████████ | 48/53 [01:02<00:06,  1.23s/it]Scraping Schedule:  92%|█████████▏| 49/53 [01:04<00:04,  1.23s/it]Scraping Schedule:  94%|█████████▍| 50/53 [01:05<00:03,  1.23s/it]Scraping Schedule:  96%|█████████▌| 51/53 [01:06<00:02,  1.22s/it]Scraping Schedule:  98%|█████████▊| 52/53 [01:07<00:01,  1.22s/it]Scraping Schedule: 100%|██████████| 53/53 [01:08<00:00,  1.22s/it]Scraping Schedule: 100%|██████████| 53/53 [01:08<00:00,  1.30s/it]
+Scraping Game  2023020164 2023-11-04
+Scraping Game  2023020290 2023-11-22
+
+Players missing IDs:
+  - JURAJ SLAFKOVSKY 2023020164
+  - JURAJ SLAFKOVSKY 2023020290
+  - GUSTAV LINDSTRÖM 2023020290
+  - JESSE YLÖNEN 2023020290
+  - SAM MONTEMBEAULT 20164
+  - nan 20164
+  - SAM MONTEMBEAULT 20290
+  - nan 20290
+
+  Batch 1/1  (2/2 games) | stints so far: 118,782
+  Total stints: 118,782 → stints_2324.csv
+  118,782 stints loaded for 23-24
+
+============================================================
+Step 3 — Combine 3 seasons + build RAPM regression
+============================================================
+  25-26: 91,490 stints (weight ×1.0)
+  24-25: 119,056 stints (weight ×0.7)
+  23-24: 118,782 stints (weight ×0.5)
+  Combined: 329,328 stints ≥10s
+Building RAPM matrix: 329,328 stints × 1161 players (season-weighted)
+Fitting offensive RAPM (RidgeCV)...
+  Best alpha: 100.0
+Fitting defensive RAPM (RidgeCV)...
+  Best alpha: 100.0
+
+============================================================
+Step 4 — Quality check and upload
+============================================================
+
+Min-TOI filter (≥200 min 5v5): 1161 → 891 players (removed 270 low-sample players)
+
+Quality gate (McDavid >70th pct AND Draisaitl >60th pct):
+  McDavid   rapm_off_pct: 96.7  ✓
+  Draisaitl rapm_off_pct: 70.8  ✓
+
+✓ Conditions met — uploading multi-season RAPM to Supabase
+  Nulling out 2 players with |RAPM| > 5.0...
+  Done — 2 impossible RAPM values cleared
+
+Uploaded RAPM for 712 players
+  179 IDs not in Supabase: [8470604, 8470610, 8470794, 8470966, 8471218, 8471274, 8471686, 8471699, 8471709, 8473449, 8473504, 8473604, 8474009, 8474031, 8474602, 8474618, 8474673, 8474870, 8474884, 8475164]...
+
+--- TOP 15 OFFENSIVE RAPM ---
+        full_name position  rapm_off  rapm_off_pct
+ Rutger McGroarty        R     7.880       100.000
+Aleksander Barkov        C     4.615        99.888
+  Nikita Kucherov        R     4.042        99.776
+      Jeff Malott        L     3.987        99.663
+          8475752        ?     3.946        99.551
+     Jordan Staal        C     3.946        99.439
+   Pierre Engvall        L     3.927        99.327
+     Zack MacEwen        R     3.886        99.214
+     Alex Steeves        C     3.755        99.102
+          8482241        ?     3.720        98.990
+  Mason Marchment        L     3.595        98.878
+     Jordan Kyrou        R     3.578        98.765
+          8485702        ?     3.511        98.653
+          8482758        ?     3.433        98.541
+ Pavel Buchnevich        L     3.429        98.429
+
+--- TOP 15 DEFENSIVE RAPM ---
+          full_name position  rapm_def  rapm_def_pct
+Samuel Montembeault        G     8.474       100.000
+       Ivan Demidov        R     6.177        99.888
+  Gabriel Landeskog        L     5.847        99.776
+            8477454        ?     5.216        99.663
+        Ross Colton        C     4.576        99.551
+  Aleksander Barkov        C     4.375        99.439
+            8477930        ?     4.370        99.327
+            8477482        ?     4.207        99.214
+    Nikita Kucherov        R     4.189        99.102
+   Nathan MacKinnon        C     4.092        98.990
+            8485414        ?     4.009        98.878
+      Brandon Hagel        L     3.903        98.765
+   David Gustafsson        C     3.862        98.653
+            8483497        ?     3.828        98.541
+ Mackie Samoskevich        R     3.638        98.429
+
+--- SPOTLIGHT PLAYERS ---
+  Player                rapm_off  off_pct  rapm_def  def_pct
+  --------------------  --------  -------  --------  -------
+  Connor McDavid           2.957     96.7     3.447     98.2
+  Leon Draisaitl           1.163     70.8     1.165     74.1
+  Nathan MacKinnon         3.264     97.8     4.092     99.0
+  Nikita Kucherov          4.042     99.8     4.189     99.1
+  Darren Raddysh          -1.461     17.8    -1.717     12.5
+
+Next steps:
+  1. rapm_off_pct is now at 20% in OFF_WEIGHTS in compute_ratings.py
+  2. Re-run: python compute_ratings.py
+
+✓ Done. Run compute_ratings.py to refresh overall ratings.
