@@ -49,30 +49,55 @@ function parseToi(toi) {
   return mins + secs / 60;
 }
 
+// Invert TEAM_FULL so we can look up abbr by full team name
+const TEAM_BY_FULLNAME = Object.fromEntries(
+  Object.entries(TEAM_FULL).map(([abbr, name]) => [name, abbr])
+);
+
 async function fetchStandings() {
   try {
-    const res = await fetch('https://api-web.nhle.com/v1/standings/now', {
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) return {};
-    const data = await res.json();
+    const [standingsRes, ppRes] = await Promise.all([
+      fetch('https://api-web.nhle.com/v1/standings/now', { next: { revalidate: 3600 } }),
+      fetch(
+        'https://api.nhle.com/stats/rest/en/team/powerplay?cayenneExp=seasonId=20252026',
+        { next: { revalidate: 3600 } }
+      ),
+    ]);
+
     const map = {};
-    for (const t of (data.standings || [])) {
-      // Handle both object and string shapes for teamAbbrev
-      const abbr = typeof t.teamAbbrev === 'object'
-        ? t.teamAbbrev.default
-        : t.teamAbbrev;
-      if (!abbr) continue;
-      // powerPlayPct is a decimal (0.234 = 23.4%) — convert to percentage
-      const rawPP = t.powerPlayPct ?? t.ppPctg ?? t.ppPct ?? null;
-      map[abbr] = {
-        wins:     t.wins     || 0,
-        losses:   t.losses   || 0,
-        otLosses: t.otLosses || 0,
-        points:   t.points   || 0,
-        ppPct:    rawPP != null ? +(rawPP * 100).toFixed(1) : null,
-      };
+
+    // W/L/OTL/points from standings endpoint
+    if (standingsRes.ok) {
+      const data = await standingsRes.json();
+      for (const t of (data.standings || [])) {
+        const abbr = typeof t.teamAbbrev === 'object'
+          ? t.teamAbbrev.default
+          : t.teamAbbrev;
+        if (!abbr) continue;
+        map[abbr] = {
+          wins:     t.wins     || 0,
+          losses:   t.losses   || 0,
+          otLosses: t.otLosses || 0,
+          points:   t.points   || 0,
+          ppPct:    null,
+        };
+      }
     }
+
+    // PP% from the team powerplay stats endpoint.
+    // powerPlayPct is a decimal (e.g. 0.331 = 33.1%). Teams identified by teamFullName.
+    if (ppRes.ok) {
+      const ppData = await ppRes.json();
+      for (const t of (ppData.data || [])) {
+        const abbr = TEAM_BY_FULLNAME[t.teamFullName];
+        if (!abbr) continue;
+        const raw = t.powerPlayPct;
+        if (map[abbr]) {
+          map[abbr].ppPct = raw != null ? +(raw * 100).toFixed(1) : null;
+        }
+      }
+    }
+
     return map;
   } catch {
     return {};
