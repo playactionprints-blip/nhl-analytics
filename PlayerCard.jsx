@@ -340,7 +340,7 @@ function PlayerCard({ player }) {
               </div>
             )}
             <div style={{ marginBottom:4 }}>
-              <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Percentile Profile vs. Forwards</div>
+              <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>{player.position === "D" ? "Percentile Profile vs. Defensemen" : player.position === "G" ? "Percentile Profile vs. Goalies" : "Percentile Profile vs. Forwards"}</div>
               <RadarViz percentiles={player.percentiles} color={accent} />
             </div>
           </div>
