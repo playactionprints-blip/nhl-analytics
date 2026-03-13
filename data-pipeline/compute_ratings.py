@@ -187,18 +187,19 @@ def pct_rank(series):
 def compute_group(subdf, is_defense):
     subdf = subdf.copy()
 
-    # Offensive rating — ixG/60 35%, A1/60 25%, Pts/60 10%, iCF/60 10%,
-    #                    xGF% 10%, finishing_pct 10%
-    # RAPM_off excluded: ridge RAPM with alpha=100 shrinks elite players toward zero
-    # (McDavid/Kucherov score ~52nd pct because they face tougher competition).
-    # Adding it at any meaningful weight displaces McDavid/MacKinnon from the top.
+    # Offensive rating — ixG/60 28%, A1/60 20%, RAPM_off 20%, Pts/60 8%,
+    #                    iCF/60 8%, xGF% 8%, finishing_pct 8%
+    # RAPM_off included at 20%: TOI filter (≥200 min) removes small-sample noise,
+    # and the improved xG model (NHL API v1 coords) makes RAPM more accurate.
+    # Other weights scaled ×0.80 to make room for the 20% RAPM component.
     OFF_WEIGHTS = {
-        'ixg_60':        0.35,
-        'a1_60':         0.25,
-        'pts_60':        0.10,
-        'icf_60':        0.10,
-        'xgf_pct':       0.10,
-        'finishing_pct': 0.10,
+        'ixg_60':        0.28,
+        'a1_60':         0.20,
+        'rapm_off_pct':  0.20,
+        'pts_60':        0.08,
+        'icf_60':        0.08,
+        'xgf_pct':       0.08,
+        'finishing_pct': 0.08,
     }
     for col in OFF_WEIGHTS:
         if col in subdf.columns:

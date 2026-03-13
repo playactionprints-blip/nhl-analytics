@@ -525,6 +525,19 @@ def build_rapm(stints_df):
     pid_idx   = {p: i for i, p in enumerate(all_pids)}
     n_players = len(all_pids)
 
+    # Vectorised per-player 5v5 TOI (seconds) — used later for min-TOI filter
+    def _explode_toi(col):
+        s = stints_df[[col, 'duration_seconds']].copy()
+        s[col] = s[col].str.split('|')
+        s = s.explode(col)
+        s = s[s[col].str.strip() != '']
+        s[col] = s[col].astype(int)
+        return s.groupby(col)['duration_seconds'].sum()
+
+    toi_home = _explode_toi('home_players')
+    toi_away = _explode_toi('away_players')
+    player_toi_sec = toi_home.add(toi_away, fill_value=0)
+
     has_season_weight = 'season_weight' in stints_df.columns
     print(f"Building RAPM matrix: {n_stints:,} stints × {n_players} players"
           + (" (season-weighted)" if has_season_weight else ""))
@@ -572,9 +585,10 @@ def build_rapm(stints_df):
     print(f"  Best alpha: {m_def.alpha_}")
 
     results = pd.DataFrame({
-        'player_id': all_pids,
-        'rapm_off':  m_off.coef_,
-        'rapm_def': -m_def.coef_,  # flipped: higher = better defender
+        'player_id':     all_pids,
+        'rapm_off':      m_off.coef_,
+        'rapm_def':     -m_def.coef_,  # flipped: higher = better defender
+        'toi_5v5_total': [round(float(player_toi_sec.get(p, 0)) / 60.0, 1) for p in all_pids],
     })
     results['rapm_off_pct'] = results['rapm_off'].rank(pct=True) * 100
     results['rapm_def_pct'] = results['rapm_def'].rank(pct=True) * 100
@@ -674,6 +688,27 @@ def upload_rapm(results_df):
               f"{'...' if len(not_found) > 20 else ''}")
 
 
+def null_impossible_rapm(sb):
+    """
+    Set rapm_off/rapm_def to NULL in Supabase for any player where
+    abs(rapm_off) > 5.0 or abs(rapm_def) > 5.0.
+    These values are physically impossible and indicate small-sample regression blow-up.
+    """
+    rows = sb.table('players').select('player_id,rapm_off,rapm_def').execute().data
+    to_null = [
+        r['player_id'] for r in rows
+        if (r.get('rapm_off') is not None and abs(float(r['rapm_off'])) > 5.0)
+        or (r.get('rapm_def') is not None and abs(float(r['rapm_def'])) > 5.0)
+    ]
+    if not to_null:
+        print("  No impossible RAPM values found (all abs() ≤ 5.0)")
+        return
+    print(f"  Nulling out {len(to_null)} players with |RAPM| > 5.0...")
+    null_data = {'rapm_off': None, 'rapm_def': None, 'rapm_off_pct': None, 'rapm_def_pct': None}
+    sb.table('players').update(null_data).in_('player_id', to_null).execute()
+    print(f"  Done — {len(to_null)} impossible RAPM values cleared")
+
+
 def print_leaderboards(results_df):
     if not SUPABASE_URL or not SUPABASE_KEY:
         return
@@ -724,11 +759,37 @@ def print_leaderboards(results_df):
 # ── Step 5: Quality gate before uploading ────────────────────────────────────
 def check_and_maybe_upload(results_df):
     """
-    Upload multi-season RAPM to Supabase only if elite players score well.
-    Conditions: McDavid rapm_off_pct > 70th AND Draisaitl rapm_off_pct > 60th.
-    These thresholds indicate the 3-season regression has reduced collinearity
-    enough to correctly separate the Oilers' top two players.
+    Apply min-TOI filter, null impossible values, then upload if quality gate passes.
+    Quality gate: McDavid rapm_off_pct > 70th AND Draisaitl rapm_off_pct > 60th.
     """
+    # ── Min-TOI filter: remove small-sample noise ─────────────────────────────
+    MIN_TOI_MINUTES = 200
+    n_before = len(results_df)
+    results_df = results_df[results_df['toi_5v5_total'] >= MIN_TOI_MINUTES].copy()
+    n_after = len(results_df)
+    print(f"\nMin-TOI filter (≥{MIN_TOI_MINUTES} min 5v5): {n_before} → {n_after} players "
+          f"(removed {n_before - n_after} low-sample players)")
+
+    # Recompute percentile ranks within the filtered qualified set
+    results_df['rapm_off_pct'] = results_df['rapm_off'].rank(pct=True) * 100
+    results_df['rapm_def_pct'] = results_df['rapm_def'].rank(pct=True) * 100
+
+    # Drop remaining impossible values (physically unreachable regardless of sample size)
+    MAX_RAPM = 5.0
+    n_extreme = (
+        (results_df['rapm_off'].abs() > MAX_RAPM) |
+        (results_df['rapm_def'].abs() > MAX_RAPM)
+    ).sum()
+    if n_extreme:
+        results_df = results_df[
+            (results_df['rapm_off'].abs() <= MAX_RAPM) &
+            (results_df['rapm_def'].abs() <= MAX_RAPM)
+        ].copy()
+        print(f"  Removed {n_extreme} players with |RAPM| > {MAX_RAPM}")
+        # Recompute percentiles after removing extreme values
+        results_df['rapm_off_pct'] = results_df['rapm_off'].rank(pct=True) * 100
+        results_df['rapm_def_pct'] = results_df['rapm_def'].rank(pct=True) * 100
+
     mc_row = results_df[results_df['player_id'] == MCDAVID_ID]
     dr_row = results_df[results_df['player_id'] == DRAISAITL_ID]
 
@@ -741,15 +802,21 @@ def check_and_maybe_upload(results_df):
 
     if mc_pct > 70 and dr_pct > 60:
         print("\n✓ Conditions met — uploading multi-season RAPM to Supabase")
+        if SUPABASE_URL and SUPABASE_KEY:
+            sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+            null_impossible_rapm(sb)
         upload_rapm(results_df)
         print_leaderboards(results_df)
         print("\nNext steps:")
-        print("  1. In compute_ratings.py, add rapm_off_pct at 20% to OFF_WEIGHTS")
+        print("  1. rapm_off_pct is now at 20% in OFF_WEIGHTS in compute_ratings.py")
         print("  2. Re-run: python compute_ratings.py")
         return True
     else:
         print("\n✗ Conditions not met — not uploading (current single-season RAPM preserved)")
         print("  Multi-season regression still doesn't clearly separate elite players.")
+        if SUPABASE_URL and SUPABASE_KEY:
+            sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+            null_impossible_rapm(sb)
         print_leaderboards(results_df)
         return False
 
