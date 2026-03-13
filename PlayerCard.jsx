@@ -51,6 +51,12 @@ function statColor(pct) {
   if (pct >= 48) return "#f0c040";
   return "#e05050";
 }
+function fmtMinSec(decimalMinutes) {
+  if (decimalMinutes == null || isNaN(decimalMinutes)) return "—";
+  const m = Math.floor(decimalMinutes);
+  const s = Math.round((decimalMinutes - m) * 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 function PercentileBar({ label, value }) {
@@ -300,10 +306,26 @@ function PlayerCard({ player }) {
               <StatBox label="+/-" value={player.plus_minus != null ? `${player.plus_minus > 0 ? "+" : ""}${player.plus_minus}` : null} />
               <StatBox label="Pts/82" value={ptsPer82 || null} highlight />
             </div>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:player.contract_info?.cap_hit ? 8 : 16, padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
               <span style={{ fontSize:11, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Avg TOI</span>
               <span style={{ fontSize:20, fontWeight:800, color:accent }}>{player.toi || "—"}</span>
             </div>
+            {((player.toi_pp > 0) || (player.toi_pk > 0)) && (player.gp > 0) && (
+              <div style={{ display:"grid", gridTemplateColumns:(player.toi_pp > 0 && player.toi_pk > 0) ? "1fr 1fr" : "1fr", gap:8, marginBottom:player.contract_info?.cap_hit ? 8 : 16 }}>
+                {player.toi_pp > 0 && (
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+                    <span style={{ fontSize:10, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>PP TOI</span>
+                    <span style={{ fontSize:14, fontWeight:800, color:"#38bdf8", fontFamily:"'Barlow Condensed',sans-serif" }}>{fmtMinSec(player.toi_pp / player.gp)}/gm</span>
+                  </div>
+                )}
+                {player.toi_pk > 0 && (
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+                    <span style={{ fontSize:10, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>PK TOI</span>
+                    <span style={{ fontSize:14, fontWeight:800, color:"#818cf8", fontFamily:"'Barlow Condensed',sans-serif" }}>{fmtMinSec(player.toi_pk / player.gp)}/gm</span>
+                  </div>
+                )}
+              </div>
+            )}
             {player.contract_info?.cap_hit && (
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
                 <span style={{ fontSize:11, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Cap Hit</span>
@@ -350,6 +372,126 @@ function PlayerCard({ player }) {
                 {Object.entries(player.percentiles).map(([k,v]) => <PercentileBar key={k} label={k} value={v} />)}
               </div>
             )}
+
+            {/* Special Teams */}
+            <div style={{ marginTop:20 }}>
+              <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:10 }}>Special Teams</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+
+                {/* Power Play card */}
+                {(() => {
+                  const tpp    = player.toi_pp;
+                  const cfpp   = player.cf_pct_pp;
+                  const xgfpp  = player.xgf_pp;
+                  const gp     = player.gp || 1;
+                  const per60  = tpp > 0 && xgfpp != null ? xgfpp / tpp * 60 : null;
+                  const C      = "#38bdf8";
+                  return (
+                    <div style={{ background:"#0a1520", border:`1px solid ${C}22`, borderRadius:8, padding:"10px 12px" }}>
+                      <div style={{ fontSize:10, color:C, fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>⚡ Power Play</div>
+                      {tpp == null || tpp < 20 ? (
+                        <div style={{ fontSize:11, color:tpp == null ? "#2a4060" : "#3a5a78", fontFamily:"'DM Mono',monospace", padding:"4px 0" }}>
+                          {tpp == null ? "Not deployed" : "Limited PP time"}
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
+                            <span style={{ fontSize:10, color:"#5a7a99", fontFamily:"'DM Mono',monospace" }}>TOI</span>
+                            <span style={{ fontSize:13, fontWeight:700, color:C, fontFamily:"'DM Mono',monospace" }}>{fmtMinSec(tpp / gp)}/gm</span>
+                          </div>
+                          {cfpp != null && (
+                            <div style={{ marginBottom:8 }}>
+                              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                                <span style={{ fontSize:10, color:"#8899aa", fontFamily:"'DM Mono',monospace" }}>CF% on PP</span>
+                                <span style={{ fontSize:11, fontWeight:700, color:statColor(cfpp), fontFamily:"'DM Mono',monospace" }}>{cfpp.toFixed(1)}%</span>
+                              </div>
+                              <div style={{ height:5, background:"#1a2535", borderRadius:3, position:"relative", overflow:"hidden" }}>
+                                <div style={{ position:"absolute", left:"50%", top:0, bottom:0, width:1, background:"#2a3d55", zIndex:1 }} />
+                                <div style={{ position:"absolute", left:cfpp>=50?"50%":`${cfpp}%`, width:cfpp>=50?`${cfpp-50}%`:`${50-cfpp}%`, height:"100%", background:C, opacity:0.75, borderRadius:3 }} />
+                              </div>
+                            </div>
+                          )}
+                          {per60 != null && (
+                            <div>
+                              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                                <span style={{ fontSize:10, color:"#8899aa", fontFamily:"'DM Mono',monospace" }}>xGF/60 on PP</span>
+                                <span style={{ fontSize:11, fontWeight:700, color:per60 >= 2.8 ? C : "#e05050", fontFamily:"'DM Mono',monospace" }}>{per60.toFixed(2)}</span>
+                              </div>
+                              {(() => {
+                                const norm = Math.min(100, Math.max(0, per60 / 5.6 * 100));
+                                return (
+                                  <div style={{ height:5, background:"#1a2535", borderRadius:3, position:"relative", overflow:"hidden" }}>
+                                    <div style={{ position:"absolute", left:"50%", top:0, bottom:0, width:1, background:"#2a3d55", zIndex:1 }} />
+                                    <div style={{ position:"absolute", left:norm>=50?"50%":`${norm}%`, width:norm>=50?`${norm-50}%`:`${50-norm}%`, height:"100%", background:norm>=50?C:"#e05050", opacity:0.75, borderRadius:3 }} />
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Penalty Kill card */}
+                {(() => {
+                  const tpk    = player.toi_pk;
+                  const cfpk   = player.cf_pct_pk;
+                  const xgapk  = player.xga_pk;
+                  const gp     = player.gp || 1;
+                  const per60  = tpk > 0 && xgapk != null ? xgapk / tpk * 60 : null;
+                  const C      = "#818cf8";
+                  return (
+                    <div style={{ background:"#0a1520", border:`1px solid ${C}22`, borderRadius:8, padding:"10px 12px" }}>
+                      <div style={{ fontSize:10, color:C, fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>🛡 Penalty Kill</div>
+                      {tpk == null || tpk < 20 ? (
+                        <div style={{ fontSize:11, color:tpk == null ? "#2a4060" : "#3a5a78", fontFamily:"'DM Mono',monospace", padding:"4px 0" }}>
+                          {tpk == null ? "Not deployed" : "Limited PK time"}
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
+                            <span style={{ fontSize:10, color:"#5a7a99", fontFamily:"'DM Mono',monospace" }}>TOI</span>
+                            <span style={{ fontSize:13, fontWeight:700, color:C, fontFamily:"'DM Mono',monospace" }}>{fmtMinSec(tpk / gp)}/gm</span>
+                          </div>
+                          {cfpk != null && (
+                            <div style={{ marginBottom:8 }}>
+                              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                                <span style={{ fontSize:10, color:"#8899aa", fontFamily:"'DM Mono',monospace" }}>CF% on PK</span>
+                                <span style={{ fontSize:11, fontWeight:700, color:statColor(cfpk), fontFamily:"'DM Mono',monospace" }}>{cfpk.toFixed(1)}%</span>
+                              </div>
+                              <div style={{ height:5, background:"#1a2535", borderRadius:3, position:"relative", overflow:"hidden" }}>
+                                <div style={{ position:"absolute", left:"50%", top:0, bottom:0, width:1, background:"#2a3d55", zIndex:1 }} />
+                                <div style={{ position:"absolute", left:cfpk>=50?"50%":`${cfpk}%`, width:cfpk>=50?`${cfpk-50}%`:`${50-cfpk}%`, height:"100%", background:C, opacity:0.75, borderRadius:3 }} />
+                              </div>
+                            </div>
+                          )}
+                          {per60 != null && (
+                            <div>
+                              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                                <span style={{ fontSize:10, color:"#8899aa", fontFamily:"'DM Mono',monospace" }}>xGA/60 on PK</span>
+                                <span style={{ fontSize:11, fontWeight:700, color:per60 < 2.4 ? C : "#e05050", fontFamily:"'DM Mono',monospace" }}>{per60.toFixed(2)}</span>
+                              </div>
+                              {(() => {
+                                const invNorm = Math.min(100, Math.max(0, (1 - per60 / 4.8) * 100));
+                                return (
+                                  <div style={{ height:5, background:"#1a2535", borderRadius:3, position:"relative", overflow:"hidden" }}>
+                                    <div style={{ position:"absolute", left:"50%", top:0, bottom:0, width:1, background:"#2a3d55", zIndex:1 }} />
+                                    <div style={{ position:"absolute", left:invNorm>=50?"50%":`${invNorm}%`, width:invNorm>=50?`${invNorm-50}%`:`${50-invNorm}%`, height:"100%", background:invNorm>=50?C:"#e05050", opacity:0.75, borderRadius:3 }} />
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+
+              </div>
+            </div>
           </div>
         )}
 
