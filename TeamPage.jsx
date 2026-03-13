@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PlayerCard } from "@/PlayerCard";
+import { GoalieCard } from "@/GoalieCard";
 
 // ── Shared constants (mirrored from PlayerCard.jsx) ──────────────────────────
 const TEAM_COLOR = {
@@ -236,7 +237,10 @@ function PlayerModal({ player, onClose }) {
         padding: 20,
       }}>
       <div onClick={e => e.stopPropagation()}>
-        <PlayerCard player={player} />
+        {player.position === "G"
+          ? <GoalieCard player={player} />
+          : <PlayerCard player={player} />
+        }
       </div>
     </div>
   );

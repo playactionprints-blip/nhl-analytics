@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { GoalieCard } from "./GoalieCard";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip,
          LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 
@@ -907,7 +908,10 @@ export default function App({ players: propPlayers, seasonStats }) {
             <button className="pc-modal-close-btn" onClick={() => setSelectedPlayer(null)} aria-label="Close">✕</button>
             <div className="pc-modal-wrapper" onClick={e => { if (e.target === e.currentTarget) setSelectedPlayer(null); }}>
               <div style={{ animation:"fadeUp 0.4s ease" }}>
-                <PlayerCard key={displayPlayer.player_id} player={displayPlayer} />
+                {displayPlayer.position === "G"
+                  ? <GoalieCard player={displayPlayer} />
+                  : <PlayerCard key={displayPlayer.player_id} player={displayPlayer} />
+                }
               </div>
             </div>
           </>

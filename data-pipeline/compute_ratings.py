@@ -394,3 +394,74 @@ for _, row in final.iterrows():
         skipped += 1
 
 print(f"\nDone. Updated: {updated} | Skipped: {skipped}")
+
+# ── Goalie Ratings ─────────────────────────────────────────────────────────────
+print("\n--- COMPUTING GOALIE RATINGS ---")
+print("SQL migration (run in Supabase editor if columns don't exist):")
+print("  alter table players add column if not exists sv_pct_pct float8;")
+print("  alter table players add column if not exists gaa_pct float8;")
+print("  alter table players add column if not exists win_pct_pct float8;")
+print("  alter table players add column if not exists shutout_pct float8;")
+
+goalie_rows = sb.table('players').select(
+    'player_id,full_name,position,gp,wins,losses,shutouts,gaa,save_pct'
+).eq('position', 'G').execute().data
+
+gdf = pd.DataFrame(goalie_rows)
+for col in ['gp', 'wins', 'losses', 'shutouts', 'gaa', 'save_pct']:
+    gdf[col] = pd.to_numeric(gdf[col], errors='coerce')
+gdf['wins']     = gdf['wins'].fillna(0)
+gdf['losses']   = gdf['losses'].fillna(0)
+gdf['shutouts'] = gdf['shutouts'].fillna(0)
+gdf = gdf[gdf['gp'] >= 10].copy()
+print(f"Qualified goalies: {len(gdf)} (≥10 GP)")
+
+if len(gdf) > 0:
+    gdf['win_pct']       = gdf['wins']     / gdf['gp']
+    gdf['shutout_rate']  = gdf['shutouts'] / gdf['gp']
+
+    gdf['sv_pct_pct']   = gdf['save_pct'].rank(pct=True) * 100
+    gdf['gaa_pct']      = (1 - gdf['gaa'].rank(pct=True)) * 100   # inverted: lower GAA → higher pct
+    gdf['win_pct_pct']  = gdf['win_pct'].rank(pct=True) * 100
+    gdf['shutout_pct']  = gdf['shutout_rate'].rank(pct=True) * 100
+
+    gdf['overall_rating'] = (
+        gdf['sv_pct_pct']  * 0.40 +
+        gdf['gaa_pct']     * 0.35 +
+        gdf['win_pct_pct'] * 0.15 +
+        gdf['shutout_pct'] * 0.10
+    ).round(1)
+
+    gdf['percentiles'] = gdf.apply(lambda r: {
+        'SV%':     round(float(r['sv_pct_pct']),  1),
+        'GAA':     round(float(r['gaa_pct']),      1),
+        'Win%':    round(float(r['win_pct_pct']),  1),
+        'SO Rate': round(float(r['shutout_pct']),  1),
+    }, axis=1)
+
+    print("\n--- TOP 10 GOALIES ---")
+    top10 = gdf.sort_values('overall_rating', ascending=False).head(10)
+    print(top10[['full_name','gp','wins','save_pct','gaa','shutouts','overall_rating']].to_string())
+
+    g_updated = g_failed = 0
+    for _, row in gdf.iterrows():
+        data = {
+            'overall_rating': float(row['overall_rating']),
+            'sv_pct_pct':     float(row['sv_pct_pct']),
+            'gaa_pct':        float(row['gaa_pct']),
+            'win_pct_pct':    float(row['win_pct_pct']),
+            'shutout_pct':    float(row['shutout_pct']),
+            'percentiles':    row['percentiles'],
+        }
+        try:
+            result = sb.table('players').update(data).eq('player_id', row['player_id']).execute()
+            if result.data:
+                g_updated += 1
+            else:
+                g_failed += 1
+        except Exception as e:
+            g_failed += 1
+            if g_failed == 1:
+                print(f"  Upload error: {e}")
+                print("  → Run the SQL migration above in Supabase editor first, then re-run.")
+    print(f"Goalie ratings uploaded: {g_updated} | failed: {g_failed}")
