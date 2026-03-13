@@ -6,7 +6,7 @@ import { PlayerCard } from "@/PlayerCard";
 
 // ── Shared constants (mirrored from PlayerCard.jsx) ──────────────────────────
 const TEAM_COLOR = {
-  ANA:"#F47A38",ARI:"#8C2633",BOS:"#FFB81C",BUF:"#003087",CAR:"#CC0000",
+  ANA:"#F47A38",BOS:"#FFB81C",BUF:"#003087",CAR:"#CC0000",
   CBJ:"#002654",CGY:"#C8102E",CHI:"#CF0A2C",COL:"#6F263D",DAL:"#006847",
   DET:"#CE1126",EDM:"#FF4C00",FLA:"#C8102E",LAK:"#111111",MIN:"#154734",
   MTL:"#AF1E2D",NSH:"#FFB81C",NJD:"#CC0000",NYI:"#00539B",NYR:"#0038A8",
@@ -16,7 +16,7 @@ const TEAM_COLOR = {
 };
 
 const TEAM_FULL = {
-  ANA:"Anaheim Ducks",ARI:"Arizona Coyotes",BOS:"Boston Bruins",BUF:"Buffalo Sabres",
+  ANA:"Anaheim Ducks",BOS:"Boston Bruins",BUF:"Buffalo Sabres",
   CAR:"Carolina Hurricanes",CBJ:"Columbus Blue Jackets",CGY:"Calgary Flames",
   CHI:"Chicago Blackhawks",COL:"Colorado Avalanche",DAL:"Dallas Stars",
   DET:"Detroit Red Wings",EDM:"Edmonton Oilers",FLA:"Florida Panthers",
