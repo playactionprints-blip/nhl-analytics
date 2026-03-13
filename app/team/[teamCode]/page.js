@@ -63,13 +63,14 @@ async function fetchStandings() {
         ? t.teamAbbrev.default
         : t.teamAbbrev;
       if (!abbr) continue;
+      // powerPlayPct is a decimal (0.234 = 23.4%) — convert to percentage
+      const rawPP = t.powerPlayPct ?? t.ppPctg ?? t.ppPct ?? null;
       map[abbr] = {
-        wins:      t.wins      || 0,
-        losses:    t.losses    || 0,
-        otLosses:  t.otLosses  || 0,
-        points:    t.points    || 0,
-        // field name varies: ppPctg, powerPlayPct, ppPct
-        ppPct: t.powerPlayPct ?? t.ppPctg ?? t.ppPct ?? null,
+        wins:     t.wins     || 0,
+        losses:   t.losses   || 0,
+        otLosses: t.otLosses || 0,
+        points:   t.points   || 0,
+        ppPct:    rawPP != null ? +(rawPP * 100).toFixed(1) : null,
       };
     }
     return map;
@@ -95,6 +96,7 @@ export default async function TeamPageRoute({ params }) {
       .from('players')
       .select('*')
       .eq('team', teamCode)
+      .gte('gp', 5)
       .order('overall_rating', { ascending: false, nullsFirst: false }),
     supabase
       .from('players')
