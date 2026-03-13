@@ -283,6 +283,7 @@ GOALS_PER_WIN     = 6.0
 REPLACEMENT_LEVEL = -0.15   # xG/60 below average = replacement level
 PP_AVG_XGF_PER_60 = 2.8    # league avg PP xGF/60
 PK_AVG_XGA_PER_60 = 2.4    # league avg PK xGA/60
+RAPM_TO_XG60_SCALE = 1 / 60.0  # Stored RAPM comes from build_rapm's xG/hour target
 
 # Fetch current-season TOI splits and PP/PK xG (populated by upload_nst_splits.py)
 splits_rows   = sb.table('players').select(
@@ -305,9 +306,11 @@ for _, row in final.iterrows():
         war_data[pid] = {}
         continue
 
+    rapm_off_xg60 = rapm_off_v * RAPM_TO_XG60_SCALE
+    rapm_def_xg60 = rapm_def_v * RAPM_TO_XG60_SCALE
     h5     = toi_5v5 / 60.0
-    ev_off = (rapm_off_v - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
-    ev_def = (rapm_def_v - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
+    ev_off = (rapm_off_xg60 - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
+    ev_def = (rapm_def_xg60 - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
 
     pp_war = 0.0
     if toi_pp_sp and toi_pp_sp > 0 and xgf_pp_v is not None:
@@ -324,6 +327,48 @@ for _, row in final.iterrows():
         'war_pk':     round(pk_war, 2),
         'war_total':  round(ev_off + ev_def + pp_war + pk_war, 2),
     }
+
+# Spotlight diagnostic for WAR scaling
+spotlight = final[final['full_name'] == 'Nathan MacKinnon']
+if not spotlight.empty:
+    row = spotlight.iloc[0]
+    pid = row['player_id']
+    sp = splits_lookup.get(pid, {})
+    rapm_off_raw = safe(row.get('rapm_off'))
+    rapm_def_raw = safe(row.get('rapm_def'))
+    toi_5v5 = safe(sp.get('toi_5v5'))
+    toi_pp_sp = safe(sp.get('toi_pp'))
+    toi_pk_sp = safe(sp.get('toi_pk'))
+    xgf_pp_v = safe(sp.get('xgf_pp'))
+    xga_pk_v = safe(sp.get('xga_pk'))
+    if rapm_off_raw is not None and rapm_def_raw is not None and toi_5v5:
+        h5 = toi_5v5 / 60.0
+        rapm_off_xg60 = rapm_off_raw * RAPM_TO_XG60_SCALE
+        rapm_def_xg60 = rapm_def_raw * RAPM_TO_XG60_SCALE
+        ev_off = (rapm_off_xg60 - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
+        ev_def = (rapm_def_xg60 - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
+        pp_war = 0.0
+        if toi_pp_sp and toi_pp_sp > 0 and xgf_pp_v is not None:
+            pp_war = (xgf_pp_v / toi_pp_sp * 60 - PP_AVG_XGF_PER_60) * (toi_pp_sp / 60.0) / GOALS_PER_WIN
+        pk_war = 0.0
+        if toi_pk_sp and toi_pk_sp > 0 and xga_pk_v is not None:
+            pk_war = (PK_AVG_XGA_PER_60 - xga_pk_v / toi_pk_sp * 60) * (toi_pk_sp / 60.0) / GOALS_PER_WIN
+        print("\n--- WAR DIAGNOSTIC: Nathan MacKinnon ---")
+        print(f"  rapm_off raw:   {rapm_off_raw:.4f}")
+        print(f"  rapm_def raw:   {rapm_def_raw:.4f}")
+        print(f"  toi_5v5 (min):  {toi_5v5:.2f}")
+        print(f"  toi_pp  (min):  {toi_pp_sp:.2f}" if toi_pp_sp is not None else "  toi_pp  (min):  None")
+        print(f"  rapm_off xG/60: {rapm_off_xg60:.4f}  (raw / 60)")
+        print(f"  rapm_def xG/60: {rapm_def_xg60:.4f}  (raw / 60)")
+        print(f"  EV Off WAR = ({rapm_off_xg60:.4f} - ({REPLACEMENT_LEVEL:.2f})) * ({toi_5v5:.2f}/60) / {GOALS_PER_WIN:.1f} = {ev_off:.2f}")
+        print(f"  EV Def WAR = ({rapm_def_xg60:.4f} - ({REPLACEMENT_LEVEL:.2f})) * ({toi_5v5:.2f}/60) / {GOALS_PER_WIN:.1f} = {ev_def:.2f}")
+        if toi_pp_sp and toi_pp_sp > 0 and xgf_pp_v is not None:
+            pp_per60 = xgf_pp_v / toi_pp_sp * 60
+            print(f"  PP WAR     = ({pp_per60:.4f} - {PP_AVG_XGF_PER_60:.1f}) * ({toi_pp_sp:.2f}/60) / {GOALS_PER_WIN:.1f} = {pp_war:.2f}")
+        if toi_pk_sp and toi_pk_sp > 0 and xga_pk_v is not None:
+            pk_per60 = xga_pk_v / toi_pk_sp * 60
+            print(f"  PK WAR     = ({PK_AVG_XGA_PER_60:.1f} - {pk_per60:.4f}) * ({toi_pk_sp:.2f}/60) / {GOALS_PER_WIN:.1f} = {pk_war:.2f}")
+        print(f"  Total WAR  = {ev_off + ev_def + pp_war + pk_war:.2f}")
 
 # Print top-20 WAR leaderboard
 name_pos = {row['player_id']: (row['full_name'], row['position']) for _, row in final.iterrows()}
