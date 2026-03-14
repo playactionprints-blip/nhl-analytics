@@ -15,13 +15,23 @@ Requires SQL migration first:
 import json
 import math
 import os
-import re
 import time
 from collections import defaultdict
 from datetime import date
 
+import numpy as np
+import pandas as pd
 import requests
 from supabase import create_client
+
+from build_xg_model import (
+    FEATURE_COLS,
+    _EVENT_TYPE_MAP,
+    _SHOT_TYPE_MAP,
+    _parse_situation_code,
+    _strength_category,
+    engineer_features,
+)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
@@ -40,17 +50,7 @@ SEASON_CONFIGS = {
 }
 
 SHOT_EVENTS = {'shot-on-goal', 'goal', 'missed-shot'}
-SHOT_TYPE_MAP = {
-    'wrist': 'WRIST SHOT',
-    'slap': 'SLAP SHOT',
-    'snap': 'SNAP SHOT',
-    'backhand': 'BACKHAND',
-    'tip-in': 'TIP-IN',
-    'deflected': 'DEFLECTED',
-    'wrap-around': 'WRAP-AROUND',
-    'between-legs': 'BETWEEN LEGS',
-    'poke': 'POKE',
-}
+XG_MODEL_BUCKETS = ('5v5', 'PP', 'PK')
 
 
 def _get_with_retry(url, max_retries=3):
@@ -105,32 +105,105 @@ def load_game_ids(season_key):
     return ids
 
 
-def aggregate_goalie_shots(game_ids):
-    totals = defaultdict(lambda: {
-        'expected_goals_against': 0.0,
-    })
+def load_xg_models():
+    try:
+        from xgboost import XGBClassifier
+    except Exception:
+        print("xgboost not available — falling back to simple shot-location xG")
+        return {}
+
+    models = {}
+    for bucket in XG_MODEL_BUCKETS:
+        model_path = os.path.join(DATA_DIR, f'xg_model_{bucket}.json')
+        if not os.path.exists(model_path):
+            continue
+        model = XGBClassifier()
+        model.load_model(model_path)
+        models[bucket] = model
+
+    if models:
+        print(f"Loaded trained xG models for: {', '.join(sorted(models))}")
+    else:
+        print("No trained xG models found — falling back to simple shot-location xG")
+    return models
+
+
+def aggregate_goalie_shots(game_ids, season_key, models):
+    shot_rows = []
     failed = []
 
     for idx, game_id in enumerate(game_ids, start=1):
         try:
             url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play"
             data = _get_with_retry(url).json()
+            home_team_id = data.get('homeTeam', {}).get('id')
+            home_abbr = data.get('homeTeam', {}).get('abbrev', '')
+            away_abbr = data.get('awayTeam', {}).get('abbrev', '')
+            home_score = away_score = 0
+            prior_type = 'NONE'
+            prior_team = ''
+            prior_secs = 0
+
             for ev in data.get('plays', []):
                 ev_type = ev.get('typeDescKey')
-                if ev_type not in SHOT_EVENTS:
-                    continue
-                if ev.get('periodDescriptor', {}).get('periodType') == 'SO':
-                    continue
                 det = ev.get('details', {})
+                period = ev.get('periodDescriptor', {}).get('number', 0)
+                period_type = ev.get('periodDescriptor', {}).get('periodType')
+                if not period or period < 1 or period_type == 'SO':
+                    continue
+
+                parts = str(ev.get('timeInPeriod', '0:00')).split(':')
+                p_secs = int(parts[0]) * 60 + int(parts[1]) if len(parts) == 2 else 0
+                abs_t = (period - 1) * 1200 + p_secs
+
+                if ev_type == 'goal':
+                    if det.get('eventOwnerTeamId') == home_team_id:
+                        home_score += 1
+                    else:
+                        away_score += 1
+
+                if ev_type not in SHOT_EVENTS:
+                    prior_type = _EVENT_TYPE_MAP.get(ev_type, str(ev_type or '').upper()[:10])
+                    prior_team = home_abbr if det.get('eventOwnerTeamId') == home_team_id else away_abbr
+                    prior_secs = abs_t
+                    continue
+
                 goalie_id = det.get('goalieInNetId')
                 xc = det.get('xCoord')
                 yc = det.get('yCoord')
                 if goalie_id is None or xc is None or yc is None:
+                    prior_type = _EVENT_TYPE_MAP.get(ev_type, 'SHOT')
+                    prior_team = home_abbr if det.get('eventOwnerTeamId') == home_team_id else away_abbr
+                    prior_secs = abs_t
                     continue
 
-                shot_type = SHOT_TYPE_MAP.get(det.get('shotType', ''), det.get('shotType', ''))
-                xg = compute_xg_xy(float(xc), float(yc), shot_type)
-                totals[int(goalie_id)]['expected_goals_against'] += xg
+                event_team_id = det.get('eventOwnerTeamId')
+                is_home = int(event_team_id == home_team_id)
+                shooter_team = home_abbr if is_home else away_abbr
+                score_diff = home_score - away_score
+                if not is_home:
+                    score_diff = -score_diff
+
+                shot_rows.append({
+                    'game_id': game_id,
+                    'season': season_key,
+                    'period': period,
+                    'time_seconds': abs_t,
+                    'goalie_id': int(goalie_id),
+                    'is_home': is_home,
+                    'x_coord': float(xc),
+                    'y_coord': float(yc),
+                    'shot_type': _SHOT_TYPE_MAP.get(det.get('shotType', ''), ''),
+                    'prior_event_type': prior_type,
+                    'prior_event_team': prior_team,
+                    'seconds_since_prior': float(max(0, abs_t - prior_secs)),
+                    'score_diff': score_diff,
+                    'game_strength': _parse_situation_code(ev.get('situationCode', '')),
+                    'is_goal': int(ev_type == 'goal'),
+                })
+                prior_type = _EVENT_TYPE_MAP.get(ev_type, 'SHOT')
+                prior_team = shooter_team
+                prior_secs = abs_t
         except Exception as e:
             failed.append((game_id, str(e)))
 
@@ -141,6 +214,47 @@ def aggregate_goalie_shots(game_ids):
         print(f"  Failed games: {len(failed)}")
         for game_id, err in failed[:10]:
             print(f"    {game_id}: {err}")
+    if not shot_rows:
+        return {}
+
+    df = pd.DataFrame(shot_rows)
+    totals = defaultdict(lambda: {
+        'expected_goals_against': 0.0,
+        'unblocked_attempts_against': 0,
+    })
+
+    if models:
+        feats = engineer_features(df, apply_noise_filter=True)
+        feats['xg_pred'] = np.nan
+        for bucket, model in models.items():
+            mask = feats['strength_bucket'] == bucket
+            if mask.any():
+                feats.loc[mask, 'xg_pred'] = model.predict_proba(
+                    feats.loc[mask, FEATURE_COLS].astype(float)
+                )[:, 1]
+        fallback_mask = feats['xg_pred'].isna()
+        if fallback_mask.any():
+            feats.loc[fallback_mask, 'xg_pred'] = feats.loc[fallback_mask].apply(
+                lambda row: compute_xg_xy(row['x_coord'], row['y_coord'], row['shot_type']),
+                axis=1,
+            )
+        grouped = feats.groupby('goalie_id').agg(
+            expected_goals_against=('xg_pred', 'sum'),
+            unblocked_attempts_against=('goalie_id', 'size'),
+        ).reset_index()
+    else:
+        df['xg_pred'] = df.apply(
+            lambda row: compute_xg_xy(row['x_coord'], row['y_coord'], row['shot_type']),
+            axis=1,
+        )
+        grouped = df.groupby('goalie_id').agg(
+            expected_goals_against=('xg_pred', 'sum'),
+            unblocked_attempts_against=('goalie_id', 'size'),
+        ).reset_index()
+
+    for row in grouped.to_dict('records'):
+        totals[int(row['goalie_id'])]['expected_goals_against'] = float(row['expected_goals_against'])
+        totals[int(row['goalie_id'])]['unblocked_attempts_against'] = int(row['unblocked_attempts_against'])
     return totals
 
 
@@ -156,7 +270,8 @@ def main():
     print("  alter table players add column if not exists save_pct_above_expected float8;")
 
     game_ids = load_game_ids(season_key)
-    totals = aggregate_goalie_shots(game_ids)
+    models = load_xg_models()
+    totals = aggregate_goalie_shots(game_ids, season_key, models)
 
     goalie_rows = sb.table('players').select(
         'player_id,full_name,position,shots_against,goals_against,save_pct'
@@ -174,14 +289,16 @@ def main():
 
         shots_against = int(official_shots)
         goals_against = int(official_goals)
+        unblocked_attempts_against = int(t.get('unblocked_attempts_against') or 0)
         if shots_against <= 0:
             continue
         xga = float(t['expected_goals_against'])
         actual_sv_pct = 1 - (goals_against / shots_against)
-        expected_sv_pct = 1 - (xga / shots_against)
+        actual_unblocked_sv_pct = 1 - (goals_against / unblocked_attempts_against) if unblocked_attempts_against > 0 else actual_sv_pct
+        expected_sv_pct = 1 - (xga / unblocked_attempts_against) if unblocked_attempts_against > 0 else 1 - (xga / shots_against)
         gsax = xga - goals_against
         gsax_per_xga = (gsax / xga * 100.0) if xga > 0 else None
-        sv_pct_above_expected = actual_sv_pct - expected_sv_pct
+        sv_pct_above_expected = actual_unblocked_sv_pct - expected_sv_pct
         gdf_rows.append({
             'player_id': pid,
             'full_name': goalie['full_name'],
