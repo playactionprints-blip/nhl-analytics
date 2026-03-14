@@ -27,7 +27,7 @@ Data source: hockey-scraper (wraps NHL HTML shift reports + JSON play-by-play)
   - 100% game coverage across all tested regular-season games
 """
 
-import json, os, re, time, math, sys, warnings
+import json, os, re, time, math, sys, warnings, unicodedata
 from collections import defaultdict
 import requests
 import hockey_scraper
@@ -106,6 +106,13 @@ if os.path.exists(PATCH_FILE):
         PLAYER_ID_PATCH = json.load(f)
     print(f"Loaded player_id_patch: {len(PLAYER_ID_PATCH)} entries")
 
+NAME_PREFIX_ALIASES = {
+    "JOSEPH ": "JOE ",
+    "MIKEY ": "MICHAEL ",
+    "JOSH ": "JOSHUA ",
+    "SAM ": "SAMUEL ",
+}
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def compute_xg_xy(x, y, shot_type=''):
@@ -151,6 +158,59 @@ def _hs_id_to_full(hs_id, base):
     base varies by season: 2025000000 / 2024000000 / 2023000000.
     """
     return base + int(hs_id)
+
+
+def _normalize_player_name(name):
+    """
+    Normalize player names for ID patch lookup.
+    Handles accents, spacing drift, and common nickname/official-name mismatches.
+    """
+    value = str(name or "").strip().upper()
+    value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    value = re.sub(r"\s+", " ", value).strip()
+    for src, dst in NAME_PREFIX_ALIASES.items():
+        if value.startswith(src):
+            value = dst + value[len(src):]
+            break
+    return value
+
+
+PLAYER_ID_PATCH_NORM = {
+    _normalize_player_name(name): player_id
+    for name, player_id in PLAYER_ID_PATCH.items()
+}
+
+
+def _lookup_player_patch(name):
+    raw_name = str(name or "").strip().upper()
+    return PLAYER_ID_PATCH.get(raw_name) or PLAYER_ID_PATCH_NORM.get(_normalize_player_name(name))
+
+
+def _coerce_scrape_frame(frame):
+    return frame if isinstance(frame, pd.DataFrame) else pd.DataFrame()
+
+
+def _extract_batch_stints(batch, result, id_base, failed):
+    pbp_all = _coerce_scrape_frame(result.get('pbp') if isinstance(result, dict) else None)
+    sh_all = _coerce_scrape_frame(result.get('shifts') if isinstance(result, dict) else None)
+    if pbp_all.empty or sh_all.empty:
+        failed.extend(batch)
+        return []
+
+    pbp_all = pbp_all.copy()
+    sh_all = sh_all.copy()
+    pbp_all['_gid_full'] = pbp_all['Game_Id'].apply(lambda x: _hs_id_to_full(x, id_base))
+    sh_all['_gid_full'] = sh_all['Game_Id'].apply(lambda x: _hs_id_to_full(x, id_base))
+
+    rows = []
+    for gid in batch:
+        game_pbp = pbp_all[pbp_all['_gid_full'] == gid]
+        game_sh = sh_all[sh_all['_gid_full'] == gid]
+        if game_pbp.empty or game_sh.empty:
+            failed.append(gid)
+            continue
+        rows.extend(build_stints_from_game_hs(gid, game_pbp, game_sh))
+    return rows
 
 
 def _get_with_retry(url, max_retries=3):
@@ -420,9 +480,9 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
             continue
 
         pid = sh.get('Player_Id')
-        # Apply patch for NaN IDs using uppercase player name
+        # Apply patch for NaN IDs using normalized player name
         if pd.isna(pid):
-            pid = PLAYER_ID_PATCH.get(str(sh.get('Player', '')).strip().upper())
+            pid = _lookup_player_patch(sh.get('Player', ''))
         if pd.isna(pid) or not pid:
             continue
         try:
@@ -599,34 +659,14 @@ def fetch_all_stints(game_ids, season_cfg):
         try:
             result = hockey_scraper.scrape_games(batch, True, data_format='pandas')
             if result is None:
-                print(f"  Batch {batches_done}/{n_batches}: scraper returned None — "
-                      f"{len(batch)} games skipped")
-                failed.extend(batch)
-                continue
+                raise ValueError("scraper returned None")
 
-            pbp_all = result.get('pbp', pd.DataFrame())
-            sh_all  = result.get('shifts', pd.DataFrame())
-
-            if pbp_all.empty or sh_all.empty:
-                print(f"  Batch {batches_done}/{n_batches}: empty result — "
-                      f"{len(batch)} games skipped")
-                failed.extend(batch)
-                continue
-
-            # Add full 10-digit game ID column for per-game filtering
-            pbp_all['_gid_full'] = pbp_all['Game_Id'].apply(
-                lambda x: _hs_id_to_full(x, id_base))
-            sh_all['_gid_full']  = sh_all['Game_Id'].apply(
-                lambda x: _hs_id_to_full(x, id_base))
-
-            for gid in batch:
-                game_pbp = pbp_all[pbp_all['_gid_full'] == gid]
-                game_sh  = sh_all[sh_all['_gid_full']  == gid]
-                if game_pbp.empty or game_sh.empty:
-                    failed.append(gid)
-                    continue
-                stints = build_stints_from_game_hs(gid, game_pbp, game_sh)
-                new_rows.extend(stints)
+            batch_failed = []
+            batch_rows = _extract_batch_stints(batch, result, id_base, batch_failed)
+            if not batch_rows:
+                raise ValueError("empty batch result")
+            new_rows.extend(batch_rows)
+            failed.extend(batch_failed)
 
             progress = batch_start + len(batch)
             print(f"  Batch {batches_done}/{n_batches}  ({progress}/{total} games) | "
@@ -634,7 +674,18 @@ def fetch_all_stints(game_ids, season_cfg):
 
         except Exception as e:
             print(f"  Batch {batches_done}/{n_batches} failed: {e}")
-            failed.extend(batch)
+            for gid in batch:
+                try:
+                    single_result = hockey_scraper.scrape_games([gid], True, data_format='pandas')
+                    single_failed = []
+                    single_rows = _extract_batch_stints([gid], single_result, id_base, single_failed)
+                    if single_rows:
+                        new_rows.extend(single_rows)
+                    else:
+                        failed.extend(single_failed or [gid])
+                except Exception as game_err:
+                    print(f"    Game {gid} failed: {game_err}")
+                    failed.append(gid)
 
         # Checkpoint every 5 batches (~250 games)
         if batches_done % 5 == 0:
