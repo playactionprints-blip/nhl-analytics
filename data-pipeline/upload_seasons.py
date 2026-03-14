@@ -21,6 +21,24 @@ SEASONS = [
     ('23-24', 'eh_skaters_2324.csv',       'nst_onice_2324.csv'),
 ]
 
+SPLIT_FILES = {
+    '25-26': {
+        '5v5': 'nst_5v5_2526.csv',
+        'pp': 'nst_pp_2526.csv',
+        'pk': 'nst_pk_2526.csv',
+    },
+    '24-25': {
+        '5v5': 'nst_5v5_2425.csv',
+        'pp': 'nst_pp_2425.csv',
+        'pk': 'nst_pk_2425.csv',
+    },
+    '23-24': {
+        '5v5': 'nst_onice_2324.csv',
+        'pp': 'nst_pp_2324.csv',
+        'pk': 'nst_pk_2324.csv',
+    },
+}
+
 
 def norm_name(name):
     """Normalize for matching: strip HTML, remove accents/periods, lowercase."""
@@ -95,6 +113,40 @@ def safe_float(v):
     except: return None
 
 
+def load_split_df(season, situation):
+    path = os.path.join(DATA_DIR, SPLIT_FILES[season][situation])
+    df = pd.read_csv(path, encoding='utf-8-sig')
+    df.columns = [c.strip().replace('\xa0', ' ') for c in df.columns]
+    df['_norm'] = df['Player'].apply(norm_name)
+    df = df.sort_values('GP', ascending=False).drop_duplicates('_norm').reset_index(drop=True)
+
+    if situation == '5v5':
+        return df[['_norm', 'TOI', 'CF', 'CA', 'xGF', 'xGA', 'CF%', 'xGF%']].rename(columns={
+            'TOI': 'toi_5v5',
+            'CF': 'cf_5v5',
+            'CA': 'ca_5v5',
+            'xGF': 'xgf_5v5',
+            'xGA': 'xga_5v5',
+            'CF%': 'cf_pct_5v5',
+            'xGF%': 'xgf_pct_5v5',
+        })
+    if situation == 'pp':
+        return df[['_norm', 'TOI', 'CF', 'xGF', 'CF%']].rename(columns={
+            'TOI': 'toi_pp',
+            'CF': 'cf_pp',
+            'xGF': 'xgf_pp',
+            'CF%': 'cf_pct_pp',
+        })
+    if situation == 'pk':
+        return df[['_norm', 'TOI', 'CF', 'xGA', 'CF%']].rename(columns={
+            'TOI': 'toi_pk',
+            'CF': 'cf_pk',
+            'xGA': 'xga_pk',
+            'CF%': 'cf_pct_pk',
+        })
+    raise ValueError(f"Unknown situation: {situation}")
+
+
 # ── Fetch all players into a lookup dict ─────────────────────────────────────
 print("Fetching players from Supabase...")
 all_players = sb.table('players').select('player_id,full_name,position').execute().data
@@ -136,6 +188,19 @@ for season, eh_file, nst_file in SEASONS:
     merged = eh.merge(nst_slim, on='_norm', how='left')
     print(f"  EH-NST merge: {merged['CF%'].notna().sum()}/{len(merged)} have on-ice data")
 
+    split_5v5 = load_split_df(season, '5v5')
+    split_pp  = load_split_df(season, 'pp')
+    split_pk  = load_split_df(season, 'pk')
+    merged = merged.merge(split_5v5, on='_norm', how='left')
+    merged = merged.merge(split_pp, on='_norm', how='left')
+    merged = merged.merge(split_pk, on='_norm', how='left')
+    print(
+        "  Split coverage: "
+        f"5v5 {merged['toi_5v5'].notna().sum()}/{len(merged)} | "
+        f"PP {merged['toi_pp'].notna().sum()}/{len(merged)} | "
+        f"PK {merged['toi_pk'].notna().sum()}/{len(merged)}"
+    )
+
     # Build upload rows
     rows = []
     skipped = []
@@ -168,6 +233,21 @@ for season, eh_file, nst_file in SEASONS:
             'xgf_pct':   safe_float(row.get('xGF%')),
             'hdcf_pct':  safe_float(row.get('HDCF%')),
             'scf_pct':   safe_float(row.get('SCF%')),
+            'toi_5v5':   safe_float(row.get('toi_5v5')),
+            'cf_5v5':    safe_float(row.get('cf_5v5')),
+            'ca_5v5':    safe_float(row.get('ca_5v5')),
+            'xgf_5v5':   safe_float(row.get('xgf_5v5')),
+            'xga_5v5':   safe_float(row.get('xga_5v5')),
+            'cf_pct_5v5': safe_float(row.get('cf_pct_5v5')),
+            'xgf_pct_5v5': safe_float(row.get('xgf_pct_5v5')),
+            'toi_pp':    safe_float(row.get('toi_pp')),
+            'cf_pp':     safe_float(row.get('cf_pp')),
+            'xgf_pp':    safe_float(row.get('xgf_pp')),
+            'cf_pct_pp': safe_float(row.get('cf_pct_pp')),
+            'toi_pk':    safe_float(row.get('toi_pk')),
+            'cf_pk':     safe_float(row.get('cf_pk')),
+            'xga_pk':    safe_float(row.get('xga_pk')),
+            'cf_pct_pk': safe_float(row.get('cf_pct_pk')),
         })
 
     pct = 100 * len(rows) / len(merged)

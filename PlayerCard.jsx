@@ -628,7 +628,9 @@ function TeamLogo({ abbr, size = 32 }) {
 function GoalieContent({ player, accent }) {
   const svPct = player.save_pct ? (player.save_pct * 100).toFixed(1) : null;
   const gaa = player.gaa ? player.gaa.toFixed(2) : null;
-  const gsaa = player.gsaa != null ? player.gsaa.toFixed(1) : null;
+  const gsax = player.gsax != null ? player.gsax.toFixed(1) : null;
+  const xsvPct = player.expected_save_pct != null ? (player.expected_save_pct * 100).toFixed(1) : null;
+  const svAboveExpected = player.save_pct_above_expected != null ? `${player.save_pct_above_expected >= 0 ? "+" : ""}${(player.save_pct_above_expected * 100).toFixed(1)}%` : null;
   return (
     <div>
       <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:14 }}>Goalie Stats — Current Season</div>
@@ -640,9 +642,15 @@ function GoalieContent({ player, accent }) {
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:20 }}>
         <StatBox label="GAA" value={gaa} />
         <StatBox label="SV%" value={svPct ? `${svPct}%` : null} highlight />
-        <StatBox label="GSAA" value={gsaa} highlight={player.gsaa > 0} />
+        <StatBox label="GSAx" value={gsax} highlight={player.gsax > 0} />
         <StatBox label="SO" value={player.shutouts} />
       </div>
+      {(xsvPct || svAboveExpected) && (
+        <div style={{ display:"flex", gap:14, marginBottom:16, fontSize:11, color:"#5a7a99", fontFamily:"'DM Mono',monospace" }}>
+          <span>xSV%: {xsvPct ? `${xsvPct}%` : "—"}</span>
+          <span>SV% Above Expected: {svAboveExpected || "—"}</span>
+        </div>
+      )}
       {/* SV% bar */}
       {svPct && (
         <div style={{ marginBottom:16 }}>
@@ -658,7 +666,7 @@ function GoalieContent({ player, accent }) {
       <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px" }}>
         <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6 }}>About Goalie Metrics</div>
         <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>
-          GSAA = Goals Saved Above Average, based on league-average save percentage and each goalie&apos;s shots against. GAA = Goals Against Average · SV% = Save Percentage · SO = Shutouts.
+          GSAx = Goals Saved Above Expected, using shot-level expected goals against from NHL play-by-play. xSV% is the save percentage an average goalie would have on those shots. GAA = Goals Against Average · SV% = Save Percentage · SO = Shutouts.
         </p>
       </div>
     </div>
