@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-const PS_COLS = 'player_id,season,gp,toi,g,a1,a2,ixg,icf,iff,hits,blk,gva,tka,fow,fol,cf_pct,xgf_pct,hdcf_pct,scf_pct';
+const PS_COLS = 'player_id,season,gp,toi,g,a1,a2,ixg,icf,iff,hits,blk,gva,tka,fow,fol,cf_pct,xgf_pct,hdcf_pct,scf_pct,rapm_off,rapm_def,war_total,war_ev_off,war_ev_def,war_pp,war_pk,war_shooting,war_penalties';
 
 function formatAvgToi(totalMin, gp) {
   if (!totalMin || !gp) return null;
@@ -51,8 +51,15 @@ function mapSeasonRows(rows, playerLookup) {
       off_rating:    null,
       def_rating:    null,
       overall_rating:null,
-      war_total:     null,
-      war_shooting:  null,
+      war_total:     ps.war_total ?? null,
+      war_ev_off:    ps.war_ev_off ?? null,
+      war_ev_def:    ps.war_ev_def ?? null,
+      war_pp:        ps.war_pp ?? null,
+      war_pk:        ps.war_pk ?? null,
+      war_shooting:  ps.war_shooting ?? null,
+      war_penalties: ps.war_penalties ?? null,
+      rapm_off:      ps.rapm_off ?? null,
+      rapm_def:      ps.rapm_def ?? null,
       percentiles:   p.percentiles || {},
       warTrend:      [],
     };

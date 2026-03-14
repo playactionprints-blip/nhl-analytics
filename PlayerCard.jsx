@@ -68,6 +68,61 @@ function parseAvgToi(toi) {
   return m + s / 60;
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function formatSigned(value, digits = 2) {
+  if (value == null || Number.isNaN(value)) return "—";
+  const n = Number(value);
+  return `${n > 0 ? "+" : ""}${n.toFixed(digits)}`;
+}
+
+function formatMoneyShort(value) {
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  return `$${(Number(value) / 1_000_000).toFixed(1)}M`;
+}
+
+function formatFeetInches(heightCm) {
+  if (heightCm == null || Number.isNaN(Number(heightCm))) return null;
+  const totalInches = Number(heightCm) / 2.54;
+  const feet = Math.floor(totalInches / 12);
+  const inches = Math.round(totalInches - feet * 12);
+  return `${feet}'${inches}"`;
+}
+
+function formatLbs(weightKg) {
+  if (weightKg == null || Number.isNaN(Number(weightKg))) return null;
+  return `${Math.round(Number(weightKg) * 2.20462)} lbs`;
+}
+
+function roleLabel(player) {
+  const avgToi = parseAvgToi(player.toi);
+  const ppPerGame = player.gp && player.toi_pp ? player.toi_pp / player.gp : 0;
+  const pos = (player.position || "").toUpperCase();
+
+  let evenStrengthRole = "Depth";
+  if (pos === "D") {
+    if (avgToi >= 23) evenStrengthRole = "1st Pair";
+    else if (avgToi >= 20) evenStrengthRole = "Top 4";
+    else if (avgToi >= 17) evenStrengthRole = "2nd Pair";
+    else evenStrengthRole = "3rd Pair";
+  } else {
+    if (avgToi >= 20) evenStrengthRole = "1st Line";
+    else if (avgToi >= 17) evenStrengthRole = "Top 6";
+    else if (avgToi >= 14) evenStrengthRole = "Middle 6";
+    else evenStrengthRole = "Depth";
+  }
+
+  if (ppPerGame >= 2.3) return `${evenStrengthRole} / PP1`;
+  if (ppPerGame >= 1.0) return `${evenStrengthRole} / PP2`;
+  return evenStrengthRole;
+}
+
+function positionGroup(position) {
+  return position === "D" ? "D" : position === "G" ? "G" : "F";
+}
+
 // ── Sub-components ───────────────────────────────────────────────────────────
 function PercentileBar({ label, value }) {
   const color = pctColor(value);
@@ -128,7 +183,7 @@ function percentileTilePalette(value) {
 function PercentileTile({ label, value, subtitle, big = false }) {
   const palette = percentileTilePalette(value);
   return (
-    <div style={{
+    <div className="pc-percentile-shell" style={{
       minHeight: big ? 116 : 96,
       background: palette.bg,
       border: `1px solid ${palette.border}`,
@@ -169,203 +224,291 @@ function PercentileTile({ label, value, subtitle, big = false }) {
   );
 }
 
+function TrendPanel({ title, subtitle, data, lines, accent }) {
+  const valid = (data || []).filter((row) => lines.some((line) => row[line.key] != null));
+  if (valid.length < 2) return null;
+
+  return (
+    <div style={{
+      background: "#0f141b",
+      border: "1px solid #1b232d",
+      borderRadius: 18,
+      padding: "18px 18px 14px",
+    }}>
+      <div style={{ fontSize: 11, color: "#717780", fontFamily: "'DM Mono',monospace", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 15, color: "#f1efe9", fontWeight: 700, marginBottom: 10 }}>
+        {subtitle}
+      </div>
+      <ResponsiveContainer width="100%" height={150}>
+        <LineChart data={valid} margin={{ top: 6, right: 6, left: -22, bottom: 0 }}>
+          <CartesianGrid stroke="#1f2833" strokeDasharray="0" vertical={true} />
+          <XAxis dataKey="season" tick={{ fontSize: 11, fill: "#7f8388", fontFamily: "DM Mono,monospace" }} axisLine={false} tickLine={false} />
+          <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#7f8388", fontFamily: "DM Mono,monospace" }} axisLine={false} tickLine={false} />
+          <Tooltip
+            contentStyle={{ background: "#0a1016", border: "1px solid #283240", borderRadius: 10, fontSize: 12, fontFamily: "DM Mono,monospace" }}
+            labelStyle={{ color: "#9da4ad" }}
+            formatter={(v) => [`${v}`, ""]}
+          />
+          {lines.map((line) => (
+            <Line
+              key={line.key}
+              type="monotone"
+              dataKey={line.key}
+              stroke={line.color || accent}
+              strokeWidth={3}
+              dot={{ r: 5, fill: line.color || accent, strokeWidth: 0 }}
+              activeDot={{ r: 6, fill: line.color || accent }}
+              name={line.label}
+              connectNulls
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function RankedBar({ label, value, color, valueColor, bg = "#1a2028" }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "148px 1fr 42px", gap: 10, alignItems: "center" }}>
+      <div style={{ fontSize: 17, color: "#8d9197", fontWeight: 600 }}>{label}</div>
+      <div style={{ height: 8, background: bg, borderRadius: 999, overflow: "hidden" }}>
+        <div style={{ width: `${clamp(value || 0, 0, 100)}%`, height: "100%", background: color, borderRadius: 999 }} />
+      </div>
+      <div style={{ fontSize: 16, color: valueColor || "#f1efe9", fontWeight: 800, textAlign: "right" }}>
+        {value != null ? Math.round(value) : "—"}
+      </div>
+    </div>
+  );
+}
+
+function SummaryMetricTile({ label, value, subtitle, color }) {
+  return (
+    <div style={{
+      background: "#151b22",
+      border: "1px solid #232c36",
+      borderRadius: 16,
+      padding: "16px 18px 14px",
+      minHeight: 108,
+    }}>
+      <div style={{ fontSize: 14, color: "#7e838a", fontWeight: 600, marginBottom: 10 }}>{label}</div>
+      <div style={{ fontSize: 26, color: color || "#f1efe9", fontWeight: 900, lineHeight: 1, marginBottom: 8 }}>
+        {value ?? "—"}
+      </div>
+      <div style={{ fontSize: 13, color: "#7d838b", fontFamily: "'DM Mono',monospace" }}>{subtitle}</div>
+    </div>
+  );
+}
+
 function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
   const avgToi = parseAvgToi(player.toi);
   const totalToiHours = avgToi && player.gp ? (avgToi * player.gp) / 60 : null;
   const pts = player.pts ?? (((player.g || 0) + (player.a || 0)) || null);
   const percentiles = player.percentiles || {};
-  const rawStats = {
-    "Goals/60": totalToiHours ? ((player.g || 0) / totalToiHours).toFixed(2) : null,
-    "Pts/60": totalToiHours && pts != null ? (pts / totalToiHours).toFixed(2) : null,
-    "iCF/60": totalToiHours && player.icf != null ? (player.icf / totalToiHours).toFixed(2) : null,
-    "ixG/60": totalToiHours && player.ixg != null ? (player.ixg / totalToiHours).toFixed(2) : null,
-    "xGF%": player.xgf_pct != null ? `${player.xgf_pct.toFixed(1)}%` : null,
-    "HDCF%": player.hdcf_pct != null ? `${player.hdcf_pct.toFixed(1)}%` : null,
-    "RAPM Off": player.rapm_off != null ? `${player.rapm_off >= 0 ? "+" : ""}${player.rapm_off.toFixed(2)}` : null,
-    "RAPM Def": player.rapm_def != null ? `${player.rapm_def >= 0 ? "+" : ""}${player.rapm_def.toFixed(2)}` : null,
-  };
-
-  const sections = [
-    {
-      title: "Scoring",
-      items: [
-        { label: "Goals / 60", value: percentiles["Goals/60"], subtitle: rawStats["Goals/60"] },
-        { label: "Points / 60", value: percentiles["Pts/60"], subtitle: rawStats["Pts/60"] },
-        { label: "Individual xG / 60", value: percentiles["ixG/60"], subtitle: rawStats["ixG/60"] },
-        { label: "Shot Volume / 60", value: percentiles["iCF/60"], subtitle: rawStats["iCF/60"] },
-      ],
-    },
-    {
-      title: "Impact",
-      items: [
-        { label: "3-Year WAR", value: percentiles["WAR"], subtitle: player.war_total != null ? `${player.war_total.toFixed(2)} WAR` : null },
-        { label: "EV Offence", value: percentiles["EV Off"] ?? player.rapm_off_pct, subtitle: player.war_ev_off != null ? `${player.war_ev_off.toFixed(2)} WAR` : rawStats["RAPM Off"] },
-        { label: "EV Defence", value: percentiles["EV Def"] ?? player.rapm_def_pct, subtitle: player.war_ev_def != null ? `${player.war_ev_def.toFixed(2)} WAR` : rawStats["RAPM Def"] },
-        { label: "Power Play", value: percentiles["PP"], subtitle: player.war_pp != null ? `${player.war_pp.toFixed(2)} WAR` : null },
-        { label: "Penalty Kill", value: percentiles["PK"], subtitle: player.war_pk != null ? `${player.war_pk.toFixed(2)} WAR` : null },
-        { label: "Shooting", value: percentiles["Shooting"], subtitle: player.war_shooting != null ? `${player.war_shooting.toFixed(2)} WAR` : null },
-        { label: "Penalties", value: percentiles["Penalties"], subtitle: player.war_penalties != null ? `${player.war_penalties.toFixed(2)} WAR` : null },
-        { label: "RAPM Offence", value: percentiles["RAPM Off"] ?? player.rapm_off_pct, subtitle: rawStats["RAPM Off"] },
-      ],
-    },
-    {
-      title: "Context",
-      items: [
-        { label: "RAPM Defence", value: percentiles["RAPM Def"] ?? player.rapm_def_pct, subtitle: rawStats["RAPM Def"] },
-        { label: "On-Ice xGF%", value: percentiles["xGF%"], subtitle: rawStats["xGF%"] },
-        { label: "High-Danger Share", value: percentiles["HDCF%"], subtitle: rawStats["HDCF%"] },
-        { label: "Competition", value: percentiles["Competition"], subtitle: player.qoc_impact != null ? player.qoc_impact.toFixed(2) : null },
-        { label: "Teammates", value: percentiles["Teammates"], subtitle: player.qot_impact != null ? player.qot_impact.toFixed(2) : null },
-        { label: "Off Rating", value: percentiles["Off Rating"] ?? player.off_rating, subtitle: "score / 100" },
-        { label: "Def Rating", value: percentiles["Def Rating"] ?? player.def_rating, subtitle: "score / 100" },
-        { label: "Overall Rating", value: percentiles["Overall"] ?? player.overall_rating, subtitle: "score / 100" },
-      ],
-    },
-  ];
-
-  const profilePct = percentiles["WAR"]
-    ?? percentiles["Overall"]
-    ?? (player.overall_rating != null
-      ? Math.round(player.overall_rating)
-      : Math.round(((player.rapm_off_pct || 0) + (player.rapm_def_pct || 0) + (percentiles["Pts/60"] || 0)) / 3));
+  const profilePct = percentiles["WAR"] ?? percentiles["Overall"] ?? player.overall_rating ?? null;
   const positionLabel =
     player.position === "D"
       ? "defencemen"
       : player.position === "G"
         ? "goalies"
         : "forwards";
+  const physicalBits = [
+    player.position,
+    age != null ? `Age ${age}` : null,
+    roleLabel(player),
+    formatFeetInches(player.height_cm),
+    formatLbs(player.weight_kg),
+  ].filter(Boolean);
+  const marketValue = player.contract_info?.market_value ?? null;
+  const surplusValue = marketValue != null && player.contract_info?.cap_hit != null
+    ? Number(marketValue) - Number(player.contract_info.cap_hit)
+    : null;
+  const ixgPerGame = player.gp && player.ixg != null ? player.ixg / player.gp : null;
+  const barsLeft = [
+    { label: "EV Offence", value: percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct, color: "#19c2ff" },
+    { label: "EV Defence", value: percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct, color: "#21b8ff" },
+    { label: "Power Play", value: percentiles["PP"], color: "#1bbcff" },
+    { label: "Penalty Kill", value: percentiles["PK"], color: "#1fb0e3" },
+    { label: "Finishing", value: percentiles["Shooting"], color: "#2cc8ff" },
+  ];
+  const barsRight = [
+    { label: "Goals", value: percentiles["Goals/60"], color: "#ffb51f" },
+    { label: "1st Assists", value: percentiles["Pts/60"], color: "#ffb11a" },
+    { label: "Penalties", value: percentiles["Penalties"], color: "#ffb31c" },
+    { label: "Competition", value: percentiles["Competition"], color: "#f6a91c" },
+    { label: "Teammates", value: percentiles["Teammates"], color: "#ffb927" },
+  ];
+  const summaryBars = [
+    { label: "Offence", value: percentiles["Off Rating"] ?? player.off_rating, color: "linear-gradient(90deg,#24566d 0%,#16c6ff 100%)", textColor: "#19c2ff" },
+    { label: "Defence", value: percentiles["Def Rating"] ?? player.def_rating, color: "linear-gradient(90deg,#6f3840 0%,#ff4d57 100%)", textColor: "#ff4d57" },
+    { label: "Finishing", value: percentiles["Shooting"], color: "linear-gradient(90deg,#6d5430 0%,#f1ab1c 100%)", textColor: "#ffb11a" },
+  ];
+  const warTrend = player.warTrend || [];
+  const impactTrend = player.impactTrend || [];
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 18 }}>
-      <div style={{
-        background: "linear-gradient(180deg,#f6f7f8 0%,#eceff2 100%)",
-        border: "1px solid #d6dde5",
-        color: "#0c1620",
-        padding: 18,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-          <TeamLogo abbr={teamAbbr} size={36} />
-          <div>
-            <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1, letterSpacing: "-1px" }}>
-              {player.full_name || player.name}
-            </div>
-            <div style={{ fontSize: 11, color: "#55687a", fontFamily: "'DM Mono',monospace" }}>
-              {teamFull}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-start", marginBottom: 16 }}>
+    <div style={{
+      background: "#0c1117",
+      border: "1px solid #1c242d",
+      borderRadius: 24,
+      padding: 28,
+      color: "#f1efe9",
+      boxShadow: "0 30px 80px rgba(0,0,0,0.35)",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, paddingBottom: 22, borderBottom: "1px solid #1b222a" }}>
+        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
           <div style={{
-            width: 96,
-            height: 120,
-            flexShrink: 0,
-            border: "1px solid #d2dbe3",
-            background: `linear-gradient(160deg,#ffffff 0%,${accent}18 100%)`,
+            width: 66,
+            height: 66,
+            borderRadius: "50%",
+            border: `1px solid ${accent}`,
+            color: accent,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            overflow: "hidden",
+            textAlign: "center",
+            fontFamily: "'DM Mono',monospace",
+            fontSize: 12,
+            fontWeight: 700,
+            lineHeight: 1.1,
+            background: `${accent}12`,
           }}>
-            <PlayerAvatar player={player} size={96} />
+            <div>{teamAbbr.slice(0, 3)}<br />{teamFull.split(" ").slice(-1)[0].slice(0, 3).toUpperCase()}</div>
           </div>
-          <div style={{ flex: 1, display: "grid", gap: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>Pos</span>
-              <strong>{player.position || "—"}</strong>
+          <div>
+            <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.04em", lineHeight: 1.05 }}>
+              {player.full_name || player.name}
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>Age</span>
-              <strong>{age ?? "—"}</strong>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>TOI</span>
-              <strong>{player.toi || "—"}</strong>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>3Y WAR</span>
-              <strong>{player.war_total != null ? player.war_total.toFixed(2) : "—"}</strong>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>Cap</span>
-              <strong>{player.contract_info?.cap_hit ? `$${(player.contract_info.cap_hit / 1_000_000).toFixed(2)}M` : "—"}</strong>
+            <div style={{ fontSize: 16, color: "#8b9097", marginTop: 6 }}>
+              {physicalBits.join(" • ")}
             </div>
           </div>
         </div>
 
-        <PercentileTile
-          label="Player Card Score"
-          value={profilePct}
-          subtitle={`${player.gp ?? 0} GP tracked`}
-          big
-        />
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
-          <PercentileTile
-            label="EV Offence"
-            value={percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct}
-            subtitle={player.war_ev_off != null ? `${player.war_ev_off.toFixed(2)} WAR` : rawStats["RAPM Off"]}
-          />
-          <PercentileTile
-            label="EV Defence"
-            value={percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct}
-            subtitle={player.war_ev_def != null ? `${player.war_ev_def.toFixed(2)} WAR` : rawStats["RAPM Def"]}
-          />
-          <PercentileTile
-            label="PP Impact"
-            value={percentiles["PP"]}
-            subtitle={player.war_pp != null ? `${player.war_pp.toFixed(2)} WAR` : null}
-          />
-          <PercentileTile
-            label="Penalties"
-            value={percentiles["Penalties"]}
-            subtitle={player.war_penalties != null ? `${player.war_penalties.toFixed(2)} WAR` : null}
-          />
+        <div style={{
+          border: `1px solid ${accent}`,
+          borderRadius: 14,
+          padding: "10px 18px",
+          minWidth: 120,
+          textAlign: "center",
+          background: `${accent}12`,
+        }}>
+          <div style={{ fontSize: 12, color: accent, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            WAR %ile
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 900, color: accent, lineHeight: 1.1 }}>
+            {profilePct != null ? Math.round(profilePct) : "—"}
+          </div>
         </div>
       </div>
 
-      <div style={{
-        background: "linear-gradient(180deg,#f7f8fa 0%,#eef2f5 100%)",
-        border: "1px solid #d6dde5",
-        padding: 18,
-        color: "#0d1620",
-      }}>
-        {sections.map(section => (
-          <div key={section.title} style={{ marginBottom: 18 }}>
-            <div style={{
-              fontSize: 12,
-              fontWeight: 800,
-              color: "#33485c",
-              marginBottom: 8,
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-              fontFamily: "'DM Mono',monospace",
-            }}>
-              {section.title}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
-              {section.items.map(item => (
-                <PercentileTile
-                  key={item.label}
-                  label={item.label}
-                  value={item.value}
-                  subtitle={item.subtitle}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+      <div className="pc-percentile-top" style={{ display: "grid", gridTemplateColumns: "1fr 0.98fr", gap: 18, paddingTop: 22, paddingBottom: 22, borderBottom: "1px solid #1b222a" }}>
+        <div style={{ display: "grid", gap: 16 }}>
+          <TrendPanel
+            title="Trend Charts"
+            subtitle="WAR Percentile Rank"
+            data={warTrend}
+            lines={[{ key: "war", label: "WAR", color: "#f1efe9" }]}
+            accent={accent}
+          />
+          <TrendPanel
+            title=" "
+            subtitle={<span>EV <span style={{ color: "#19c2ff" }}>Offence</span> vs <span style={{ color: "#ff4d57" }}>Defence</span></span>}
+            data={impactTrend}
+            lines={[
+              { key: "off", label: "EV Off", color: "#19c2ff" },
+              { key: "def", label: "EV Def", color: "#ff4d57" },
+            ]}
+            accent={accent}
+          />
+        </div>
 
         <div style={{
-          marginTop: 10,
-          paddingTop: 10,
-          borderTop: "1px solid #d6dde5",
-          fontSize: 12,
-          color: "#42586d",
-          fontFamily: "'Barlow Condensed',sans-serif",
+          background: "#171d24",
+          border: "1px solid #272f38",
+          borderRadius: 16,
+          padding: 18,
+          alignSelf: "start",
         }}>
-          Projected percentile ranking among {positionLabel}. The tiles blend 3-year RAPM, season WAR components rolled into a projected card WAR, and first-pass teammate/competition context.
+          <div style={{ fontSize: 12, color: "#7a7f86", fontFamily: "'DM Mono',monospace", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 14 }}>
+            Contract
+          </div>
+          {[
+            { label: "Cap hit", value: player.contract_info?.cap_hit ? `${formatMoneyShort(player.contract_info.cap_hit)}${player.contract_info?.years_remaining ? ` × ${player.contract_info.years_remaining} yrs` : ""}` : "—" },
+            { label: "Market value", value: marketValue != null ? formatMoneyShort(marketValue) : "—" },
+            { label: "Surplus value", value: surplusValue != null ? formatSigned(surplusValue / 1_000_000, 1).replace("+", "+$").replace("-", "-$") + "M" : "—", color: surplusValue > 0 ? "#32e39a" : "#f1efe9" },
+            { label: "TOI role", value: roleLabel(player) },
+            { label: "TOI / gm", value: avgToi != null ? `${avgToi.toFixed(1)} min` : "—" },
+            { label: "Expiry", value: player.contract_info?.expiry ? `${player.contract_info.expiry}` : "—" },
+          ].map((item) => (
+            <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: item.label === "Expiry" ? "none" : "1px solid #252c34" }}>
+              <span style={{ fontSize: 15, color: "#8b9097" }}>{item.label}</span>
+              <span style={{ fontSize: 15, color: item.color || "#f1efe9", fontWeight: 700, textAlign: "right" }}>{item.value}</span>
+            </div>
+          ))}
         </div>
+      </div>
+
+      <div style={{ paddingTop: 20, paddingBottom: 20, borderBottom: "1px solid #1b222a" }}>
+        <div style={{ fontSize: 12, color: "#7a7f86", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 16 }}>
+          Percentile Ranks — Among All {positionLabel}
+        </div>
+        <div className="pc-percentile-ranks" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+          <div style={{ display: "grid", gap: 12 }}>
+            {barsLeft.map((item) => <RankedBar key={item.label} {...item} valueColor="#f1efe9" />)}
+          </div>
+          <div style={{ display: "grid", gap: 12 }}>
+            {barsRight.map((item) => <RankedBar key={item.label} {...item} valueColor="#f1efe9" />)}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ paddingTop: 20, paddingBottom: 20, borderBottom: "1px solid #1b222a" }}>
+        <div style={{ fontSize: 12, color: "#7a7f86", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 16 }}>
+          Offence vs Defence vs Finishing
+        </div>
+        <div style={{ display: "grid", gap: 14 }}>
+          {summaryBars.map((bar) => (
+            <div key={bar.label} style={{ display: "grid", gridTemplateColumns: "104px 1fr 46px", gap: 12, alignItems: "center" }}>
+              <div style={{ fontSize: 18, color: "#8d9197", fontWeight: 600 }}>{bar.label}</div>
+              <div style={{ height: 24, background: "#1b2228", borderRadius: 6, overflow: "hidden" }}>
+                <div style={{ width: `${clamp(bar.value || 0, 0, 100)}%`, height: "100%", background: bar.color, borderRadius: 6 }} />
+              </div>
+              <div style={{ fontSize: 18, color: bar.textColor, fontWeight: 900, textAlign: "right" }}>
+                {bar.value != null ? Math.round(bar.value) : "—"}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="pc-percentile-tiles" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, paddingTop: 20 }}>
+        <SummaryMetricTile
+          label="Offensive ±"
+          value={formatSigned(player.rapm_off, 2)}
+          subtitle={`${Math.round(percentiles["RAPM Off"] ?? player.rapm_off_pct ?? 0)}th %ile`}
+          color="#19c2ff"
+        />
+        <SummaryMetricTile
+          label="Defensive ±"
+          value={formatSigned(player.rapm_def, 2)}
+          subtitle={`${Math.round(percentiles["RAPM Def"] ?? player.rapm_def_pct ?? 0)}th %ile`}
+          color="#8e9398"
+        />
+        <SummaryMetricTile
+          label="xGoals / gm"
+          value={ixgPerGame != null ? ixgPerGame.toFixed(2) : "—"}
+          subtitle={`${Math.round(percentiles["ixG/60"] ?? 0)}th %ile`}
+          color="#ffb11a"
+        />
+        <SummaryMetricTile
+          label="WAR3"
+          value={player.war_total != null ? player.war_total.toFixed(2) : "—"}
+          subtitle={`${profilePct != null ? Math.round(profilePct) : "—"}th %ile`}
+          color="#32e39a"
+        />
       </div>
     </div>
   );
@@ -542,7 +685,7 @@ function PlayerCard({ player }) {
   const gp = player.gp ?? 0;
   const ptsPer82 = gp > 0 ? Math.round((pts / gp) * 82) : 0;
   const tabs = isGoalie ? ["goalie stats"] : ["overview", "percentile card", "on-ice", "war / rapm", "ratings"];
-  const cardWidth = !isGoalie && tab === "percentile card" ? 980 : 420;
+  const cardWidth = !isGoalie && tab === "percentile card" ? 1080 : 420;
 
   return (
     <div className="pc-card" style={{ width:cardWidth, background:"linear-gradient(160deg,#0c1a28 0%,#081016 100%)", borderRadius:16, border:"1px solid #1e2d40", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
@@ -958,9 +1101,10 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
   const [selectedSeason, setSelectedSeason] = useState('players'); // 'players' | '25-26' | '24-25' | '23-24'
 
   // Use season-specific data when a historical season is selected
-  const activePlayers = selectedSeason === 'players'
-    ? players
-    : (seasonStats?.[selectedSeason] || []);
+  const activePlayers = useMemo(
+    () => (selectedSeason === 'players' ? players : (seasonStats?.[selectedSeason] || [])),
+    [players, seasonStats, selectedSeason]
+  );
 
   const COLS = [
     { key:'full_name',      sortKey:'full_name',      label:'Player',  align:'left'   },
@@ -1106,9 +1250,73 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
   );
 }
 
+function computePercentileLookup(rows, metric) {
+  const valid = rows
+    .filter((row) => row[metric] != null && !Number.isNaN(Number(row[metric])))
+    .sort((a, b) => Number(a[metric]) - Number(b[metric]));
+  const lookup = {};
+  valid.forEach((row, index) => {
+    lookup[row.player_id] = Math.round(((index + 1) / valid.length) * 100);
+  });
+  return lookup;
+}
+
+function enrichPlayersWithSeasonTrends(players, seasonStats) {
+  const seasons = ["23-24", "24-25", "25-26"];
+  const seasonLookups = {};
+
+  seasons.forEach((season) => {
+    const rows = seasonStats?.[season] || [];
+    seasonLookups[season] = {
+      F: rows.filter((row) => positionGroup(row.position) === "F"),
+      D: rows.filter((row) => positionGroup(row.position) === "D"),
+      G: rows.filter((row) => positionGroup(row.position) === "G"),
+    };
+    Object.keys(seasonLookups[season]).forEach((group) => {
+      const groupRows = seasonLookups[season][group];
+      seasonLookups[season][`${group}_war`] = computePercentileLookup(groupRows, "war_total");
+      seasonLookups[season][`${group}_off`] = computePercentileLookup(groupRows, "war_ev_off");
+      seasonLookups[season][`${group}_def`] = computePercentileLookup(groupRows, "war_ev_def");
+    });
+  });
+
+  return players.map((player) => {
+    const group = positionGroup(player.position);
+    const warTrend = [];
+    const impactTrend = [];
+
+    seasons.forEach((season) => {
+      const seasonRows = seasonLookups[season]?.[group] || [];
+      const row = seasonRows.find((entry) => entry.player_id === player.player_id);
+      if (!row) return;
+
+      const warPct = seasonLookups[season][`${group}_war`][player.player_id];
+      const offPct = seasonLookups[season][`${group}_off`][player.player_id];
+      const defPct = seasonLookups[season][`${group}_def`][player.player_id];
+
+      if (warPct != null) {
+        warTrend.push({ season, war: warPct });
+      }
+      if (offPct != null || defPct != null) {
+        impactTrend.push({ season, off: offPct ?? null, def: defPct ?? null });
+      }
+    });
+
+    return {
+      ...player,
+      warTrend,
+      impactTrend,
+    };
+  });
+}
+
 // ── App Shell ────────────────────────────────────────────────────────────────
 export default function App({ players: propPlayers, seasonStats }) {
-  const allPlayers = propPlayers?.length ? propPlayers : [];
+  const basePlayers = useMemo(() => (propPlayers?.length ? propPlayers : []), [propPlayers]);
+  const allPlayers = useMemo(
+    () => enrichPlayersWithSeasonTrends(basePlayers, seasonStats),
+    [basePlayers, seasonStats]
+  );
   const [search, setSearch] = useState("");
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
@@ -1125,7 +1333,14 @@ export default function App({ players: propPlayers, seasonStats }) {
     return list.slice(0, 50);
   }, [allPlayers, selectedTeam, search]);
 
-  const displayPlayer = selectedPlayer;
+  const playerLookup = useMemo(
+    () => Object.fromEntries(allPlayers.map((player) => [player.player_id, player])),
+    [allPlayers]
+  );
+
+  const displayPlayer = selectedPlayer
+    ? { ...(playerLookup[selectedPlayer.player_id] || {}), ...selectedPlayer }
+    : null;
 
   return (
     <>
@@ -1151,6 +1366,10 @@ export default function App({ players: propPlayers, seasonStats }) {
           .pc-war-badge { top:10px !important; right:10px !important; padding:4px 8px !important; }
           .pc-tabs-bar { overflow-x:auto !important; -webkit-overflow-scrolling:touch; }
           .pc-stat-grid-4 { grid-template-columns:repeat(2,1fr) !important; }
+          .pc-percentile-shell { padding:18px !important; border-radius:18px !important; }
+          .pc-percentile-top { grid-template-columns:1fr !important; }
+          .pc-percentile-ranks { grid-template-columns:1fr !important; }
+          .pc-percentile-tiles { grid-template-columns:1fr 1fr !important; }
           .tbl-col-hide { display:none !important; }
           .pc-modal-backdrop { display:block !important; position:fixed !important; inset:0 !important; z-index:199 !important; background:rgba(0,9,15,0.85) !important; }
           .pc-modal-close-btn { display:flex !important; align-items:center !important; justify-content:center !important; position:fixed !important; top:16px !important; right:16px !important; z-index:201 !important; min-width:44px !important; min-height:44px !important; width:44px !important; height:44px !important; border-radius:22px !important; background:#1a2535 !important; border:1px solid #2a3d55 !important; color:#e8f4ff !important; font-size:20px !important; cursor:pointer !important; line-height:1 !important; }
