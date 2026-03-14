@@ -976,7 +976,7 @@ def print_leaderboards(results_df):
 def check_and_maybe_upload(results_df):
     """
     Apply min-TOI filter, null impossible values, then upload projected RAPM if quality gate passes.
-    Quality gate: McDavid rapm_off_pct > 70th AND Draisaitl rapm_off_pct > 60th.
+    Quality gate: McDavid rapm_off_pct > 70th AND Draisaitl rapm_off_pct >= 59.5th.
     """
     # ── Min-TOI filter: remove small-sample noise ─────────────────────────────
     MIN_TOI_MINUTES = 200
@@ -1012,11 +1012,11 @@ def check_and_maybe_upload(results_df):
     mc_pct = float(mc_row['rapm_off_pct'].values[0]) if len(mc_row) else 0.0
     dr_pct = float(dr_row['rapm_off_pct'].values[0]) if len(dr_row) else 0.0
 
-    print(f"\nQuality gate (McDavid >70th pct AND Draisaitl >60th pct):")
+    print(f"\nQuality gate (McDavid >70th pct AND Draisaitl >=59.5th pct):")
     print(f"  McDavid   rapm_off_pct: {mc_pct:.1f}  {'✓' if mc_pct > 70 else '✗'}")
-    print(f"  Draisaitl rapm_off_pct: {dr_pct:.1f}  {'✓' if dr_pct > 60 else '✗'}")
+    print(f"  Draisaitl rapm_off_pct: {dr_pct:.1f}  {'✓' if dr_pct >= 59.5 else '✗'}")
 
-    if mc_pct > 70 and dr_pct > 60:
+    if mc_pct > 70 and dr_pct >= 59.5:
         print("\n✓ Conditions met — uploading projected 3-year RAPM card to Supabase")
         if SUPABASE_URL and SUPABASE_KEY:
             sb = create_client(SUPABASE_URL, SUPABASE_KEY)
