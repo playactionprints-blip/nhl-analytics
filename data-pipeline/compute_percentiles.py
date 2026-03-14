@@ -1,84 +1,137 @@
-import pandas as pd, os, math
+#!/usr/bin/env python3
+import math
+import os
+
+import pandas as pd
 from supabase import create_client
 
-sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
+sb = create_client(
+    os.getenv('SUPABASE_URL') or os.getenv('NEXT_PUBLIC_SUPABASE_URL'),
+    os.getenv('SUPABASE_KEY') or os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
+)
 
-res = sb.table('players').select(
-    'player_id,full_name,position,gp,g,pts,toi,xgf_pct,hdcf_pct,icf,ixg'
-).not_.is_('toi','null').execute()
-
-players = res.data
-print(f"Fetched {len(players)} players")
 
 def parse_toi(toi_str):
-    """Convert avg TOI '17:41' to minutes per game as float."""
     try:
-        parts = str(toi_str).split(':')
-        return int(parts[0]) + int(parts[1]) / 60.0
-    except: return None
+        mins, secs = str(toi_str).split(':')
+        return int(mins) + int(secs) / 60.0
+    except Exception:
+        return None
+
 
 def safe(val):
-    if val is None: return None
+    if val is None:
+        return None
     try:
         f = float(val)
         return None if (math.isnan(f) or math.isinf(f)) else f
-    except: return None
+    except Exception:
+        return None
 
-rows = []
-for p in players:
-    pos = p.get('position','')
-    if pos == 'G': continue
-    gp = safe(p.get('gp')) or 0
-    if gp < 10: continue
-    avg_toi = parse_toi(p.get('toi'))
-    if avg_toi is None or avg_toi < 5: continue  # min 5 min/game avg
-
-    # Total TOI in minutes = avg_toi * gp
-    total_toi = avg_toi * gp
-    toi60 = total_toi / 60.0
-
-    g   = safe(p.get('g')) or 0
-    pts = safe(p.get('pts')) or 0
-    icf = safe(p.get('icf'))
-    ixg = safe(p.get('ixg'))
-    xgf  = safe(p.get('xgf_pct'))
-    hdcf = safe(p.get('hdcf_pct'))
-
-    rows.append({
-        'player_id': p['player_id'],
-        'full_name': p['full_name'],
-        'position': pos,
-        'goals_60': round(g   / toi60, 4) if toi60 > 0 else None,
-        'pts_60':   round(pts / toi60, 4) if toi60 > 0 else None,
-        'icf_60':   round(icf / toi60, 4) if (icf is not None and toi60 > 0) else None,
-        'ixg_60':   round(ixg / toi60, 4) if (ixg is not None and toi60 > 0) else None,
-        'xgf_pct':  xgf,
-        'hdcf_pct': hdcf,
-    })
-
-df = pd.DataFrame(rows)
-print(f"Computing percentiles for {len(df)} qualified skaters")
-if len(df) > 0:
-    print("Sample:", df[['full_name','goals_60','pts_60']].head(3).to_dict('records'))
 
 def pct_rank(series):
     return series.rank(pct=True, na_option='keep') * 100
 
-for col in ['goals_60','pts_60','icf_60','ixg_60','xgf_pct','hdcf_pct']:
-    if col in df.columns:
-        df[f'{col}_pct'] = pct_rank(df[col]).round(0)
+
+cols = (
+    'player_id,full_name,position,gp,g,pts,toi,xgf_pct,hdcf_pct,icf,ixg,'
+    'rapm_off,rapm_def,qot_impact,qoc_impact,'
+    'war_total,war_ev_off,war_ev_def,war_pp,war_pk,war_shooting,war_penalties,'
+    'off_rating,def_rating,overall_rating'
+)
+players = sb.table('players').select(cols).neq('position', 'G').execute().data
+print(f"Fetched {len(players)} skaters")
+
+rows = []
+for p in players:
+    gp = safe(p.get('gp')) or 0
+    avg_toi = parse_toi(p.get('toi'))
+    if gp < 10 or avg_toi is None or avg_toi < 5:
+        continue
+
+    total_toi = avg_toi * gp
+    toi60 = total_toi / 60.0 if total_toi else None
+    position = p.get('position', '')
+    group = 'D' if position == 'D' else 'F'
+
+    g = safe(p.get('g')) or 0
+    pts = safe(p.get('pts')) or 0
+    icf = safe(p.get('icf'))
+    ixg = safe(p.get('ixg'))
+
+    rows.append({
+        'player_id': p['player_id'],
+        'full_name': p['full_name'],
+        'position': position,
+        'group': group,
+        'goals_60': round(g / toi60, 4) if toi60 else None,
+        'pts_60': round(pts / toi60, 4) if toi60 else None,
+        'icf_60': round(icf / toi60, 4) if (icf is not None and toi60) else None,
+        'ixg_60': round(ixg / toi60, 4) if (ixg is not None and toi60) else None,
+        'xgf_pct': safe(p.get('xgf_pct')),
+        'hdcf_pct': safe(p.get('hdcf_pct')),
+        'rapm_off': safe(p.get('rapm_off')),
+        'rapm_def': safe(p.get('rapm_def')),
+        'qot_impact': safe(p.get('qot_impact')),
+        'qoc_impact': safe(p.get('qoc_impact')),
+        'war_total': safe(p.get('war_total')),
+        'war_ev_off': safe(p.get('war_ev_off')),
+        'war_ev_def': safe(p.get('war_ev_def')),
+        'war_pp': safe(p.get('war_pp')),
+        'war_pk': safe(p.get('war_pk')),
+        'war_shooting': safe(p.get('war_shooting')),
+        'war_penalties': safe(p.get('war_penalties')),
+        'off_rating': safe(p.get('off_rating')),
+        'def_rating': safe(p.get('def_rating')),
+        'overall_rating': safe(p.get('overall_rating')),
+    })
+
+df = pd.DataFrame(rows)
+print(f"Computing projected skater percentiles for {len(df)} qualified players")
+if df.empty:
+    raise SystemExit("No qualified skaters")
+
+metric_labels = {
+    'goals_60': 'Goals/60',
+    'pts_60': 'Pts/60',
+    'icf_60': 'iCF/60',
+    'ixg_60': 'ixG/60',
+    'xgf_pct': 'xGF%',
+    'hdcf_pct': 'HDCF%',
+    'war_total': 'WAR',
+    'war_ev_off': 'EV Off',
+    'war_ev_def': 'EV Def',
+    'war_pp': 'PP',
+    'war_pk': 'PK',
+    'war_shooting': 'Shooting',
+    'war_penalties': 'Penalties',
+    'rapm_off': 'RAPM Off',
+    'rapm_def': 'RAPM Def',
+    'qoc_impact': 'Competition',
+    'qot_impact': 'Teammates',
+    'off_rating': 'Off Rating',
+    'def_rating': 'Def Rating',
+    'overall_rating': 'Overall',
+}
+
+for group_key in ('F', 'D'):
+    mask = df['group'] == group_key
+    group_df = df.loc[mask].copy()
+    if group_df.empty:
+        continue
+    for metric in metric_labels:
+        if group_df[metric].notna().sum() == 0:
+            continue
+        df.loc[mask, f'{metric}_pct'] = pct_rank(group_df[metric]).round(0)
 
 updated = 0
 skipped = 0
-
 for _, row in df.iterrows():
     pct = {}
-    if pd.notna(row.get('goals_60_pct')): pct['Goals/60'] = int(row['goals_60_pct'])
-    if pd.notna(row.get('pts_60_pct')):   pct['Pts/60']   = int(row['pts_60_pct'])
-    if pd.notna(row.get('icf_60_pct')):   pct['iCF/60']   = int(row['icf_60_pct'])
-    if pd.notna(row.get('ixg_60_pct')):   pct['ixG/60']   = int(row['ixg_60_pct'])
-    if pd.notna(row.get('xgf_pct_pct')):  pct['xGF%']     = int(row['xgf_pct_pct'])
-    if pd.notna(row.get('hdcf_pct_pct')): pct['HDCF%']    = int(row['hdcf_pct_pct'])
+    for metric, label in metric_labels.items():
+        pct_val = row.get(f'{metric}_pct')
+        if pd.notna(pct_val):
+            pct[label] = int(pct_val)
 
     if not pct:
         skipped += 1

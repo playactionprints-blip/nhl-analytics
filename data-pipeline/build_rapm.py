@@ -28,6 +28,7 @@ Data source: hockey-scraper (wraps NHL HTML shift reports + JSON play-by-play)
 """
 
 import json, os, re, time, math, sys, warnings
+from collections import defaultdict
 import requests
 import hockey_scraper
 import pandas as pd
@@ -83,6 +84,14 @@ SEASON_CONFIGS = {
         'weight':     0.5,
     },
 }
+
+CARD_SEASON_WEIGHTS = {
+    '25-26': 0.50,
+    '24-25': 0.30,
+    '23-24': 0.20,
+}
+MIN_TOI_MINUTES = 200
+MAX_RAPM = 5.0
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
@@ -157,6 +166,153 @@ def _get_with_retry(url, max_retries=3):
                 time.sleep(5.0)
             else:
                 raise
+
+
+def parse_player_ids(cell):
+    if pd.isna(cell):
+        return []
+    return [int(p) for p in str(cell).split('|') if p.strip()]
+
+
+def filter_qualified_results(results_df, min_toi_minutes=MIN_TOI_MINUTES, max_rapm=MAX_RAPM):
+    """Apply a 5v5 TOI floor and drop physically impossible RAPM values."""
+    qualified = results_df[results_df['toi_5v5_total'] >= min_toi_minutes].copy()
+    qualified = qualified[
+        (qualified['rapm_off'].abs() <= max_rapm) &
+        (qualified['rapm_def'].abs() <= max_rapm)
+    ].copy()
+    if qualified.empty:
+        return qualified
+
+    qualified['rapm_off_pct'] = qualified['rapm_off'].rank(pct=True) * 100
+    qualified['rapm_def_pct'] = qualified['rapm_def'].rank(pct=True) * 100
+    return qualified
+
+
+def compute_context_metrics(stints_df, results_df):
+    """
+    First-pass QoT/QoC from season RAPM.
+    QoT = TOI-weighted average teammate impact.
+    QoC = TOI-weighted average opponent impact.
+    """
+    if results_df.empty:
+        return pd.DataFrame(columns=['player_id', 'qot_impact', 'qoc_impact', 'qot_impact_pct', 'qoc_impact_pct'])
+
+    impact_map = {
+        int(row.player_id): float(row.rapm_off) + float(row.rapm_def)
+        for row in results_df.itertuples()
+    }
+    qot_num = defaultdict(float)
+    qot_den = defaultdict(float)
+    qoc_num = defaultdict(float)
+    qoc_den = defaultdict(float)
+
+    for stint in stints_df[stints_df['duration_seconds'] >= 10].itertuples():
+        home_pids = parse_player_ids(stint.home_players)
+        away_pids = parse_player_ids(stint.away_players)
+        duration_min = float(stint.duration_seconds) / 60.0
+        if duration_min <= 0:
+            continue
+
+        home_impacts = {pid: impact_map[pid] for pid in home_pids if pid in impact_map}
+        away_impacts = {pid: impact_map[pid] for pid in away_pids if pid in impact_map}
+        if not home_impacts and not away_impacts:
+            continue
+
+        home_opp_avg = sum(away_impacts.values()) / len(away_impacts) if away_impacts else None
+        away_opp_avg = sum(home_impacts.values()) / len(home_impacts) if home_impacts else None
+
+        for pid in home_pids:
+            if pid not in impact_map:
+                continue
+            teammate_vals = [impact_map[t] for t in home_pids if t != pid and t in impact_map]
+            if teammate_vals:
+                qot_num[pid] += (sum(teammate_vals) / len(teammate_vals)) * duration_min
+                qot_den[pid] += duration_min
+            if home_opp_avg is not None:
+                qoc_num[pid] += home_opp_avg * duration_min
+                qoc_den[pid] += duration_min
+
+        for pid in away_pids:
+            if pid not in impact_map:
+                continue
+            teammate_vals = [impact_map[t] for t in away_pids if t != pid and t in impact_map]
+            if teammate_vals:
+                qot_num[pid] += (sum(teammate_vals) / len(teammate_vals)) * duration_min
+                qot_den[pid] += duration_min
+            if away_opp_avg is not None:
+                qoc_num[pid] += away_opp_avg * duration_min
+                qoc_den[pid] += duration_min
+
+    rows = []
+    for pid in results_df['player_id'].tolist():
+        qot = qot_num[pid] / qot_den[pid] if qot_den[pid] > 0 else None
+        qoc = qoc_num[pid] / qoc_den[pid] if qoc_den[pid] > 0 else None
+        rows.append({
+            'player_id': int(pid),
+            'qot_impact': qot,
+            'qoc_impact': qoc,
+        })
+
+    context_df = pd.DataFrame(rows)
+    if context_df.empty:
+        return context_df
+
+    if context_df['qot_impact'].notna().any():
+        context_df['qot_impact_pct'] = context_df['qot_impact'].rank(pct=True) * 100
+    else:
+        context_df['qot_impact_pct'] = None
+
+    if context_df['qoc_impact'].notna().any():
+        context_df['qoc_impact_pct'] = context_df['qoc_impact'].rank(pct=True) * 100
+    else:
+        context_df['qoc_impact_pct'] = None
+
+    return context_df
+
+
+def project_season_results(season_results):
+    """Weighted 3-year projection from season RAPM/context into the players table."""
+    grouped = defaultdict(dict)
+    for season_key, df in season_results.items():
+        for row in df.itertuples():
+            grouped[int(row.player_id)][season_key] = row
+
+    rows = []
+    for pid, season_map in grouped.items():
+        data = {'player_id': pid}
+        toi_weighted = 0.0
+        weight_sum = 0.0
+        for season_key, row in season_map.items():
+            weight = CARD_SEASON_WEIGHTS.get(season_key, 0.0)
+            toi_weighted += weight * float(getattr(row, 'toi_5v5_total', 0.0) or 0.0)
+            weight_sum += weight
+        data['toi_5v5_total'] = round(toi_weighted, 1) if weight_sum > 0 else 0.0
+
+        for metric in ('rapm_off', 'rapm_def', 'qot_impact', 'qoc_impact'):
+            num = 0.0
+            den = 0.0
+            for season_key, row in season_map.items():
+                weight = CARD_SEASON_WEIGHTS.get(season_key, 0.0)
+                value = getattr(row, metric, None)
+                if value is None or pd.isna(value):
+                    continue
+                num += float(value) * weight
+                den += weight
+            data[metric] = (num / den) if den > 0 else None
+        rows.append(data)
+
+    projected = pd.DataFrame(rows)
+    if projected.empty:
+        return projected
+
+    for metric in ('rapm_off', 'rapm_def', 'qot_impact', 'qoc_impact'):
+        pct_col = f'{metric}_pct'
+        if projected[metric].notna().any():
+            projected[pct_col] = projected[metric].rank(pct=True) * 100
+        else:
+            projected[pct_col] = None
+    return projected
 
 
 # ── Step 1: Fetch regular-season game IDs for one season ─────────────────────
@@ -670,6 +826,10 @@ def upload_rapm(results_df):
             'rapm_def':     round(float(row['rapm_def']),     4),
             'rapm_off_pct': round(float(row['rapm_off_pct']), 1),
             'rapm_def_pct': round(float(row['rapm_def_pct']), 1),
+            'qot_impact':   round(float(row['qot_impact']), 4) if pd.notna(row.get('qot_impact')) else None,
+            'qoc_impact':   round(float(row['qoc_impact']), 4) if pd.notna(row.get('qoc_impact')) else None,
+            'qot_impact_pct': round(float(row['qot_impact_pct']), 1) if pd.notna(row.get('qot_impact_pct')) else None,
+            'qoc_impact_pct': round(float(row['qoc_impact_pct']), 1) if pd.notna(row.get('qoc_impact_pct')) else None,
         }
         result = sb.table('players').update(data).eq('player_id', pid).execute()
         if result.data:
@@ -681,11 +841,58 @@ def upload_rapm(results_df):
             print("      alter table players add column if not exists rapm_def     float8;")
             print("      alter table players add column if not exists rapm_off_pct float8;")
             print("      alter table players add column if not exists rapm_def_pct float8;")
+            print("      alter table players add column if not exists qot_impact float8;")
+            print("      alter table players add column if not exists qoc_impact float8;")
+            print("      alter table players add column if not exists qot_impact_pct float8;")
+            print("      alter table players add column if not exists qoc_impact_pct float8;")
 
     print(f"\nUploaded RAPM for {updated} players")
     if not_found:
         print(f"  {len(not_found)} IDs not in Supabase: {not_found[:20]}"
               f"{'...' if len(not_found) > 20 else ''}")
+
+
+def upload_season_rapm(season_key, results_df):
+    """Upload season RAPM/context to player_seasons."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("✗ SUPABASE_URL / SUPABASE_KEY not set")
+        return
+
+    sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+    existing = {
+        (r['player_id'], r['season'])
+        for r in sb.table('player_seasons').select('player_id,season').eq('season', season_key).execute().data
+    }
+    updated = 0
+    missing = 0
+    for row in results_df.itertuples():
+        key = (int(row.player_id), season_key)
+        if key not in existing:
+            missing += 1
+            continue
+        data = {
+            'rapm_off': round(float(row.rapm_off), 4),
+            'rapm_def': round(float(row.rapm_def), 4),
+            'rapm_off_pct': round(float(row.rapm_off_pct), 1),
+            'rapm_def_pct': round(float(row.rapm_def_pct), 1),
+            'qot_impact': round(float(row.qot_impact), 4) if pd.notna(getattr(row, 'qot_impact', None)) else None,
+            'qoc_impact': round(float(row.qoc_impact), 4) if pd.notna(getattr(row, 'qoc_impact', None)) else None,
+            'qot_impact_pct': round(float(row.qot_impact_pct), 1) if pd.notna(getattr(row, 'qot_impact_pct', None)) else None,
+            'qoc_impact_pct': round(float(row.qoc_impact_pct), 1) if pd.notna(getattr(row, 'qoc_impact_pct', None)) else None,
+        }
+        result = (
+            sb.table('player_seasons')
+            .update(data)
+            .eq('player_id', int(row.player_id))
+            .eq('season', season_key)
+            .execute()
+        )
+        if result.data:
+            updated += 1
+
+    print(f"  Uploaded season RAPM/context for {season_key}: {updated} rows")
+    if missing:
+        print(f"    Missing player_seasons rows skipped: {missing}")
 
 
 def null_impossible_rapm(sb):
@@ -704,7 +911,16 @@ def null_impossible_rapm(sb):
         print("  No impossible RAPM values found (all abs() ≤ 5.0)")
         return
     print(f"  Nulling out {len(to_null)} players with |RAPM| > 5.0...")
-    null_data = {'rapm_off': None, 'rapm_def': None, 'rapm_off_pct': None, 'rapm_def_pct': None}
+    null_data = {
+        'rapm_off': None,
+        'rapm_def': None,
+        'rapm_off_pct': None,
+        'rapm_def_pct': None,
+        'qot_impact': None,
+        'qoc_impact': None,
+        'qot_impact_pct': None,
+        'qoc_impact_pct': None,
+    }
     sb.table('players').update(null_data).in_('player_id', to_null).execute()
     print(f"  Done — {len(to_null)} impossible RAPM values cleared")
 
@@ -759,7 +975,7 @@ def print_leaderboards(results_df):
 # ── Step 5: Quality gate before uploading ────────────────────────────────────
 def check_and_maybe_upload(results_df):
     """
-    Apply min-TOI filter, null impossible values, then upload if quality gate passes.
+    Apply min-TOI filter, null impossible values, then upload projected RAPM if quality gate passes.
     Quality gate: McDavid rapm_off_pct > 70th AND Draisaitl rapm_off_pct > 60th.
     """
     # ── Min-TOI filter: remove small-sample noise ─────────────────────────────
@@ -801,19 +1017,19 @@ def check_and_maybe_upload(results_df):
     print(f"  Draisaitl rapm_off_pct: {dr_pct:.1f}  {'✓' if dr_pct > 60 else '✗'}")
 
     if mc_pct > 70 and dr_pct > 60:
-        print("\n✓ Conditions met — uploading multi-season RAPM to Supabase")
+        print("\n✓ Conditions met — uploading projected 3-year RAPM card to Supabase")
         if SUPABASE_URL and SUPABASE_KEY:
             sb = create_client(SUPABASE_URL, SUPABASE_KEY)
             null_impossible_rapm(sb)
         upload_rapm(results_df)
         print_leaderboards(results_df)
         print("\nNext steps:")
-        print("  1. rapm_off_pct is now at 20% in OFF_WEIGHTS in compute_ratings.py")
+        print("  1. Season RAPM is stored on player_seasons; projected RAPM is refreshed on players")
         print("  2. Re-run: python compute_ratings.py")
         return True
     else:
-        print("\n✗ Conditions not met — not uploading (current single-season RAPM preserved)")
-        print("  Multi-season regression still doesn't clearly separate elite players.")
+        print("\n✗ Conditions not met — not uploading projected RAPM card")
+        print("  The projected RAPM still doesn't clearly separate elite players.")
         if SUPABASE_URL and SUPABASE_KEY:
             sb = create_client(SUPABASE_URL, SUPABASE_KEY)
             null_impossible_rapm(sb)
@@ -851,24 +1067,33 @@ if __name__ == '__main__':
         print("\n→ Review diagnostics above, then set TEST_MODE = False and re-run.")
         sys.exit(0)
 
-    # Step 3: combine all seasons and run regression
+    # Step 3: build per-season RAPM + first-pass context
     print(f"\n{'='*60}")
-    print("Step 3 — Combine 3 seasons + build RAPM regression")
+    print("Step 3 — Per-season RAPM + context")
     print(f"{'='*60}")
 
-    combined = pd.concat(list(season_dfs.values()), ignore_index=True)
-    n_qualified = len(combined[combined['duration_seconds'] >= 10])
-    for sk, sdf in season_dfs.items():
-        w = SEASON_CONFIGS[sk]['weight']
-        print(f"  {sk}: {len(sdf):,} stints (weight ×{w})")
-    print(f"  Combined: {n_qualified:,} stints ≥10s")
+    season_results = {}
+    for season_key, stints in season_dfs.items():
+        print(f"\n{season_key}: fitting season RAPM")
+        raw_results = build_rapm(stints)
+        qualified = filter_qualified_results(raw_results)
+        print(
+            f"  Qualified skaters for {season_key}: "
+            f"{len(qualified)}/{len(raw_results)} (≥{MIN_TOI_MINUTES} min 5v5)"
+        )
+        context = compute_context_metrics(stints, qualified)
+        merged = qualified.merge(context, on='player_id', how='left')
+        season_results[season_key] = merged
+        upload_season_rapm(season_key, merged)
 
-    results = build_rapm(combined)
-
-    # Step 4: quality gate + conditional upload
+    # Step 4: project per-season RAPM to 3-year card RAPM and upload to players
     print(f"\n{'='*60}")
-    print("Step 4 — Quality check and upload")
+    print("Step 4 — Project 3-year RAPM card")
     print(f"{'='*60}")
-    check_and_maybe_upload(results)
+    projected = project_season_results(season_results)
+    if projected.empty:
+        print("✗ No projected RAPM rows were produced")
+        sys.exit(1)
+    check_and_maybe_upload(projected)
 
-    print("\n✓ Done. Run compute_ratings.py to refresh overall ratings.")
+    print("\n✓ Done. Run compute_ratings.py, then compute_percentiles.py to refresh cards.")

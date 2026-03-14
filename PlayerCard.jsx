@@ -173,6 +173,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
   const avgToi = parseAvgToi(player.toi);
   const totalToiHours = avgToi && player.gp ? (avgToi * player.gp) / 60 : null;
   const pts = player.pts ?? (((player.g || 0) + (player.a || 0)) || null);
+  const percentiles = player.percentiles || {};
   const rawStats = {
     "Goals/60": totalToiHours ? ((player.g || 0) / totalToiHours).toFixed(2) : null,
     "Pts/60": totalToiHours && pts != null ? (pts / totalToiHours).toFixed(2) : null,
@@ -188,35 +189,45 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
     {
       title: "Scoring",
       items: [
-        { label: "Goals / 60", value: player.percentiles?.["Goals/60"], subtitle: rawStats["Goals/60"] },
-        { label: "Points / 60", value: player.percentiles?.["Pts/60"], subtitle: rawStats["Pts/60"] },
-        { label: "Individual xG / 60", value: player.percentiles?.["ixG/60"], subtitle: rawStats["ixG/60"] },
-        { label: "Shot Volume / 60", value: player.percentiles?.["iCF/60"], subtitle: rawStats["iCF/60"] },
+        { label: "Goals / 60", value: percentiles["Goals/60"], subtitle: rawStats["Goals/60"] },
+        { label: "Points / 60", value: percentiles["Pts/60"], subtitle: rawStats["Pts/60"] },
+        { label: "Individual xG / 60", value: percentiles["ixG/60"], subtitle: rawStats["ixG/60"] },
+        { label: "Shot Volume / 60", value: percentiles["iCF/60"], subtitle: rawStats["iCF/60"] },
       ],
     },
     {
       title: "Impact",
       items: [
-        { label: "RAPM Offence", value: player.rapm_off_pct, subtitle: rawStats["RAPM Off"] },
-        { label: "RAPM Defence", value: player.rapm_def_pct, subtitle: rawStats["RAPM Def"] },
-        { label: "On-Ice xGF%", value: player.percentiles?.["xGF%"], subtitle: rawStats["xGF%"] },
-        { label: "High-Danger Share", value: player.percentiles?.["HDCF%"], subtitle: rawStats["HDCF%"] },
+        { label: "3-Year WAR", value: percentiles["WAR"], subtitle: player.war_total != null ? `${player.war_total.toFixed(2)} WAR` : null },
+        { label: "EV Offence", value: percentiles["EV Off"] ?? player.rapm_off_pct, subtitle: player.war_ev_off != null ? `${player.war_ev_off.toFixed(2)} WAR` : rawStats["RAPM Off"] },
+        { label: "EV Defence", value: percentiles["EV Def"] ?? player.rapm_def_pct, subtitle: player.war_ev_def != null ? `${player.war_ev_def.toFixed(2)} WAR` : rawStats["RAPM Def"] },
+        { label: "Power Play", value: percentiles["PP"], subtitle: player.war_pp != null ? `${player.war_pp.toFixed(2)} WAR` : null },
+        { label: "Penalty Kill", value: percentiles["PK"], subtitle: player.war_pk != null ? `${player.war_pk.toFixed(2)} WAR` : null },
+        { label: "Shooting", value: percentiles["Shooting"], subtitle: player.war_shooting != null ? `${player.war_shooting.toFixed(2)} WAR` : null },
+        { label: "Penalties", value: percentiles["Penalties"], subtitle: player.war_penalties != null ? `${player.war_penalties.toFixed(2)} WAR` : null },
+        { label: "RAPM Offence", value: percentiles["RAPM Off"] ?? player.rapm_off_pct, subtitle: rawStats["RAPM Off"] },
       ],
     },
     {
-      title: "Model",
+      title: "Context",
       items: [
-        { label: "Offensive Rating", value: player.off_rating, subtitle: "score / 100" },
-        { label: "Defensive Rating", value: player.def_rating, subtitle: "score / 100" },
-        { label: "Overall Rating", value: player.overall_rating, subtitle: "score / 100" },
-        { label: "Shooting WAR", value: player.war_shooting != null ? Math.max(0, Math.min(100, (player.war_shooting + 1.5) * 25)) : null, subtitle: player.war_shooting != null ? `${player.war_shooting.toFixed(2)} WAR` : null },
+        { label: "RAPM Defence", value: percentiles["RAPM Def"] ?? player.rapm_def_pct, subtitle: rawStats["RAPM Def"] },
+        { label: "On-Ice xGF%", value: percentiles["xGF%"], subtitle: rawStats["xGF%"] },
+        { label: "High-Danger Share", value: percentiles["HDCF%"], subtitle: rawStats["HDCF%"] },
+        { label: "Competition", value: percentiles["Competition"], subtitle: player.qoc_impact != null ? player.qoc_impact.toFixed(2) : null },
+        { label: "Teammates", value: percentiles["Teammates"], subtitle: player.qot_impact != null ? player.qot_impact.toFixed(2) : null },
+        { label: "Off Rating", value: percentiles["Off Rating"] ?? player.off_rating, subtitle: "score / 100" },
+        { label: "Def Rating", value: percentiles["Def Rating"] ?? player.def_rating, subtitle: "score / 100" },
+        { label: "Overall Rating", value: percentiles["Overall"] ?? player.overall_rating, subtitle: "score / 100" },
       ],
     },
   ];
 
-  const profilePct = player.overall_rating != null
-    ? Math.round(player.overall_rating)
-    : Math.round(((player.rapm_off_pct || 0) + (player.rapm_def_pct || 0) + (player.percentiles?.["Pts/60"] || 0)) / 3);
+  const profilePct = percentiles["WAR"]
+    ?? percentiles["Overall"]
+    ?? (player.overall_rating != null
+      ? Math.round(player.overall_rating)
+      : Math.round(((player.rapm_off_pct || 0) + (player.rapm_def_pct || 0) + (percentiles["Pts/60"] || 0)) / 3));
   const positionLabel =
     player.position === "D"
       ? "defencemen"
@@ -272,7 +283,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
               <strong>{player.toi || "—"}</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>WAR</span>
+              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>3Y WAR</span>
               <strong>{player.war_total != null ? player.war_total.toFixed(2) : "—"}</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
@@ -292,22 +303,22 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
           <PercentileTile
             label="EV Offence"
-            value={player.rapm_off_pct}
+            value={percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct}
             subtitle={player.war_ev_off != null ? `${player.war_ev_off.toFixed(2)} WAR` : rawStats["RAPM Off"]}
           />
           <PercentileTile
             label="EV Defence"
-            value={player.rapm_def_pct}
+            value={percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct}
             subtitle={player.war_ev_def != null ? `${player.war_ev_def.toFixed(2)} WAR` : rawStats["RAPM Def"]}
           />
           <PercentileTile
             label="PP Impact"
-            value={player.war_pp != null ? Math.max(0, Math.min(100, (player.war_pp + 0.5) * 50)) : null}
+            value={percentiles["PP"]}
             subtitle={player.war_pp != null ? `${player.war_pp.toFixed(2)} WAR` : null}
           />
           <PercentileTile
             label="Penalties"
-            value={player.war_penalties != null ? Math.max(0, Math.min(100, 50 + player.war_penalties * 45)) : null}
+            value={percentiles["Penalties"]}
             subtitle={player.war_penalties != null ? `${player.war_penalties.toFixed(2)} WAR` : null}
           />
         </div>
@@ -353,7 +364,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
           color: "#42586d",
           fontFamily: "'Barlow Condensed',sans-serif",
         }}>
-          Percentile ranking among {positionLabel}. Percentile tiles use your current Supabase percentile payload plus RAPM percentiles and model scores.
+          Projected percentile ranking among {positionLabel}. The tiles blend 3-year RAPM, season WAR components rolled into a projected card WAR, and first-pass teammate/competition context.
         </div>
       </div>
     </div>
@@ -400,7 +411,21 @@ function RapmBox({ label, value, pct, subtitle }) {
 }
 
 function RadarViz({ percentiles, color }) {
-  const entries = Object.entries(percentiles || {});
+  const preferredOrder = [
+    "WAR",
+    "EV Off",
+    "EV Def",
+    "PP",
+    "Shooting",
+    "Penalties",
+    "RAPM Off",
+    "RAPM Def",
+  ];
+  const allEntries = Object.entries(percentiles || {});
+  const preferredEntries = preferredOrder
+    .filter((key) => percentiles && percentiles[key] != null)
+    .map((key) => [key, percentiles[key]]);
+  const entries = preferredEntries.length ? preferredEntries : allEntries.slice(0, 8);
   if (!entries.length) return (
     <div style={{ height:120, display:"flex", alignItems:"center", justifyContent:"center" }}>
       <span style={{ fontSize:11, color:"#2a4060", fontFamily:"'DM Mono',monospace" }}>No percentile data yet</span>
