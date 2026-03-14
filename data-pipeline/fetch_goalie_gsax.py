@@ -28,7 +28,7 @@ from build_xg_model import (
     FEATURE_COLS,
     _EVENT_TYPE_MAP,
     _SHOT_TYPE_MAP,
-    _parse_situation_code,
+    _parse_situation_details,
     _strength_category,
     engineer_features,
 )
@@ -143,6 +143,8 @@ def aggregate_goalie_shots(game_ids, season_key, models):
             prior_type = 'NONE'
             prior_team = ''
             prior_secs = 0
+            prior_x = None
+            prior_y = None
 
             for ev in data.get('plays', []):
                 ev_type = ev.get('typeDescKey')
@@ -166,6 +168,8 @@ def aggregate_goalie_shots(game_ids, season_key, models):
                     prior_type = _EVENT_TYPE_MAP.get(ev_type, str(ev_type or '').upper()[:10])
                     prior_team = home_abbr if det.get('eventOwnerTeamId') == home_team_id else away_abbr
                     prior_secs = abs_t
+                    prior_x = det.get('xCoord')
+                    prior_y = det.get('yCoord')
                     continue
 
                 goalie_id = det.get('goalieInNetId')
@@ -175,11 +179,15 @@ def aggregate_goalie_shots(game_ids, season_key, models):
                     prior_type = _EVENT_TYPE_MAP.get(ev_type, 'SHOT')
                     prior_team = home_abbr if det.get('eventOwnerTeamId') == home_team_id else away_abbr
                     prior_secs = abs_t
+                    prior_x = det.get('xCoord')
+                    prior_y = det.get('yCoord')
                     continue
 
                 event_team_id = det.get('eventOwnerTeamId')
                 is_home = int(event_team_id == home_team_id)
                 shooter_team = home_abbr if is_home else away_abbr
+                sit = _parse_situation_details(ev.get('situationCode', ''))
+                defending_goalies = sit['away_goalies'] if is_home else sit['home_goalies']
                 score_diff = home_score - away_score
                 if not is_home:
                     score_diff = -score_diff
@@ -196,14 +204,19 @@ def aggregate_goalie_shots(game_ids, season_key, models):
                     'shot_type': _SHOT_TYPE_MAP.get(det.get('shotType', ''), ''),
                     'prior_event_type': prior_type,
                     'prior_event_team': prior_team,
+                    'prior_event_x_coord': float(prior_x) if prior_x is not None else np.nan,
+                    'prior_event_y_coord': float(prior_y) if prior_y is not None else np.nan,
                     'seconds_since_prior': float(max(0, abs_t - prior_secs)),
                     'score_diff': score_diff,
-                    'game_strength': _parse_situation_code(ev.get('situationCode', '')),
+                    'game_strength': sit['strength'],
+                    'is_empty_net': int(defending_goalies == 0),
                     'is_goal': int(ev_type == 'goal'),
                 })
                 prior_type = _EVENT_TYPE_MAP.get(ev_type, 'SHOT')
                 prior_team = shooter_team
                 prior_secs = abs_t
+                prior_x = xc
+                prior_y = yc
         except Exception as e:
             failed.append((game_id, str(e)))
 

@@ -75,8 +75,9 @@ SHOT_COLS = [
     'game_id', 'season', 'period', 'time_seconds',
     'shooter_id', 'shooter_team', 'is_home',
     'x_coord', 'y_coord', 'shot_type',
-    'prior_event_type', 'prior_event_team', 'seconds_since_prior',
-    'score_diff', 'game_strength',
+    'prior_event_type', 'prior_event_team', 'prior_event_x_coord', 'prior_event_y_coord',
+    'seconds_since_prior',
+    'score_diff', 'game_strength', 'is_empty_net',
     'is_goal',
 ]
 
@@ -110,6 +111,30 @@ def _strength_category(strength):
     if strength == '5v4':   return 'PP'   # home team on PP
     if strength == '4v5':   return 'PK'   # home team on PK
     return 'other'
+
+
+def _parse_situation_details(sit_code):
+    """
+    Parse NHL API v1 situationCode (4 chars: away_goalies + away_sk + home_sk + home_goalies).
+    Returns goalie/skater counts plus simplified strength label.
+    """
+    if not sit_code or len(str(sit_code)) != 4:
+        return {
+            'away_goalies': 1,
+            'away_skaters': 5,
+            'home_skaters': 5,
+            'home_goalies': 1,
+            'strength': 'other',
+        }
+    s = str(sit_code)
+    away_goalies, away_sk, home_sk, home_goalies = map(int, s)
+    return {
+        'away_goalies': away_goalies,
+        'away_skaters': away_sk,
+        'home_skaters': home_sk,
+        'home_goalies': home_goalies,
+        'strength': _parse_situation_code(sit_code),
+    }
 
 
 # ── NHL API v1 shot scraping helpers ──────────────────────────────────────────
@@ -166,6 +191,8 @@ def scrape_game_shots_v1(game_id_full, season_key):
     prior_type  = 'NONE'
     prior_team  = ''
     prior_secs  = 0
+    prior_x     = None
+    prior_y     = None
 
     rows = []
     for ev in data.get('plays', []):
@@ -193,6 +220,8 @@ def scrape_game_shots_v1(game_id_full, season_key):
             prior_type = _EVENT_TYPE_MAP.get(ev_type, ev_type.upper()[:10])
             prior_team = home_abbr if det.get('eventOwnerTeamId') == home_team_id else away_abbr
             prior_secs = abs_t
+            prior_x = det.get('xCoord')
+            prior_y = det.get('yCoord')
             continue
 
         # Coordinates — skip if missing
@@ -202,6 +231,8 @@ def scrape_game_shots_v1(game_id_full, season_key):
             prior_type = _EVENT_TYPE_MAP.get(ev_type, 'SHOT')
             prior_team = home_abbr if det.get('eventOwnerTeamId') == home_team_id else away_abbr
             prior_secs = abs_t
+            prior_x = det.get('xCoord')
+            prior_y = det.get('yCoord')
             continue
 
         shooter_id = det.get('shootingPlayerId') or det.get('scoringPlayerId')
@@ -213,6 +244,8 @@ def scrape_game_shots_v1(game_id_full, season_key):
         event_team_id = det.get('eventOwnerTeamId')
         is_home       = int(event_team_id == home_team_id)
         shooter_team  = home_abbr if is_home else away_abbr
+        sit = _parse_situation_details(ev.get('situationCode', ''))
+        defending_goalies = sit['away_goalies'] if is_home else sit['home_goalies']
 
         score_diff = home_score - away_score
         if not is_home:
@@ -231,15 +264,20 @@ def scrape_game_shots_v1(game_id_full, season_key):
             'shot_type':           _SHOT_TYPE_MAP.get(det.get('shotType', ''), ''),
             'prior_event_type':    prior_type,
             'prior_event_team':    prior_team,
+            'prior_event_x_coord': float(prior_x) if prior_x is not None else np.nan,
+            'prior_event_y_coord': float(prior_y) if prior_y is not None else np.nan,
             'seconds_since_prior': float(max(0, abs_t - prior_secs)),
             'score_diff':          score_diff,
-            'game_strength':       _parse_situation_code(ev.get('situationCode', '')),
+            'game_strength':       sit['strength'],
+            'is_empty_net':        int(defending_goalies == 0),
             'is_goal':             int(ev_type == 'goal'),
         })
 
         prior_type = _EVENT_TYPE_MAP.get(ev_type, 'SHOT')
         prior_team = shooter_team
         prior_secs = abs_t
+        prior_x = xc
+        prior_y = yc
 
     return rows
 
@@ -264,7 +302,7 @@ def scrape_shots_for_season(season_key, season_cfg, existing_df=None):
             df_ex = pd.read_csv(SHOTS_CKPT)
             season_rows = df_ex[df_ex['season'] == season_key]
             if len(season_rows) > 0:
-                existing_rows = season_rows.to_dict('records')
+                existing_rows = season_rows.reindex(columns=SHOT_COLS).to_dict('records')
                 done_games    = set(season_rows['game_id'].unique())
                 print(f"  Resuming {season_key}: {len(done_games)} games done, "
                       f"{len(existing_rows):,} shots loaded")
@@ -272,7 +310,7 @@ def scrape_shots_for_season(season_key, season_cfg, existing_df=None):
             print(f"  Warning: could not load checkpoint: {e}")
 
     if not done_games and existing_df is not None and len(existing_df) > 0:
-        existing_rows = existing_df[SHOT_COLS].to_dict('records')
+        existing_rows = existing_df.reindex(columns=SHOT_COLS).to_dict('records')
         done_games    = set(existing_df['game_id'].unique())
         print(f"  Seeded {season_key} from shots_all_seasons.csv: "
               f"{len(done_games)} games ({len(existing_rows):,} shots)")
@@ -281,7 +319,7 @@ def scrape_shots_for_season(season_key, season_cfg, existing_df=None):
     print(f"  {season_key}: {len(todo)} games remaining ({len(game_ids)} total)")
 
     if not todo:
-        return pd.DataFrame(existing_rows, columns=SHOT_COLS) if existing_rows \
+        return pd.DataFrame(existing_rows).reindex(columns=SHOT_COLS) if existing_rows \
                else pd.DataFrame(columns=SHOT_COLS)
 
     new_rows   = []
@@ -309,7 +347,7 @@ def scrape_shots_for_season(season_key, season_cfg, existing_df=None):
         print(f"  {len(failed)} games failed for {season_key}")
 
     all_rows = existing_rows + new_rows
-    return pd.DataFrame(all_rows, columns=SHOT_COLS) if all_rows \
+    return pd.DataFrame(all_rows).reindex(columns=SHOT_COLS) if all_rows \
            else pd.DataFrame(columns=SHOT_COLS)
 
 
@@ -317,7 +355,7 @@ def _save_shot_checkpoint(rows, season_key_updating):
     """
     Merge new rows into the checkpoint file (keeping other seasons intact).
     """
-    new_df = pd.DataFrame(rows, columns=SHOT_COLS) if rows \
+    new_df = pd.DataFrame(rows).reindex(columns=SHOT_COLS) if rows \
              else pd.DataFrame(columns=SHOT_COLS)
 
     if os.path.exists(SHOTS_CKPT):
@@ -397,6 +435,13 @@ def engineer_features(df, apply_noise_filter=True):
              np.where(sign == -1, -x, np.abs(x)))
     df['x_normalized'] = x_norm
     y = df['y_coord'].astype(float)
+    prior_x = pd.to_numeric(df.get('prior_event_x_coord'), errors='coerce')
+    prior_y = pd.to_numeric(df.get('prior_event_y_coord'), errors='coerce')
+    prior_x_values = prior_x.to_numpy() if isinstance(prior_x, pd.Series) else np.full(len(df), np.nan)
+    prior_x_norm = np.where(sign ==  1,  prior_x_values,
+                   np.where(sign == -1, -prior_x_values, np.abs(prior_x_values)))
+    df['prior_x_normalized'] = prior_x_norm
+    df['prior_y_normalized'] = prior_y.fillna(0.0).astype(float)
 
     # Distance and angle from the attacking net (x=+89 after normalisation)
     df['distance']      = np.sqrt((x_norm - 89) ** 2 + y ** 2)
@@ -426,6 +471,20 @@ def engineer_features(df, apply_noise_filter=True):
         (df['prior_event_type'].isin(prior_shot_types))
     ).astype(int)
 
+    prior_dx = pd.Series(x_norm) - pd.Series(prior_x_norm)
+    prior_dy = y - df['prior_y_normalized']
+    df['pre_shot_lateral_movement'] = prior_dy.abs().fillna(0.0)
+    df['pre_shot_north_south_movement'] = prior_dx.abs().fillna(0.0)
+    df['pre_shot_distance'] = np.sqrt(prior_dx.fillna(0.0) ** 2 + prior_dy.fillna(0.0) ** 2)
+    secs = df['seconds_since_prior'].clip(lower=0.1)
+    df['pre_shot_speed'] = (df['pre_shot_distance'] / secs).clip(upper=120.0)
+    prior_angle = np.degrees(np.arctan2(
+        df['prior_y_normalized'].abs(),
+        (pd.Series(prior_x_norm) - 89).abs().clip(lower=0.1).fillna(0.1).values
+    ))
+    df['rebound_angle_change'] = (df['angle'] - prior_angle).abs().fillna(0.0)
+    df.loc[df['is_rebound'] == 0, 'rebound_angle_change'] = 0.0
+
     # --- Score state (clipped) ---
     df['score_state'] = df['score_diff'].clip(-3, 3)
 
@@ -449,6 +508,7 @@ def engineer_features(df, apply_noise_filter=True):
     df['game_strength_encoded'] = pd.Categorical(
         df['game_strength'], categories=STRENGTH_ORDER
     ).codes.clip(0)
+    df['is_empty_net'] = pd.to_numeric(df.get('is_empty_net'), errors='coerce').fillna(0).astype(int)
 
     # --- Strength category bucket for per-model split ---
     df['strength_bucket'] = df['game_strength'].map(_strength_category)
@@ -459,11 +519,13 @@ def engineer_features(df, apply_noise_filter=True):
 FEATURE_COLS = [
     'distance', 'angle', 'is_behind_net',
     'is_rush', 'is_rebound',
+    'pre_shot_lateral_movement', 'pre_shot_north_south_movement',
+    'pre_shot_distance', 'pre_shot_speed', 'rebound_angle_change',
     'shot_type_encoded',
     'prior_event_encoded',
     'seconds_since_prior',
     'score_state', 'period_cat',
-    'is_home', 'game_strength_encoded',
+    'is_home', 'game_strength_encoded', 'is_empty_net',
 ]
 
 
@@ -646,6 +708,11 @@ def _sample_shot(models, strength, x, y, shot_type, prior, secs_prior,
         'is_behind_net':        int(x > 89),
         'is_rush':              0,
         'is_rebound':           int(secs_prior < 3 and prior in ('SHOT', 'MISS', 'GOAL')),
+        'pre_shot_lateral_movement': 0.0,
+        'pre_shot_north_south_movement': 0.0,
+        'pre_shot_distance':    0.0,
+        'pre_shot_speed':       0.0,
+        'rebound_angle_change': 0.0,
         'shot_type_encoded':    max(st_enc, 0),
         'prior_event_encoded':  max(pr_enc, 0),
         'seconds_since_prior':  secs_prior,
@@ -653,6 +720,7 @@ def _sample_shot(models, strength, x, y, shot_type, prior, secs_prior,
         'period_cat':           period,
         'is_home':              is_home,
         'game_strength_encoded': max(gs_enc, 0),
+        'is_empty_net':         0,
     }])
 
     xg = model.predict_proba(feat.astype(float))[0, 1]
