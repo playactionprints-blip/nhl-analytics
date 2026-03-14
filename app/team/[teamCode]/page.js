@@ -121,7 +121,6 @@ export default async function TeamPageRoute({ params }) {
       .from('players')
       .select('*')
       .eq('team', teamCode)
-      .gte('gp', 5)
       .order('overall_rating', { ascending: false, nullsFirst: false }),
     supabase
       .from('players')

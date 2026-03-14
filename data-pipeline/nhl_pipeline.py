@@ -29,15 +29,16 @@ import json
 import os
 import argparse
 from pathlib import Path
+from datetime import datetime, timezone
 
 # ── Config ────────────────────────────────────────────────────────────────────
 NHL_API_BASE = "https://api-web.nhle.com/v1"
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 
-# Fill these in after creating a Supabase project at supabase.com
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+# Accept either server-style or existing frontend env vars.
+SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
 
 CURRENT_SEASON = "20252026"
 
@@ -83,6 +84,47 @@ def get_team_roster(team_abbrev: str) -> list[dict]:
                 "headshot_url": p.get("headshot", ""),
             })
     return players
+
+
+def sync_roster_to_supabase() -> None:
+    """Fetch the live NHL roster feed and upsert roster identity/team fields."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("✗ Set SUPABASE_URL and SUPABASE_KEY env vars first")
+        return
+
+    from supabase import create_client
+
+    roster_df = fetch_full_roster()
+    if roster_df.empty:
+        print("✗ No roster rows returned from NHL API")
+        return
+
+    sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+    ts = datetime.now(timezone.utc).isoformat()
+
+    records = []
+    for row in roster_df.where(pd.notnull(roster_df), None).to_dict("records"):
+        records.append({
+            "player_id": row["player_id"],
+            "first_name": row.get("first_name"),
+            "last_name": row.get("last_name"),
+            "full_name": row.get("full_name"),
+            "position": row.get("position"),
+            "team": row.get("team"),
+            "jersey": row.get("jersey"),
+            "headshot_url": row.get("headshot_url"),
+            "updated_at": ts,
+        })
+
+    batch_size = 250
+    updated = 0
+    for i in range(0, len(records), batch_size):
+        batch = records[i:i + batch_size]
+        sb.table("players").upsert(batch, on_conflict="player_id").execute()
+        updated += len(batch)
+        print(f"  Synced rows {i + 1}-{i + len(batch)}")
+
+    print(f"\n✓ Synced {updated} live roster rows to Supabase")
 
 
 def get_player_stats(player_id: int) -> dict:
@@ -280,7 +322,7 @@ def upload_to_supabase(csv_path: str = "data/players_merged.csv"):
     batch_size = 500
     for i in range(0, len(records), batch_size):
         batch = records[i : i + batch_size]
-        sb.table("players").upsert(batch).execute()
+        sb.table("players").upsert(batch, on_conflict="player_id").execute()
         print(f"  Uploaded rows {i}–{i + len(batch)}")
 
     print(f"\n✓ Uploaded {len(records)} players to Supabase")
@@ -343,6 +385,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NHL Analytics Pipeline")
     parser.add_argument("--fetch-roster", action="store_true", help="Pull all active players from NHL API")
     parser.add_argument("--fetch-stats",  action="store_true", help="Pull current-season stats for all players in Supabase")
+    parser.add_argument("--sync-roster",  action="store_true", help="Upsert the live NHL roster into Supabase")
     parser.add_argument("--merge",        action="store_true", help="Merge NHL data with NST + EH CSVs")
     parser.add_argument("--upload",       action="store_true", help="Upload merged data to Supabase")
     parser.add_argument("--schema",       action="store_true", help="Print Supabase SQL schema")
@@ -353,6 +396,8 @@ if __name__ == "__main__":
         print(SUPABASE_SQL)
     elif args.fetch_stats:
         fetch_all_stats()
+    elif args.sync_roster:
+        sync_roster_to_supabase()
     elif args.fetch_roster or args.all:
         fetch_full_roster()
         if args.all:

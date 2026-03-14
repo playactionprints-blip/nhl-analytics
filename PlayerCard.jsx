@@ -59,6 +59,14 @@ function fmtMinSec(decimalMinutes) {
   const s = Math.round((decimalMinutes - m) * 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 }
+function parseAvgToi(toi) {
+  if (!toi) return null;
+  const [mins, secs] = String(toi).split(":");
+  const m = parseInt(mins, 10);
+  const s = parseInt(secs || "0", 10);
+  if (Number.isNaN(m) || Number.isNaN(s)) return null;
+  return m + s / 60;
+}
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 function PercentileBar({ label, value }) {
@@ -71,6 +79,282 @@ function PercentileBar({ label, value }) {
       </div>
       <div style={{ height:5, background:"#1a2535", borderRadius:3, overflow:"hidden" }}>
         <div style={{ width:`${value}%`, height:"100%", background:`linear-gradient(90deg,${color}88,${color})`, borderRadius:3, transition:"width 0.8s cubic-bezier(0.22,1,0.36,1)" }} />
+      </div>
+    </div>
+  );
+}
+
+function percentileTilePalette(value) {
+  if (value == null) {
+    return {
+      bg: "#0d1825",
+      border: "#1e2d40",
+      text: "#2a4060",
+      label: "#5a7a99",
+    };
+  }
+  if (value >= 80) {
+    return {
+      bg: "linear-gradient(180deg,#9bc4ea 0%,#78addd 100%)",
+      border: "#a5cff0",
+      text: "#04111d",
+      label: "#1b2d40",
+    };
+  }
+  if (value >= 60) {
+    return {
+      bg: "linear-gradient(180deg,#c7def2 0%,#abcde8 100%)",
+      border: "#cfe6f7",
+      text: "#081521",
+      label: "#31465a",
+    };
+  }
+  if (value >= 40) {
+    return {
+      bg: "linear-gradient(180deg,#f2ecec 0%,#e8dcdc 100%)",
+      border: "#efe4e4",
+      text: "#2a2020",
+      label: "#5d4c4c",
+    };
+  }
+  return {
+    bg: "linear-gradient(180deg,#ffb6b8 0%,#ff969a 100%)",
+    border: "#ffc8ca",
+    text: "#20090b",
+    label: "#5b2529",
+  };
+}
+
+function PercentileTile({ label, value, subtitle, big = false }) {
+  const palette = percentileTilePalette(value);
+  return (
+    <div style={{
+      minHeight: big ? 116 : 96,
+      background: palette.bg,
+      border: `1px solid ${palette.border}`,
+      borderRadius: 0,
+      padding: big ? "12px 14px" : "10px 12px",
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.14)",
+    }}>
+      <div style={{
+        fontSize: big ? 11 : 10,
+        color: palette.label,
+        fontFamily: "'DM Mono',monospace",
+        lineHeight: 1.2,
+        textTransform: "none",
+      }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: big ? 34 : 26,
+        fontWeight: 900,
+        color: palette.text,
+        lineHeight: 1,
+        fontFamily: "'Barlow Condensed',sans-serif",
+      }}>
+        {value != null ? `${Math.round(value)}%` : "—"}
+      </div>
+      <div style={{
+        fontSize: 10,
+        color: palette.label,
+        fontFamily: "'DM Mono',monospace",
+        minHeight: 12,
+      }}>
+        {subtitle || ""}
+      </div>
+    </div>
+  );
+}
+
+function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
+  const avgToi = parseAvgToi(player.toi);
+  const totalToiHours = avgToi && player.gp ? (avgToi * player.gp) / 60 : null;
+  const pts = player.pts ?? (((player.g || 0) + (player.a || 0)) || null);
+  const rawStats = {
+    "Goals/60": totalToiHours ? ((player.g || 0) / totalToiHours).toFixed(2) : null,
+    "Pts/60": totalToiHours && pts != null ? (pts / totalToiHours).toFixed(2) : null,
+    "iCF/60": totalToiHours && player.icf != null ? (player.icf / totalToiHours).toFixed(2) : null,
+    "ixG/60": totalToiHours && player.ixg != null ? (player.ixg / totalToiHours).toFixed(2) : null,
+    "xGF%": player.xgf_pct != null ? `${player.xgf_pct.toFixed(1)}%` : null,
+    "HDCF%": player.hdcf_pct != null ? `${player.hdcf_pct.toFixed(1)}%` : null,
+    "RAPM Off": player.rapm_off != null ? `${player.rapm_off >= 0 ? "+" : ""}${player.rapm_off.toFixed(2)}` : null,
+    "RAPM Def": player.rapm_def != null ? `${player.rapm_def >= 0 ? "+" : ""}${player.rapm_def.toFixed(2)}` : null,
+  };
+
+  const sections = [
+    {
+      title: "Scoring",
+      items: [
+        { label: "Goals / 60", value: player.percentiles?.["Goals/60"], subtitle: rawStats["Goals/60"] },
+        { label: "Points / 60", value: player.percentiles?.["Pts/60"], subtitle: rawStats["Pts/60"] },
+        { label: "Individual xG / 60", value: player.percentiles?.["ixG/60"], subtitle: rawStats["ixG/60"] },
+        { label: "Shot Volume / 60", value: player.percentiles?.["iCF/60"], subtitle: rawStats["iCF/60"] },
+      ],
+    },
+    {
+      title: "Impact",
+      items: [
+        { label: "RAPM Offence", value: player.rapm_off_pct, subtitle: rawStats["RAPM Off"] },
+        { label: "RAPM Defence", value: player.rapm_def_pct, subtitle: rawStats["RAPM Def"] },
+        { label: "On-Ice xGF%", value: player.percentiles?.["xGF%"], subtitle: rawStats["xGF%"] },
+        { label: "High-Danger Share", value: player.percentiles?.["HDCF%"], subtitle: rawStats["HDCF%"] },
+      ],
+    },
+    {
+      title: "Model",
+      items: [
+        { label: "Offensive Rating", value: player.off_rating, subtitle: "score / 100" },
+        { label: "Defensive Rating", value: player.def_rating, subtitle: "score / 100" },
+        { label: "Overall Rating", value: player.overall_rating, subtitle: "score / 100" },
+        { label: "Shooting WAR", value: player.war_shooting != null ? Math.max(0, Math.min(100, (player.war_shooting + 1.5) * 25)) : null, subtitle: player.war_shooting != null ? `${player.war_shooting.toFixed(2)} WAR` : null },
+      ],
+    },
+  ];
+
+  const profilePct = player.overall_rating != null
+    ? Math.round(player.overall_rating)
+    : Math.round(((player.rapm_off_pct || 0) + (player.rapm_def_pct || 0) + (player.percentiles?.["Pts/60"] || 0)) / 3);
+  const positionLabel =
+    player.position === "D"
+      ? "defencemen"
+      : player.position === "G"
+        ? "goalies"
+        : "forwards";
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 18 }}>
+      <div style={{
+        background: "linear-gradient(180deg,#f6f7f8 0%,#eceff2 100%)",
+        border: "1px solid #d6dde5",
+        color: "#0c1620",
+        padding: 18,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <TeamLogo abbr={teamAbbr} size={36} />
+          <div>
+            <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1, letterSpacing: "-1px" }}>
+              {player.full_name || player.name}
+            </div>
+            <div style={{ fontSize: 11, color: "#55687a", fontFamily: "'DM Mono',monospace" }}>
+              {teamFull}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 16, alignItems: "flex-start", marginBottom: 16 }}>
+          <div style={{
+            width: 96,
+            height: 120,
+            flexShrink: 0,
+            border: "1px solid #d2dbe3",
+            background: `linear-gradient(160deg,#ffffff 0%,${accent}18 100%)`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}>
+            <PlayerAvatar player={player} size={96} />
+          </div>
+          <div style={{ flex: 1, display: "grid", gap: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>Pos</span>
+              <strong>{player.position || "—"}</strong>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>Age</span>
+              <strong>{age ?? "—"}</strong>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>TOI</span>
+              <strong>{player.toi || "—"}</strong>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>WAR</span>
+              <strong>{player.war_total != null ? player.war_total.toFixed(2) : "—"}</strong>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <span style={{ color: "#55687a", fontFamily: "'DM Mono',monospace" }}>Cap</span>
+              <strong>{player.contract_info?.cap_hit ? `$${(player.contract_info.cap_hit / 1_000_000).toFixed(2)}M` : "—"}</strong>
+            </div>
+          </div>
+        </div>
+
+        <PercentileTile
+          label="Player Card Score"
+          value={profilePct}
+          subtitle={`${player.gp ?? 0} GP tracked`}
+          big
+        />
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
+          <PercentileTile
+            label="EV Offence"
+            value={player.rapm_off_pct}
+            subtitle={player.war_ev_off != null ? `${player.war_ev_off.toFixed(2)} WAR` : rawStats["RAPM Off"]}
+          />
+          <PercentileTile
+            label="EV Defence"
+            value={player.rapm_def_pct}
+            subtitle={player.war_ev_def != null ? `${player.war_ev_def.toFixed(2)} WAR` : rawStats["RAPM Def"]}
+          />
+          <PercentileTile
+            label="PP Impact"
+            value={player.war_pp != null ? Math.max(0, Math.min(100, (player.war_pp + 0.5) * 50)) : null}
+            subtitle={player.war_pp != null ? `${player.war_pp.toFixed(2)} WAR` : null}
+          />
+          <PercentileTile
+            label="Penalties"
+            value={player.war_penalties != null ? Math.max(0, Math.min(100, 50 + player.war_penalties * 45)) : null}
+            subtitle={player.war_penalties != null ? `${player.war_penalties.toFixed(2)} WAR` : null}
+          />
+        </div>
+      </div>
+
+      <div style={{
+        background: "linear-gradient(180deg,#f7f8fa 0%,#eef2f5 100%)",
+        border: "1px solid #d6dde5",
+        padding: 18,
+        color: "#0d1620",
+      }}>
+        {sections.map(section => (
+          <div key={section.title} style={{ marginBottom: 18 }}>
+            <div style={{
+              fontSize: 12,
+              fontWeight: 800,
+              color: "#33485c",
+              marginBottom: 8,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              fontFamily: "'DM Mono',monospace",
+            }}>
+              {section.title}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+              {section.items.map(item => (
+                <PercentileTile
+                  key={item.label}
+                  label={item.label}
+                  value={item.value}
+                  subtitle={item.subtitle}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <div style={{
+          marginTop: 10,
+          paddingTop: 10,
+          borderTop: "1px solid #d6dde5",
+          fontSize: 12,
+          color: "#42586d",
+          fontFamily: "'Barlow Condensed',sans-serif",
+        }}>
+          Percentile ranking among {positionLabel}. Percentile tiles use your current Supabase percentile payload plus RAPM percentiles and model scores.
+        </div>
       </div>
     </div>
   );
@@ -232,10 +516,11 @@ function PlayerCard({ player }) {
   const pts = player.pts ?? 0;
   const gp = player.gp ?? 0;
   const ptsPer82 = gp > 0 ? Math.round((pts / gp) * 82) : 0;
-  const tabs = isGoalie ? ["goalie stats"] : ["overview", "on-ice", "war / rapm", "ratings"];
+  const tabs = isGoalie ? ["goalie stats"] : ["overview", "percentile card", "on-ice", "war / rapm", "ratings"];
+  const cardWidth = !isGoalie && tab === "percentile card" ? 980 : 420;
 
   return (
-    <div className="pc-card" style={{ width:420, background:"linear-gradient(160deg,#0c1a28 0%,#081016 100%)", borderRadius:16, border:"1px solid #1e2d40", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
+    <div className="pc-card" style={{ width:cardWidth, background:"linear-gradient(160deg,#0c1a28 0%,#081016 100%)", borderRadius:16, border:"1px solid #1e2d40", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
       {/* Top accent bar */}
       <div style={{ height:3, background:`linear-gradient(90deg,${accent},${accent}88,transparent)` }} />
 
@@ -497,6 +782,16 @@ function PlayerCard({ player }) {
           </div>
         )}
 
+        {!isGoalie && tab === "percentile card" && (
+          <PercentileCardView
+            player={player}
+            accent={accent}
+            age={age}
+            teamAbbr={teamAbbr}
+            teamFull={teamFull}
+          />
+        )}
+
         {!isGoalie && tab === "war / rapm" && (
           <div>
             {/* WAR boxes — colored by total WAR magnitude */}
@@ -514,6 +809,7 @@ function PlayerCard({ player }) {
                   <StatBox label="EV Off WAR" value={player.war_ev_off != null ? player.war_ev_off.toFixed(2) : null} />
                   <StatBox label="EV Def WAR" value={player.war_ev_def != null ? player.war_ev_def.toFixed(2) : null} />
                   <StatBox label="Shooting WAR" value={player.war_shooting != null ? player.war_shooting.toFixed(2) : null} />
+                  <StatBox label="Penalties WAR" value={player.war_penalties != null ? player.war_penalties.toFixed(2) : null} />
                 </div>
               );
             })()}
