@@ -10,14 +10,19 @@ import math
 from collections import defaultdict
 from supabase import create_client
 
-sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
+SUPABASE_URL = os.getenv('SUPABASE_URL') or os.getenv('NEXT_PUBLIC_SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY') or os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+sb = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 SEASON_WEIGHTS = {'25-26': 0.50, '24-25': 0.30, '23-24': 0.20}
 CURRENT_SEASON  = '25-26'
 
 # ── Fetch data ────────────────────────────────────────────────────────────────
 SEASONS = ['25-26', '24-25', '23-24']
-PS_COLS = 'player_id,season,gp,toi,g,a1,a2,ixg,icf,tka,gva,xgf_pct,hdcf_pct,cf_pct,scf_pct,fow,fol,cf_pct_pk'
+PS_COLS = (
+    'player_id,season,gp,toi,g,a1,a2,ixg,icf,tka,gva,xgf_pct,hdcf_pct,cf_pct,scf_pct,'
+    'fow,fol,cf_pct_pk,toi_5v5,toi_pp,toi_pk,xgf_pp,xga_pk,penalty_minutes_drawn,penalty_minutes_taken'
+)
 
 print("Fetching player_seasons (per-season to avoid row limit)...")
 ps_rows = []
@@ -50,20 +55,34 @@ except Exception as e:
     print("    alter table players add column if not exists rapm_off float8;")
     print("    alter table players add column if not exists rapm_def float8;")
 
-# Fetch finishing_pct and toi_pp (populated by upload_nst_splits.py)
+# Fetch finishing_pct, toi_pp, and penalty totals
 extra_lookup = {}
 try:
-    extra_rows = sb.table('players').select('player_id,finishing_pct,toi_pp').execute().data
+    extra_rows = sb.table('players').select(
+        'player_id,finishing_pct,toi_pp,penalties_drawn,penalties_taken,penalty_minutes_drawn,penalty_minutes_taken'
+    ).execute().data
     for r in extra_rows:
         fp  = r.get('finishing_pct')
         tpp = r.get('toi_pp')
-        if fp is not None or tpp is not None:
-            extra_lookup[r['player_id']] = {'finishing_pct': fp, 'toi_pp': tpp}
+        pens_drawn = r.get('penalties_drawn')
+        pens_taken = r.get('penalties_taken')
+        pmd = r.get('penalty_minutes_drawn')
+        pmt = r.get('penalty_minutes_taken')
+        if fp is not None or tpp is not None or pens_drawn is not None or pens_taken is not None or pmd is not None or pmt is not None:
+            extra_lookup[r['player_id']] = {
+                'finishing_pct': fp,
+                'toi_pp': tpp,
+                'penalties_drawn': pens_drawn,
+                'penalties_taken': pens_taken,
+                'penalty_minutes_drawn': pmd,
+                'penalty_minutes_taken': pmt,
+            }
     fp_count  = sum(1 for v in extra_lookup.values() if v.get('finishing_pct') is not None)
     tpp_count = sum(1 for v in extra_lookup.values() if v.get('toi_pp') is not None)
-    print(f"  {fp_count} players with finishing_pct, {tpp_count} with toi_pp")
+    pen_count = sum(1 for v in extra_lookup.values() if v.get('penalty_minutes_drawn') is not None or v.get('penalty_minutes_taken') is not None)
+    print(f"  {fp_count} players with finishing_pct, {tpp_count} with toi_pp, {pen_count} with penalty totals")
 except Exception as e:
-    print(f"  Could not fetch finishing_pct/toi_pp ({e}) — run upload_nst_splits.py first")
+    print(f"  Could not fetch finishing_pct/toi_pp/penalties ({e}) — run upload_nst_splits.py and upload_penalties.py first")
 
 
 def safe(v):
@@ -96,6 +115,9 @@ for pid, season_data in seasons_by_player.items():
     # Accumulators for weighted raw stats
     w_toi60 = 0.0
     w_g = w_a1 = w_ixg = w_icf = w_tka = w_gva = w_pts = 0.0
+    w_toi_5v5 = w_toi_pp = w_toi_pk = 0.0
+    w_xgf_pp = w_xga_pk = 0.0
+    w_penalty_minutes_drawn = w_penalty_minutes_taken = 0.0
     xgf_n = hdcf_n = cf_n = cf_pk_n = 0.0
     xgf_d = hdcf_d = cf_d = cf_pk_d = 0.0
 
@@ -137,6 +159,32 @@ for pid, season_data in seasons_by_player.items():
             cf_pk_n += w * t60 * cf_pk
             cf_pk_d += w * t60
 
+        toi_5v5 = safe(row.get('toi_5v5'))
+        if toi_5v5 is not None:
+            w_toi_5v5 += w * toi_5v5
+
+        toi_pp = safe(row.get('toi_pp'))
+        xgf_pp = safe(row.get('xgf_pp'))
+        if toi_pp is not None:
+            w_toi_pp += w * toi_pp
+        if xgf_pp is not None:
+            w_xgf_pp += w * xgf_pp
+
+        toi_pk = safe(row.get('toi_pk'))
+        xga_pk = safe(row.get('xga_pk'))
+        if toi_pk is not None:
+            w_toi_pk += w * toi_pk
+        if xga_pk is not None:
+            w_xga_pk += w * xga_pk
+
+        pmd = safe(row.get('penalty_minutes_drawn'))
+        if pmd is not None:
+            w_penalty_minutes_drawn += w * pmd
+
+        pmt = safe(row.get('penalty_minutes_taken'))
+        if pmt is not None:
+            w_penalty_minutes_taken += w * pmt
+
     if w_toi60 <= 0:
         continue
 
@@ -157,6 +205,8 @@ for pid, season_data in seasons_by_player.items():
         'position':      pos,
         'curr_g':        safe(curr.get('g')),
         'curr_ixg':      safe(curr.get('ixg')),
+        'weighted_g':    round(w_g, 4),
+        'weighted_ixg':  round(w_ixg, 4),
         'goals_60':      round(w_g    / w_toi60, 4),
         'pts_60':        round(w_pts  / w_toi60, 4),
         'ixg_60':        round(w_ixg  / w_toi60, 4),
@@ -171,6 +221,15 @@ for pid, season_data in seasons_by_player.items():
         'fo_pct':        fo_pct,
         'finishing_pct': safe(extra.get('finishing_pct')),
         'toi_pp':        safe(extra.get('toi_pp')),
+        'war_toi_5v5':   round(w_toi_5v5, 4),
+        'war_toi_pp':    round(w_toi_pp, 4),
+        'war_toi_pk':    round(w_toi_pk, 4),
+        'war_xgf_pp':    round(w_xgf_pp, 4),
+        'war_xga_pk':    round(w_xga_pk, 4),
+        'penalties_drawn': safe(extra.get('penalties_drawn')),
+        'penalties_taken': safe(extra.get('penalties_taken')),
+        'penalty_minutes_drawn': round(w_penalty_minutes_drawn, 4),
+        'penalty_minutes_taken': round(w_penalty_minutes_taken, 4),
         'rapm_off':      safe(rapm.get('rapm_off')),
         'rapm_def':      safe(rapm.get('rapm_def')),
         'rapm_off_pct':  safe(rapm.get('rapm_off_pct')),
@@ -282,54 +341,94 @@ print(f"Ratings computed for {len(final)} players")
 print("\nComputing WAR...")
 
 GOALS_PER_WIN     = 6.0
-REPLACEMENT_LEVEL = -0.15   # xG/60 below average = replacement level
-PP_AVG_XGF_PER_60 = 2.8    # league avg PP xGF/60
-PK_AVG_XGA_PER_60 = 2.4    # league avg PK xGA/60
-RAPM_TO_XG60_SCALE = 1 / 60.0  # Stored RAPM comes from build_rapm's xG/hour target
+EV_OFF_REPLACEMENT = -0.10
+# Empirical calibration: build_rapm coefficients behave more like unit-level
+# on-ice effects than final player-share xG/60 values. We scale offense and
+# defense separately to bring EV WAR back into a believable range.
+RAPM_OFF_PLAYER_SHARE = 1 / 5.0
+DEF_RAPM_SHARE_FWD = 1 / 14.0
+DEF_RAPM_SHARE_D   = 1 / 10.0
+EV_DEF_REPLACEMENT_FWD = 0.07
+EV_DEF_REPLACEMENT_D   = 0.04
 SHOOTING_XG_SHRINK = 20.0  # Shrink low-volume finishers toward league average
+NET_XG_PER_PENALTY_MIN = 0.11  # Minor-only first-pass estimate of net xG gained per penalty minute
+PP_WAR_SHRINK_TOI = 120.0  # Shrink PP on-ice results toward league average
+PK_WAR_SHRINK_TOI = 120.0  # Shrink PK on-ice results toward league average
 
-# Fetch current-season TOI splits and PP/PK xG (populated by upload_nst_splits.py)
-splits_rows   = sb.table('players').select(
-    'player_id,toi_5v5,toi_pp,toi_pk,xgf_pp,xga_pk').execute().data
-splits_lookup = {r['player_id']: r for r in splits_rows}
+# Empirical league baselines from the same 3-year weighted player_seasons split totals.
+pp_xgf_total = 0.0
+pp_toi_total = 0.0
+pk_xga_total = 0.0
+pk_toi_total = 0.0
+for sp in ps_rows:
+    season_weight = SEASON_WEIGHTS.get(sp.get('season'), 0.0)
+    toi_pp_sp = safe(sp.get('toi_pp'))
+    xgf_pp_sp = safe(sp.get('xgf_pp'))
+    if toi_pp_sp and toi_pp_sp > 0 and xgf_pp_sp is not None:
+        pp_xgf_total += xgf_pp_sp * season_weight
+        pp_toi_total += toi_pp_sp * season_weight
 
-war_data = {}   # player_id → dict of WAR components (or {} if missing RAPM/splits)
+    toi_pk_sp = safe(sp.get('toi_pk'))
+    xga_pk_sp = safe(sp.get('xga_pk'))
+    if toi_pk_sp and toi_pk_sp > 0 and xga_pk_sp is not None:
+        pk_xga_total += xga_pk_sp * season_weight
+        pk_toi_total += toi_pk_sp * season_weight
+
+PP_AVG_XGF_PER_60 = (pp_xgf_total / pp_toi_total * 60.0) if pp_toi_total > 0 else 6.8
+PK_AVG_XGA_PER_60 = (pk_xga_total / pk_toi_total * 60.0) if pk_toi_total > 0 else 6.8
+print(f"League PP baseline: {PP_AVG_XGF_PER_60:.2f} xGF/60")
+print(f"League PK baseline: {PK_AVG_XGA_PER_60:.2f} xGA/60")
+
+war_data = {}   # player_id → dict of 3-year weighted WAR components (or {} if missing RAPM/splits)
 for _, row in final.iterrows():
     pid        = row['player_id']
-    sp         = splits_lookup.get(pid, {})
     rapm_off_v = safe(row.get('rapm_off'))
     rapm_def_v = safe(row.get('rapm_def'))
-    toi_5v5    = safe(sp.get('toi_5v5'))   # minutes
-    toi_pp_sp  = safe(sp.get('toi_pp'))    # minutes
-    toi_pk_sp  = safe(sp.get('toi_pk'))    # minutes
-    xgf_pp_v   = safe(sp.get('xgf_pp'))
-    xga_pk_v   = safe(sp.get('xga_pk'))
+    toi_5v5    = safe(row.get('war_toi_5v5'))   # weighted minutes
+    toi_pp_sp  = safe(row.get('war_toi_pp'))    # weighted minutes
+    toi_pk_sp  = safe(row.get('war_toi_pk'))    # weighted minutes
+    xgf_pp_v   = safe(row.get('war_xgf_pp'))
+    xga_pk_v   = safe(row.get('war_xga_pk'))
 
     if rapm_off_v is None or rapm_def_v is None or not toi_5v5:
         war_data[pid] = {}
         continue
 
-    rapm_off_xg60 = rapm_off_v * RAPM_TO_XG60_SCALE
-    rapm_def_xg60 = rapm_def_v * RAPM_TO_XG60_SCALE
+    is_defense = row.get('position') == 'D'
+    def_share = DEF_RAPM_SHARE_D if is_defense else DEF_RAPM_SHARE_FWD
+    def_replacement = EV_DEF_REPLACEMENT_D if is_defense else EV_DEF_REPLACEMENT_FWD
+    rapm_off_xg60 = rapm_off_v * RAPM_OFF_PLAYER_SHARE
+    rapm_def_xg60 = rapm_def_v * def_share
     h5     = toi_5v5 / 60.0
-    ev_off = (rapm_off_xg60 - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
-    ev_def = (rapm_def_xg60 - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
+    ev_off = (rapm_off_xg60 - EV_OFF_REPLACEMENT) * h5 / GOALS_PER_WIN
+    ev_def = (rapm_def_xg60 - def_replacement) * h5 / GOALS_PER_WIN
 
     pp_war = 0.0
     if toi_pp_sp and toi_pp_sp > 0 and xgf_pp_v is not None:
-        pp_war = (xgf_pp_v / toi_pp_sp * 60 - PP_AVG_XGF_PER_60) * (toi_pp_sp / 60.0) / GOALS_PER_WIN
+        pp_rate = xgf_pp_v / toi_pp_sp * 60
+        pp_shrink = toi_pp_sp / (toi_pp_sp + PP_WAR_SHRINK_TOI)
+        pp_war = ((pp_rate - PP_AVG_XGF_PER_60) * pp_shrink) * (toi_pp_sp / 60.0) / GOALS_PER_WIN
 
     pk_war = 0.0
     if toi_pk_sp and toi_pk_sp > 0 and xga_pk_v is not None:
-        pk_war = (PK_AVG_XGA_PER_60 - xga_pk_v / toi_pk_sp * 60) * (toi_pk_sp / 60.0) / GOALS_PER_WIN
+        pk_rate = xga_pk_v / toi_pk_sp * 60
+        pk_shrink = toi_pk_sp / (toi_pk_sp + PK_WAR_SHRINK_TOI)
+        pk_war = ((PK_AVG_XGA_PER_60 - pk_rate) * pk_shrink) * (toi_pk_sp / 60.0) / GOALS_PER_WIN
 
     shooting_war = 0.0
-    curr_g = safe(row.get('curr_g'))
-    curr_ixg = safe(row.get('curr_ixg'))
-    if curr_g is not None and curr_ixg is not None and curr_ixg > 0:
-        excess_goals = curr_g - curr_ixg
-        shrink = curr_ixg / (curr_ixg + SHOOTING_XG_SHRINK)
+    weighted_g = safe(row.get('weighted_g'))
+    weighted_ixg = safe(row.get('weighted_ixg'))
+    if weighted_g is not None and weighted_ixg is not None and weighted_ixg > 0:
+        excess_goals = weighted_g - weighted_ixg
+        shrink = weighted_ixg / (weighted_ixg + SHOOTING_XG_SHRINK)
         shooting_war = (excess_goals * shrink) / GOALS_PER_WIN
+
+    penalties_war = 0.0
+    pmd = safe(row.get('penalty_minutes_drawn')) or 0.0
+    pmt = safe(row.get('penalty_minutes_taken')) or 0.0
+    net_penalty_minutes = pmd - pmt
+    if net_penalty_minutes:
+        penalties_war = (net_penalty_minutes * NET_XG_PER_PENALTY_MIN) / GOALS_PER_WIN
 
     war_data[pid] = {
         'war_ev_off': round(ev_off, 2),
@@ -337,63 +436,74 @@ for _, row in final.iterrows():
         'war_pp':     round(pp_war, 2),
         'war_pk':     round(pk_war, 2),
         'war_shooting': round(shooting_war, 2),
-        'war_penalties': 0.0,
-        'war_total':  round(ev_off + ev_def + pp_war + pk_war + shooting_war, 2),
+        'war_penalties': round(penalties_war, 2),
+        'war_total':  round(ev_off + ev_def + pp_war + pk_war + shooting_war + penalties_war, 2),
     }
 
 # Spotlight diagnostic for WAR scaling
 spotlight = final[final['full_name'] == 'Nathan MacKinnon']
 if not spotlight.empty:
     row = spotlight.iloc[0]
-    pid = row['player_id']
-    sp = splits_lookup.get(pid, {})
     rapm_off_raw = safe(row.get('rapm_off'))
     rapm_def_raw = safe(row.get('rapm_def'))
-    toi_5v5 = safe(sp.get('toi_5v5'))
-    toi_pp_sp = safe(sp.get('toi_pp'))
-    toi_pk_sp = safe(sp.get('toi_pk'))
-    xgf_pp_v = safe(sp.get('xgf_pp'))
-    xga_pk_v = safe(sp.get('xga_pk'))
-    curr_g = safe(row.get('curr_g'))
-    curr_ixg = safe(row.get('curr_ixg'))
+    toi_5v5 = safe(row.get('war_toi_5v5'))
+    toi_pp_sp = safe(row.get('war_toi_pp'))
+    toi_pk_sp = safe(row.get('war_toi_pk'))
+    xgf_pp_v = safe(row.get('war_xgf_pp'))
+    xga_pk_v = safe(row.get('war_xga_pk'))
+    weighted_g = safe(row.get('weighted_g'))
+    weighted_ixg = safe(row.get('weighted_ixg'))
+    pmd = safe(row.get('penalty_minutes_drawn')) or 0.0
+    pmt = safe(row.get('penalty_minutes_taken')) or 0.0
     if rapm_off_raw is not None and rapm_def_raw is not None and toi_5v5:
+        is_defense = row.get('position') == 'D'
+        def_share = DEF_RAPM_SHARE_D if is_defense else DEF_RAPM_SHARE_FWD
+        def_replacement = EV_DEF_REPLACEMENT_D if is_defense else EV_DEF_REPLACEMENT_FWD
         h5 = toi_5v5 / 60.0
-        rapm_off_xg60 = rapm_off_raw * RAPM_TO_XG60_SCALE
-        rapm_def_xg60 = rapm_def_raw * RAPM_TO_XG60_SCALE
-        ev_off = (rapm_off_xg60 - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
-        ev_def = (rapm_def_xg60 - REPLACEMENT_LEVEL) * h5 / GOALS_PER_WIN
+        rapm_off_xg60 = rapm_off_raw * RAPM_OFF_PLAYER_SHARE
+        rapm_def_xg60 = rapm_def_raw * def_share
+        ev_off = (rapm_off_xg60 - EV_OFF_REPLACEMENT) * h5 / GOALS_PER_WIN
+        ev_def = (rapm_def_xg60 - def_replacement) * h5 / GOALS_PER_WIN
         pp_war = 0.0
         if toi_pp_sp and toi_pp_sp > 0 and xgf_pp_v is not None:
-            pp_war = (xgf_pp_v / toi_pp_sp * 60 - PP_AVG_XGF_PER_60) * (toi_pp_sp / 60.0) / GOALS_PER_WIN
+            pp_rate = xgf_pp_v / toi_pp_sp * 60
+            pp_shrink = toi_pp_sp / (toi_pp_sp + PP_WAR_SHRINK_TOI)
+            pp_war = ((pp_rate - PP_AVG_XGF_PER_60) * pp_shrink) * (toi_pp_sp / 60.0) / GOALS_PER_WIN
         pk_war = 0.0
         if toi_pk_sp and toi_pk_sp > 0 and xga_pk_v is not None:
-            pk_war = (PK_AVG_XGA_PER_60 - xga_pk_v / toi_pk_sp * 60) * (toi_pk_sp / 60.0) / GOALS_PER_WIN
+            pk_rate = xga_pk_v / toi_pk_sp * 60
+            pk_shrink = toi_pk_sp / (toi_pk_sp + PK_WAR_SHRINK_TOI)
+            pk_war = ((PK_AVG_XGA_PER_60 - pk_rate) * pk_shrink) * (toi_pk_sp / 60.0) / GOALS_PER_WIN
         shooting_war = 0.0
-        if curr_g is not None and curr_ixg is not None and curr_ixg > 0:
-            excess_goals = curr_g - curr_ixg
-            shrink = curr_ixg / (curr_ixg + SHOOTING_XG_SHRINK)
+        if weighted_g is not None and weighted_ixg is not None and weighted_ixg > 0:
+            excess_goals = weighted_g - weighted_ixg
+            shrink = weighted_ixg / (weighted_ixg + SHOOTING_XG_SHRINK)
             shooting_war = (excess_goals * shrink) / GOALS_PER_WIN
-        print("\n--- WAR DIAGNOSTIC: Nathan MacKinnon ---")
+        penalties_war = ((pmd - pmt) * NET_XG_PER_PENALTY_MIN) / GOALS_PER_WIN
+        print("\n--- 3-YEAR WEIGHTED WAR DIAGNOSTIC: Nathan MacKinnon ---")
         print(f"  rapm_off raw:   {rapm_off_raw:.4f}")
         print(f"  rapm_def raw:   {rapm_def_raw:.4f}")
-        print(f"  toi_5v5 (min):  {toi_5v5:.2f}")
-        print(f"  toi_pp  (min):  {toi_pp_sp:.2f}" if toi_pp_sp is not None else "  toi_pp  (min):  None")
-        print(f"  curr_g / ixG:   {curr_g:.2f} / {curr_ixg:.2f}" if curr_g is not None and curr_ixg is not None else "  curr_g / ixG:   None")
-        print(f"  rapm_off xG/60: {rapm_off_xg60:.4f}  (raw / 60)")
-        print(f"  rapm_def xG/60: {rapm_def_xg60:.4f}  (raw / 60)")
-        print(f"  EV Off WAR = ({rapm_off_xg60:.4f} - ({REPLACEMENT_LEVEL:.2f})) * ({toi_5v5:.2f}/60) / {GOALS_PER_WIN:.1f} = {ev_off:.2f}")
-        print(f"  EV Def WAR = ({rapm_def_xg60:.4f} - ({REPLACEMENT_LEVEL:.2f})) * ({toi_5v5:.2f}/60) / {GOALS_PER_WIN:.1f} = {ev_def:.2f}")
+        print(f"  toi_5v5 (3yr weighted min):  {toi_5v5:.2f}")
+        print(f"  toi_pp  (3yr weighted min):  {toi_pp_sp:.2f}" if toi_pp_sp is not None else "  toi_pp  (3yr weighted min):  None")
+        print(f"  weighted g / ixG:            {weighted_g:.2f} / {weighted_ixg:.2f}" if weighted_g is not None and weighted_ixg is not None else "  weighted g / ixG:            None")
+        print(f"  rapm_off xG/60: {rapm_off_xg60:.4f}  (raw * {RAPM_OFF_PLAYER_SHARE:.3f})")
+        print(f"  rapm_def xG/60: {rapm_def_xg60:.4f}  (raw * {def_share:.3f})")
+        print(f"  EV Off WAR = ({rapm_off_xg60:.4f} - ({EV_OFF_REPLACEMENT:.2f})) * ({toi_5v5:.2f}/60) / {GOALS_PER_WIN:.1f} = {ev_off:.2f}")
+        print(f"  EV Def WAR = ({rapm_def_xg60:.4f} - ({def_replacement:.2f})) * ({toi_5v5:.2f}/60) / {GOALS_PER_WIN:.1f} = {ev_def:.2f}")
         if toi_pp_sp and toi_pp_sp > 0 and xgf_pp_v is not None:
             pp_per60 = xgf_pp_v / toi_pp_sp * 60
-            print(f"  PP WAR     = ({pp_per60:.4f} - {PP_AVG_XGF_PER_60:.1f}) * ({toi_pp_sp:.2f}/60) / {GOALS_PER_WIN:.1f} = {pp_war:.2f}")
+            pp_shrink = toi_pp_sp / (toi_pp_sp + PP_WAR_SHRINK_TOI)
+            print(f"  PP WAR     = (({pp_per60:.4f} - {PP_AVG_XGF_PER_60:.2f}) * {pp_shrink:.4f}) * ({toi_pp_sp:.2f}/60) / {GOALS_PER_WIN:.1f} = {pp_war:.2f}")
         if toi_pk_sp and toi_pk_sp > 0 and xga_pk_v is not None:
             pk_per60 = xga_pk_v / toi_pk_sp * 60
-            print(f"  PK WAR     = ({PK_AVG_XGA_PER_60:.1f} - {pk_per60:.4f}) * ({toi_pk_sp:.2f}/60) / {GOALS_PER_WIN:.1f} = {pk_war:.2f}")
-        if curr_g is not None and curr_ixg is not None and curr_ixg > 0:
-            excess_goals = curr_g - curr_ixg
-            shrink = curr_ixg / (curr_ixg + SHOOTING_XG_SHRINK)
-            print(f"  Shooting WAR = (({curr_g:.2f} - {curr_ixg:.2f}) * {shrink:.4f}) / {GOALS_PER_WIN:.1f} = {shooting_war:.2f}")
-        print(f"  Total WAR  = {ev_off + ev_def + pp_war + pk_war + shooting_war:.2f}")
+            pk_shrink = toi_pk_sp / (toi_pk_sp + PK_WAR_SHRINK_TOI)
+            print(f"  PK WAR     = (({PK_AVG_XGA_PER_60:.2f} - {pk_per60:.4f}) * {pk_shrink:.4f}) * ({toi_pk_sp:.2f}/60) / {GOALS_PER_WIN:.1f} = {pk_war:.2f}")
+        if weighted_g is not None and weighted_ixg is not None and weighted_ixg > 0:
+            excess_goals = weighted_g - weighted_ixg
+            shrink = weighted_ixg / (weighted_ixg + SHOOTING_XG_SHRINK)
+            print(f"  Shooting WAR = (({weighted_g:.2f} - {weighted_ixg:.2f}) * {shrink:.4f}) / {GOALS_PER_WIN:.1f} = {shooting_war:.2f}")
+        print(f"  Penalties WAR = (({pmd:.0f} - {pmt:.0f}) * {NET_XG_PER_PENALTY_MIN:.2f}) / {GOALS_PER_WIN:.1f} = {penalties_war:.2f}")
+        print(f"  Total WAR  = {ev_off + ev_def + pp_war + pk_war + shooting_war + penalties_war:.2f}")
 
 # Print top-20 WAR leaderboard
 name_pos = {row['player_id']: (row['full_name'], row['position']) for _, row in final.iterrows()}
@@ -402,12 +512,12 @@ war_list = sorted(
     key=lambda x: x[1]['war_total'], reverse=True
 )
 print(f"\n--- TOP 20 WAR ---")
-print(f"  {'Player':<26}  {'Pos':>3}  {'EV Off':>7}  {'EV Def':>7}  {'PP':>6}  {'PK':>6}  {'Shoot':>7}  {'Total':>7}")
-print(f"  {'-'*26}  {'-'*3}  {'-'*7}  {'-'*7}  {'-'*6}  {'-'*6}  {'-'*7}  {'-'*7}")
+print(f"  {'Player':<26}  {'Pos':>3}  {'EV Off':>7}  {'EV Def':>7}  {'PP':>6}  {'PK':>6}  {'Shoot':>7}  {'Pen':>6}  {'Total':>7}")
+print(f"  {'-'*26}  {'-'*3}  {'-'*7}  {'-'*7}  {'-'*6}  {'-'*6}  {'-'*7}  {'-'*6}  {'-'*7}")
 for pid, d in war_list[:20]:
     name, pos = name_pos.get(pid, ('?', '?'))
     print(f"  {name:<26}  {pos:>3}  {d['war_ev_off']:>7.2f}  {d['war_ev_def']:>7.2f}"
-          f"  {d['war_pp']:>6.2f}  {d['war_pk']:>6.2f}  {d['war_shooting']:>7.2f}  {d['war_total']:>7.2f}")
+          f"  {d['war_pp']:>6.2f}  {d['war_pk']:>6.2f}  {d['war_shooting']:>7.2f}  {d['war_penalties']:>6.2f}  {d['war_total']:>7.2f}")
 
 shoot_list = sorted(
     [(pid, d) for pid, d in war_data.items() if d.get('war_shooting') is not None],
@@ -445,6 +555,7 @@ if not tkachuk_rows.empty:
 # ── Upload to players table ───────────────────────────────────────────────────
 updated = 0
 skipped = 0
+qualified_ids = set(final['player_id'].tolist())
 
 for _, row in final.iterrows():
     off = row.get('off_rating')
@@ -459,6 +570,13 @@ for _, row in final.iterrows():
         'off_rating':     None if pd.isna(off) else float(off),
         'def_rating':     None if pd.isna(dff) else float(dff),
         'overall_rating': None if pd.isna(ovr) else float(ovr),
+        'war_total':      None,
+        'war_ev_off':     None,
+        'war_ev_def':     None,
+        'war_pp':         None,
+        'war_pk':         None,
+        'war_shooting':   None,
+        'war_penalties':  None,
     }
     war = war_data.get(row['player_id'], {})
     if war:
@@ -472,7 +590,7 @@ for _, row in final.iterrows():
             'war_penalties': war.get('war_penalties'),
         })
     try:
-        result = sb.table('players').update(data).eq('player_id', row['player_id']).execute()
+        result = sb.table('players').update(data).eq('player_id', int(row['player_id'])).execute()
         if result.data:
             updated += 1
         else:
@@ -481,9 +599,37 @@ for _, row in final.iterrows():
         skipped += 1
         if skipped == 1:
             print(f"  Upload error: {e}")
-            print("  → Run data-pipeline/migrations/add_war_columns.sql in Supabase SQL editor, then re-run.")
+            print("  → Verify all required WAR and penalty columns exist in Supabase, then re-run.")
 
 print(f"\nDone. Updated: {updated} | Skipped: {skipped}")
+
+# Clear stale WAR values for players not included in the current qualified skater set.
+# This prevents old WAR rows from lingering on newly added players or players who no
+# longer meet the qualification threshold.
+print("\nClearing stale skater WAR values...")
+all_skater_rows = sb.table('players').select('player_id,position').neq('position', 'G').execute().data
+stale_ids = [r['player_id'] for r in all_skater_rows if r['player_id'] not in qualified_ids]
+stale_reset = {
+    'war_total': None,
+    'war_ev_off': None,
+    'war_ev_def': None,
+    'war_pp': None,
+    'war_pk': None,
+    'war_shooting': None,
+    'war_penalties': None,
+}
+cleared = 0
+for pid in stale_ids:
+    try:
+        result = sb.table('players').update(stale_reset).eq('player_id', pid).execute()
+        if result.data:
+            cleared += 1
+    except Exception as e:
+        if cleared == 0:
+            print(f"  Stale WAR clear error: {e}")
+            print("  → Verify WAR columns exist, then re-run.")
+        break
+print(f"  Cleared stale WAR rows: {cleared}")
 
 # ── Goalie Ratings ─────────────────────────────────────────────────────────────
 print("\n--- COMPUTING GOALIE RATINGS ---")

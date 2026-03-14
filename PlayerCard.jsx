@@ -561,7 +561,7 @@ function PlayerCard({ player }) {
           ) : (
             <>
               <div style={{ fontSize:20, fontWeight:900, color:"#00e5a0", lineHeight:1 }}>{player.war_total != null ? player.war_total.toFixed(1) : "—"}</div>
-              <div style={{ fontSize:9, color:"#00e5a088", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em" }}>WAR</div>
+              <div style={{ fontSize:9, color:"#00e5a088", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em" }}>3Y WAR</div>
             </>
           )}
         </div>
@@ -804,7 +804,7 @@ function PlayerCard({ player }) {
                     <div style={{ fontSize:22, fontWeight:800, color:wtColor, fontFamily:"'Barlow Condensed',sans-serif", lineHeight:1 }}>
                       {wt != null ? wt.toFixed(2) : "—"}
                     </div>
-                    <div style={{ fontSize:10, color:"#5a7a99", marginTop:3, fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Total WAR</div>
+                    <div style={{ fontSize:10, color:"#5a7a99", marginTop:3, fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>3-Year WAR</div>
                   </div>
                   <StatBox label="EV Off WAR" value={player.war_ev_off != null ? player.war_ev_off.toFixed(2) : null} />
                   <StatBox label="EV Def WAR" value={player.war_ev_def != null ? player.war_ev_def.toFixed(2) : null} />
@@ -820,7 +820,7 @@ function PlayerCard({ player }) {
             </div>
             <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px", marginBottom:16 }}>
               <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>About These Metrics</div>
-              <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>WAR (Wins Above Replacement) estimates how many wins a player contributes above a replacement-level player, combining 5v5, power play, penalty kill, and shooting contributions. RAPM (Regularized Adjusted Plus-Minus) measures individual impact in xG per 60 minutes at 5v5, controlling for teammates and opponents. Both metrics are custom public-data models and still evolving.</p>
+              <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>WAR (Wins Above Replacement) is shown here as a 3-year weighted card value, combining 5v5, power play, penalty kill, shooting, and penalties to reduce one-season noise. RAPM (Regularized Adjusted Plus-Minus) measures individual impact in xG per 60 minutes at 5v5, controlling for teammates and opponents. Both metrics are custom public-data models and still evolving.</p>
             </div>
             <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
               {["Natural Stat Trick","NHL API","Custom RAPM Model"].map(src => (
@@ -961,7 +961,7 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
     { key:'off_rating',     sortKey:'off_rating',      label:'OFF',     align:'right',  bold:true, rating:true, mobileHide:true },
     { key:'def_rating',     sortKey:'def_rating',      label:'DEF',     align:'right',  bold:true, rating:true, mobileHide:true },
     { key:'overall_rating', sortKey:'overall_rating',  label:'OVR',     align:'right',  bold:true, rating:true },
-    { key:'war_total',      sortKey:'war_total',       label:'WAR',     align:'right'  },
+    { key:'war_total',      sortKey:'war_total',       label:'WAR3',    align:'right'  },
   ];
 
   function parseToi(toi) {
@@ -1139,7 +1139,7 @@ export default function App({ players: propPlayers, seasonStats }) {
         <div style={{ marginBottom:28, textAlign:"center" }}>
           <div style={{ fontSize:11, color:"#2a5070", letterSpacing:"0.2em", textTransform:"uppercase", fontFamily:"'DM Mono',monospace", marginBottom:8 }}>NHL Analytics</div>
           <h1 className="app-h1" style={{ fontSize:42, fontWeight:900, color:"#e8f4ff", letterSpacing:"-1px", lineHeight:1 }}>Player Cards</h1>
-          <div style={{ fontSize:12, color:"#2a4060", fontFamily:"'DM Mono',monospace", marginTop:6 }}>WAR · RAPM · On-Ice Shot Rates · Percentile Rankings</div>
+          <div style={{ fontSize:12, color:"#2a4060", fontFamily:"'DM Mono',monospace", marginTop:6 }}>3-Year Weighted WAR · RAPM · On-Ice Shot Rates · Percentile Rankings</div>
         </div>
 
         {/* Mode toggle */}
