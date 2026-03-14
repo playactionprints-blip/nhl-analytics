@@ -3,7 +3,9 @@
 Compute current-season goalie goals saved above expected from NHL play-by-play.
 
 Model notes:
-  - Uses shot-on-goal + goal events only, with goalieInNetId from NHL API v1.
+  - xGA is built from NHL API play-by-play shot locations.
+  - Official NHL goalie summary stats are preferred for shots/goals against so
+    GSAx aligns with the league stat line and does not drift on shootout handling.
   - Expected goals are computed from the same public shot-location model used elsewhere
     in this project, so this is GSAx-style conceptually, not a MoneyPuck clone.
 
@@ -37,7 +39,7 @@ SEASON_CONFIGS = {
     },
 }
 
-SHOT_EVENTS = {'shot-on-goal', 'goal'}
+SHOT_EVENTS = {'shot-on-goal', 'goal', 'missed-shot'}
 SHOT_TYPE_MAP = {
     'wrist': 'WRIST SHOT',
     'slap': 'SLAP SHOT',
@@ -105,8 +107,6 @@ def load_game_ids(season_key):
 
 def aggregate_goalie_shots(game_ids):
     totals = defaultdict(lambda: {
-        'shots_against': 0,
-        'goals_against': 0,
         'expected_goals_against': 0.0,
     })
     failed = []
@@ -119,6 +119,8 @@ def aggregate_goalie_shots(game_ids):
                 ev_type = ev.get('typeDescKey')
                 if ev_type not in SHOT_EVENTS:
                     continue
+                if ev.get('periodDescriptor', {}).get('periodType') == 'SO':
+                    continue
                 det = ev.get('details', {})
                 goalie_id = det.get('goalieInNetId')
                 xc = det.get('xCoord')
@@ -128,10 +130,7 @@ def aggregate_goalie_shots(game_ids):
 
                 shot_type = SHOT_TYPE_MAP.get(det.get('shotType', ''), det.get('shotType', ''))
                 xg = compute_xg_xy(float(xc), float(yc), shot_type)
-                totals[int(goalie_id)]['shots_against'] += 1
                 totals[int(goalie_id)]['expected_goals_against'] += xg
-                if ev_type == 'goal':
-                    totals[int(goalie_id)]['goals_against'] += 1
         except Exception as e:
             failed.append((game_id, str(e)))
 
@@ -159,15 +158,24 @@ def main():
     game_ids = load_game_ids(season_key)
     totals = aggregate_goalie_shots(game_ids)
 
-    goalie_rows = sb.table('players').select('player_id,full_name,position').eq('position', 'G').execute().data
+    goalie_rows = sb.table('players').select(
+        'player_id,full_name,position,shots_against,goals_against,save_pct'
+    ).eq('position', 'G').execute().data
     gdf_rows = []
     for goalie in goalie_rows:
         pid = int(goalie['player_id'])
         t = totals.get(pid)
-        if not t or t['shots_against'] <= 0:
+        official_shots = goalie.get('shots_against')
+        official_goals = goalie.get('goals_against')
+        if not t:
             continue
-        shots_against = int(t['shots_against'])
-        goals_against = int(t['goals_against'])
+        if official_shots is None or official_goals is None:
+            continue
+
+        shots_against = int(official_shots)
+        goals_against = int(official_goals)
+        if shots_against <= 0:
+            continue
         xga = float(t['expected_goals_against'])
         actual_sv_pct = 1 - (goals_against / shots_against)
         expected_sv_pct = 1 - (xga / shots_against)
