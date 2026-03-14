@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-const PS_COLS = 'player_id,season,gp,toi,g,a1,a2,ixg,icf,iff,hits,blk,gva,tka,fow,fol,cf_pct,xgf_pct,hdcf_pct,scf_pct,rapm_off,rapm_def,war_total,war_ev_off,war_ev_def,war_pp,war_pk,war_shooting,war_penalties';
+const PS_COLS = 'player_id,season,gp,toi,toi_5v5,g,a1,a2,ixg,icf,iff,hits,blk,gva,tka,fow,fol,cf_pct,xgf_pct,hdcf_pct,scf_pct,rapm_off,rapm_def,war_total,war_ev_off,war_ev_def,war_pp,war_pk,war_shooting,war_penalties';
 
 function formatAvgToi(totalMin, gp) {
   if (!totalMin || !gp) return null;
@@ -33,6 +33,7 @@ function mapSeasonRows(rows, playerLookup) {
       a,
       pts,
       toi:           formatAvgToi(ps.toi, ps.gp),
+      toi_5v5:       ps.toi_5v5 ?? null,
       cf_pct:        ps.cf_pct,
       xgf_pct:       ps.xgf_pct,
       hdcf_pct:      ps.hdcf_pct,

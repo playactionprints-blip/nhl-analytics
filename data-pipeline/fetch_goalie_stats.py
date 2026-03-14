@@ -7,7 +7,7 @@ Filters seasonTotals to:
   - gameTypeId == 2  (regular season)
   - leagueAbbrev == "NHL"  (exclude Olympics, World Champs, etc.)
 
-Fields updated: gp, toi, wins, losses, shutouts, gaa, save_pct
+Fields updated: gp, toi, wins, losses, shutouts, gaa, save_pct, goals_against, shots_against
 """
 import os, time, requests
 from supabase import create_client
@@ -48,13 +48,15 @@ for p in goalies:
             skipped += 1
             continue
 
-        gp       = nhl_block.get("gamesPlayed", 0)
-        wins     = nhl_block.get("wins",      0)
-        losses   = nhl_block.get("losses",    0)
-        shutouts = nhl_block.get("shutouts",  0)
-        gaa      = nhl_block.get("goalsAgainstAvg")
-        save_pct = nhl_block.get("savePctg")
-        toi_raw  = nhl_block.get("timeOnIce", "0:00")   # "MMMM:SS"
+        gp            = nhl_block.get("gamesPlayed", 0)
+        wins          = nhl_block.get("wins", 0)
+        losses        = nhl_block.get("losses", 0)
+        shutouts      = nhl_block.get("shutouts", 0)
+        gaa           = nhl_block.get("goalsAgainstAvg")
+        save_pct      = nhl_block.get("savePctg")
+        goals_against = nhl_block.get("goalsAgainst")
+        shots_against = nhl_block.get("shotsAgainst")
+        toi_raw       = nhl_block.get("timeOnIce", "0:00")   # "MMMM:SS"
 
         # Convert "MMMM:SS" total TOI to "M:SS" avg-per-game
         avg_toi = None
@@ -65,10 +67,12 @@ for p in goalies:
             avg_toi = f"{int(avg_s // 60)}:{int(avg_s % 60):02d}"
 
         row = {
-            "gp":       gp,
-            "wins":     wins,
-            "losses":   losses,
-            "shutouts": shutouts,
+            "gp":            gp,
+            "wins":          wins,
+            "losses":        losses,
+            "shutouts":      shutouts,
+            "goals_against": goals_against,
+            "shots_against": shots_against,
         }
         if gaa      is not None: row["gaa"]      = round(gaa,      6)
         if save_pct is not None: row["save_pct"] = round(save_pct, 6)

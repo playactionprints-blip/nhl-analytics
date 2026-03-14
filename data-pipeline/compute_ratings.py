@@ -666,17 +666,21 @@ print(f"  Cleared stale WAR rows: {cleared}")
 # ── Goalie Ratings ─────────────────────────────────────────────────────────────
 print("\n--- COMPUTING GOALIE RATINGS ---")
 print("SQL migration (run in Supabase editor if columns don't exist):")
+print("  alter table players add column if not exists goals_against int;")
+print("  alter table players add column if not exists shots_against int;")
+print("  alter table players add column if not exists gsaa float8;")
+print("  alter table players add column if not exists gsaa_pct float8;")
 print("  alter table players add column if not exists sv_pct_pct float8;")
 print("  alter table players add column if not exists gaa_pct float8;")
 print("  alter table players add column if not exists win_pct_pct float8;")
 print("  alter table players add column if not exists shutout_pct float8;")
 
 goalie_rows = sb.table('players').select(
-    'player_id,full_name,position,gp,wins,losses,shutouts,gaa,save_pct'
+    'player_id,full_name,position,gp,wins,losses,shutouts,gaa,save_pct,goals_against,shots_against'
 ).eq('position', 'G').execute().data
 
 gdf = pd.DataFrame(goalie_rows)
-for col in ['gp', 'wins', 'losses', 'shutouts', 'gaa', 'save_pct']:
+for col in ['gp', 'wins', 'losses', 'shutouts', 'gaa', 'save_pct', 'goals_against', 'shots_against']:
     gdf[col] = pd.to_numeric(gdf[col], errors='coerce')
 gdf['wins']     = gdf['wins'].fillna(0)
 gdf['losses']   = gdf['losses'].fillna(0)
@@ -687,17 +691,30 @@ print(f"Qualified goalies: {len(gdf)} (≥10 GP)")
 if len(gdf) > 0:
     gdf['win_pct']       = gdf['wins']     / gdf['gp']
     gdf['shutout_rate']  = gdf['shutouts'] / gdf['gp']
+    if gdf['shots_against'].notna().any() and gdf['goals_against'].notna().any():
+        total_shots = gdf['shots_against'].sum()
+        total_goals = gdf['goals_against'].sum()
+        league_sv_pct = 1 - (total_goals / total_shots) if total_shots > 0 else None
+    else:
+        league_sv_pct = None
+
+    if league_sv_pct is not None:
+        gdf['gsaa'] = (gdf['shots_against'] * (gdf['save_pct'] - league_sv_pct)).round(2)
+    else:
+        gdf['gsaa'] = None
 
     gdf['sv_pct_pct']   = gdf['save_pct'].rank(pct=True) * 100
     gdf['gaa_pct']      = (1 - gdf['gaa'].rank(pct=True)) * 100   # inverted: lower GAA → higher pct
     gdf['win_pct_pct']  = gdf['win_pct'].rank(pct=True) * 100
     gdf['shutout_pct']  = gdf['shutout_rate'].rank(pct=True) * 100
+    gdf['gsaa_pct']     = gdf['gsaa'].rank(pct=True) * 100 if gdf['gsaa'].notna().any() else None
 
     gdf['overall_rating'] = (
-        gdf['sv_pct_pct']  * 0.40 +
-        gdf['gaa_pct']     * 0.35 +
-        gdf['win_pct_pct'] * 0.15 +
-        gdf['shutout_pct'] * 0.10
+        gdf['sv_pct_pct']  * 0.35 +
+        gdf['gaa_pct']     * 0.25 +
+        gdf['win_pct_pct'] * 0.10 +
+        gdf['shutout_pct'] * 0.10 +
+        gdf['gsaa_pct'].fillna(50) * 0.20
     ).round(1)
 
     gdf['percentiles'] = gdf.apply(lambda r: {
@@ -705,16 +722,19 @@ if len(gdf) > 0:
         'GAA':     round(float(r['gaa_pct']),      1),
         'Win%':    round(float(r['win_pct_pct']),  1),
         'SO Rate': round(float(r['shutout_pct']),  1),
+        'GSAA':    round(float(r['gsaa_pct']),     1) if pd.notna(r.get('gsaa_pct')) else None,
     }, axis=1)
 
     print("\n--- TOP 10 GOALIES ---")
     top10 = gdf.sort_values('overall_rating', ascending=False).head(10)
-    print(top10[['full_name','gp','wins','save_pct','gaa','shutouts','overall_rating']].to_string())
+    print(top10[['full_name','gp','wins','save_pct','gaa','gsaa','shutouts','overall_rating']].to_string())
 
     g_updated = g_failed = 0
     for _, row in gdf.iterrows():
         data = {
             'overall_rating': float(row['overall_rating']),
+            'gsaa':           None if pd.isna(row['gsaa']) else float(row['gsaa']),
+            'gsaa_pct':       None if pd.isna(row['gsaa_pct']) else float(row['gsaa_pct']),
             'sv_pct_pct':     float(row['sv_pct_pct']),
             'gaa_pct':        float(row['gaa_pct']),
             'win_pct_pct':    float(row['win_pct_pct']),

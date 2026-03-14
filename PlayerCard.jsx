@@ -628,17 +628,19 @@ function TeamLogo({ abbr, size = 32 }) {
 function GoalieContent({ player, accent }) {
   const svPct = player.save_pct ? (player.save_pct * 100).toFixed(1) : null;
   const gaa = player.gaa ? player.gaa.toFixed(2) : null;
+  const gsaa = player.gsaa != null ? player.gsaa.toFixed(1) : null;
   return (
     <div>
-      <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:14 }}>Goalie Stats — 2024–25</div>
+      <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:14 }}>Goalie Stats — Current Season</div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:12 }}>
         <StatBox label="GP" value={player.gp} />
         <StatBox label="Wins" value={player.wins} highlight />
         <StatBox label="Losses" value={player.losses} />
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:20 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:20 }}>
         <StatBox label="GAA" value={gaa} />
         <StatBox label="SV%" value={svPct ? `${svPct}%` : null} highlight />
+        <StatBox label="GSAA" value={gsaa} highlight={player.gsaa > 0} />
         <StatBox label="SO" value={player.shutouts} />
       </div>
       {/* SV% bar */}
@@ -656,7 +658,7 @@ function GoalieContent({ player, accent }) {
       <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px" }}>
         <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6 }}>About Goalie Metrics</div>
         <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>
-          GAA = Goals Against Average · SV% = Save Percentage · SO = Shutouts. Advanced goalie WAR coming soon via Evolving-Hockey.
+          GSAA = Goals Saved Above Average, based on league-average save percentage and each goalie&apos;s shots against. GAA = Goals Against Average · SV% = Save Percentage · SO = Shutouts.
         </p>
       </div>
     </div>
@@ -1267,16 +1269,25 @@ function enrichPlayersWithSeasonTrends(players, seasonStats) {
 
   seasons.forEach((season) => {
     const rows = seasonStats?.[season] || [];
+    const evQualifiedRows = rows.filter((row) => row.toi_5v5 != null && Number(row.toi_5v5) > 0);
     seasonLookups[season] = {
       F: rows.filter((row) => positionGroup(row.position) === "F"),
       D: rows.filter((row) => positionGroup(row.position) === "D"),
       G: rows.filter((row) => positionGroup(row.position) === "G"),
+      F_ev: evQualifiedRows.filter((row) => positionGroup(row.position) === "F"),
+      D_ev: evQualifiedRows.filter((row) => positionGroup(row.position) === "D"),
+      G_ev: evQualifiedRows.filter((row) => positionGroup(row.position) === "G"),
     };
     Object.keys(seasonLookups[season]).forEach((group) => {
       const groupRows = seasonLookups[season][group];
+      if (!Array.isArray(groupRows)) return;
       seasonLookups[season][`${group}_war`] = computePercentileLookup(groupRows, "war_total");
-      seasonLookups[season][`${group}_off`] = computePercentileLookup(groupRows, "war_ev_off");
-      seasonLookups[season][`${group}_def`] = computePercentileLookup(groupRows, "war_ev_def");
+    });
+    ["F", "D", "G"].forEach((group) => {
+      const evRows = seasonLookups[season][`${group}_ev`] || [];
+      seasonLookups[season][`${group}_off`] = computePercentileLookup(evRows, "war_ev_off");
+      seasonLookups[season][`${group}_def`] = computePercentileLookup(evRows, "war_ev_def");
+      seasonLookups[season][`${group}_ev_by_id`] = new Set(evRows.map((row) => row.player_id));
     });
   });
 
@@ -1291,8 +1302,9 @@ function enrichPlayersWithSeasonTrends(players, seasonStats) {
       if (!row) return;
 
       const warPct = seasonLookups[season][`${group}_war`][player.player_id];
-      const offPct = seasonLookups[season][`${group}_off`][player.player_id];
-      const defPct = seasonLookups[season][`${group}_def`][player.player_id];
+      const evQualified = seasonLookups[season][`${group}_ev_by_id`]?.has(player.player_id);
+      const offPct = evQualified ? seasonLookups[season][`${group}_off`][player.player_id] : null;
+      const defPct = evQualified ? seasonLookups[season][`${group}_def`][player.player_id] : null;
 
       if (warPct != null) {
         warTrend.push({ season, war: warPct });
