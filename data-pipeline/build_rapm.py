@@ -661,9 +661,12 @@ def fetch_all_stints(game_ids, season_cfg):
 # ── Step 3: Build RAPM regression ─────────────────────────────────────────────
 def build_rapm(stints_df):
     """
-    Fit offensive + defensive RidgeCV RAPM on combined stints.
-    If a 'season_weight' column is present, each stint's sqrt(duration) weight
-    is multiplied by it so recent seasons contribute more to the regression.
+    Fit offense/defense RAPM on combined stints with separate coefficient blocks.
+    Each observation models one team's xG rate in a stint:
+      - offensive columns for the attacking skaters
+      - defensive columns for the defending skaters
+    This avoids the earlier leakage where elite offensive players could inherit
+    artificially strong defensive coefficients from one blended player term.
     """
     stints_df = stints_df[stints_df['duration_seconds'] >= 10].copy()
     n_stints  = len(stints_df)
@@ -695,13 +698,14 @@ def build_rapm(stints_df):
     player_toi_sec = toi_home.add(toi_away, fill_value=0)
 
     has_season_weight = 'season_weight' in stints_df.columns
-    print(f"Building RAPM matrix: {n_stints:,} stints × {n_players} players"
+    print(f"Building RAPM matrix: {n_stints*2:,} rows × {n_players * 2} features"
           + (" (season-weighted)" if has_season_weight else ""))
 
     r_idx, c_idx, vals = [], [], []
-    y_off   = np.zeros(n_stints)
-    y_def   = np.zeros(n_stints)
-    weights = np.zeros(n_stints)
+    y = np.zeros(n_stints * 2)
+    weights = np.zeros(n_stints * 2)
+    off_offset = 0
+    def_offset = n_players
 
     for i, (_, stint) in enumerate(stints_df.iterrows()):
         dur    = float(stint['duration_seconds'])
@@ -715,35 +719,42 @@ def build_rapm(stints_df):
         h_pids = [int(p) for p in str(stint['home_players']).split('|') if p.strip()]
         a_pids = [int(p) for p in str(stint['away_players']).split('|') if p.strip()]
 
+        home_row = i * 2
+        away_row = home_row + 1
+
         for pid in h_pids:
             if pid in pid_idx:
-                r_idx.append(i); c_idx.append(pid_idx[pid]); vals.append(1.0)
+                col = pid_idx[pid]
+                r_idx.append(home_row); c_idx.append(off_offset + col); vals.append(1.0)
+                r_idx.append(away_row); c_idx.append(def_offset + col); vals.append(1.0)
         for pid in a_pids:
             if pid in pid_idx:
-                r_idx.append(i); c_idx.append(pid_idx[pid]); vals.append(-1.0)
+                col = pid_idx[pid]
+                r_idx.append(away_row); c_idx.append(off_offset + col); vals.append(1.0)
+                r_idx.append(home_row); c_idx.append(def_offset + col); vals.append(1.0)
 
-        y_off[i]   = hxg
-        y_def[i]   = axg
-        weights[i] = w
+        y[home_row] = hxg
+        y[away_row] = axg
+        weights[home_row] = w
+        weights[away_row] = w
 
-    X = sparse.csr_matrix((vals, (r_idx, c_idx)), shape=(n_stints, n_players))
+    X = sparse.csr_matrix((vals, (r_idx, c_idx)), shape=(n_stints * 2, n_players * 2))
 
     alphas = [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
 
-    print("Fitting offensive RAPM (RidgeCV)...")
-    m_off = RidgeCV(alphas=alphas, fit_intercept=True)
-    m_off.fit(X, y_off, sample_weight=weights)
-    print(f"  Best alpha: {m_off.alpha_}")
+    print("Fitting joint offense/defense RAPM (RidgeCV)...")
+    model = RidgeCV(alphas=alphas, fit_intercept=True)
+    model.fit(X, y, sample_weight=weights)
+    print(f"  Best alpha: {model.alpha_}")
 
-    print("Fitting defensive RAPM (RidgeCV)...")
-    m_def = RidgeCV(alphas=alphas, fit_intercept=True)
-    m_def.fit(X, y_def, sample_weight=weights)
-    print(f"  Best alpha: {m_def.alpha_}")
+    coef = model.coef_
+    rapm_off = coef[:n_players]
+    rapm_def = -coef[n_players:]  # lower xGA allowed = better defense
 
     results = pd.DataFrame({
         'player_id':     all_pids,
-        'rapm_off':      m_off.coef_,
-        'rapm_def':     -m_def.coef_,  # flipped: higher = better defender
+        'rapm_off':      rapm_off,
+        'rapm_def':      rapm_def,
         'toi_5v5_total': [round(float(player_toi_sec.get(p, 0)) / 60.0, 1) for p in all_pids],
     })
     results['rapm_off_pct'] = results['rapm_off'].rank(pct=True) * 100
