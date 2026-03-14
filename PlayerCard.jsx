@@ -504,7 +504,7 @@ function PlayerCard({ player }) {
               const wt = player.war_total;
               const wtColor = wt == null ? "#4a6a88" : wt > 2.0 ? "#00e5a0" : wt >= 0.5 ? "#f0c040" : "#e05050";
               return (
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:16 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:8, marginBottom:16 }}>
                   <div style={{ background:wt != null ? `${wtColor}12` : "#0d1825", border:`1px solid ${wt != null ? `${wtColor}55` : "#1e2d40"}`, borderRadius:6, padding:"10px 12px", textAlign:"center" }}>
                     <div style={{ fontSize:22, fontWeight:800, color:wtColor, fontFamily:"'Barlow Condensed',sans-serif", lineHeight:1 }}>
                       {wt != null ? wt.toFixed(2) : "—"}
@@ -513,6 +513,7 @@ function PlayerCard({ player }) {
                   </div>
                   <StatBox label="EV Off WAR" value={player.war_ev_off != null ? player.war_ev_off.toFixed(2) : null} />
                   <StatBox label="EV Def WAR" value={player.war_ev_def != null ? player.war_ev_def.toFixed(2) : null} />
+                  <StatBox label="Shooting WAR" value={player.war_shooting != null ? player.war_shooting.toFixed(2) : null} />
                 </div>
               );
             })()}
@@ -523,7 +524,7 @@ function PlayerCard({ player }) {
             </div>
             <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px", marginBottom:16 }}>
               <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>About These Metrics</div>
-              <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>WAR (Wins Above Replacement) estimates how many wins a player contributes above a replacement-level player, combining 5v5, power play, and penalty kill contributions. RAPM (Regularized Adjusted Plus-Minus) measures individual impact in xG per 60 minutes at 5v5, controlling for teammates and opponents. Both metrics built from NHL play-by-play data.</p>
+              <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>WAR (Wins Above Replacement) estimates how many wins a player contributes above a replacement-level player, combining 5v5, power play, penalty kill, and shooting contributions. RAPM (Regularized Adjusted Plus-Minus) measures individual impact in xG per 60 minutes at 5v5, controlling for teammates and opponents. Both metrics are custom public-data models and still evolving.</p>
             </div>
             <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
               {["Natural Stat Trick","NHL API","Custom RAPM Model"].map(src => (

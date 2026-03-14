@@ -52,6 +52,7 @@ function mapSeasonRows(rows, playerLookup) {
       def_rating:    null,
       overall_rating:null,
       war_total:     null,
+      war_shooting:  null,
       percentiles:   p.percentiles || {},
       warTrend:      [],
     };

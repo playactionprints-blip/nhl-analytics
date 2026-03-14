@@ -155,6 +155,8 @@ for pid, season_data in seasons_by_player.items():
         'player_id':     pid,
         'full_name':     info['full_name'],
         'position':      pos,
+        'curr_g':        safe(curr.get('g')),
+        'curr_ixg':      safe(curr.get('ixg')),
         'goals_60':      round(w_g    / w_toi60, 4),
         'pts_60':        round(w_pts  / w_toi60, 4),
         'ixg_60':        round(w_ixg  / w_toi60, 4),
@@ -284,6 +286,7 @@ REPLACEMENT_LEVEL = -0.15   # xG/60 below average = replacement level
 PP_AVG_XGF_PER_60 = 2.8    # league avg PP xGF/60
 PK_AVG_XGA_PER_60 = 2.4    # league avg PK xGA/60
 RAPM_TO_XG60_SCALE = 1 / 60.0  # Stored RAPM comes from build_rapm's xG/hour target
+SHOOTING_XG_SHRINK = 20.0  # Shrink low-volume finishers toward league average
 
 # Fetch current-season TOI splits and PP/PK xG (populated by upload_nst_splits.py)
 splits_rows   = sb.table('players').select(
@@ -320,12 +323,22 @@ for _, row in final.iterrows():
     if toi_pk_sp and toi_pk_sp > 0 and xga_pk_v is not None:
         pk_war = (PK_AVG_XGA_PER_60 - xga_pk_v / toi_pk_sp * 60) * (toi_pk_sp / 60.0) / GOALS_PER_WIN
 
+    shooting_war = 0.0
+    curr_g = safe(row.get('curr_g'))
+    curr_ixg = safe(row.get('curr_ixg'))
+    if curr_g is not None and curr_ixg is not None and curr_ixg > 0:
+        excess_goals = curr_g - curr_ixg
+        shrink = curr_ixg / (curr_ixg + SHOOTING_XG_SHRINK)
+        shooting_war = (excess_goals * shrink) / GOALS_PER_WIN
+
     war_data[pid] = {
         'war_ev_off': round(ev_off, 2),
         'war_ev_def': round(ev_def, 2),
         'war_pp':     round(pp_war, 2),
         'war_pk':     round(pk_war, 2),
-        'war_total':  round(ev_off + ev_def + pp_war + pk_war, 2),
+        'war_shooting': round(shooting_war, 2),
+        'war_penalties': 0.0,
+        'war_total':  round(ev_off + ev_def + pp_war + pk_war + shooting_war, 2),
     }
 
 # Spotlight diagnostic for WAR scaling
@@ -341,6 +354,8 @@ if not spotlight.empty:
     toi_pk_sp = safe(sp.get('toi_pk'))
     xgf_pp_v = safe(sp.get('xgf_pp'))
     xga_pk_v = safe(sp.get('xga_pk'))
+    curr_g = safe(row.get('curr_g'))
+    curr_ixg = safe(row.get('curr_ixg'))
     if rapm_off_raw is not None and rapm_def_raw is not None and toi_5v5:
         h5 = toi_5v5 / 60.0
         rapm_off_xg60 = rapm_off_raw * RAPM_TO_XG60_SCALE
@@ -353,11 +368,17 @@ if not spotlight.empty:
         pk_war = 0.0
         if toi_pk_sp and toi_pk_sp > 0 and xga_pk_v is not None:
             pk_war = (PK_AVG_XGA_PER_60 - xga_pk_v / toi_pk_sp * 60) * (toi_pk_sp / 60.0) / GOALS_PER_WIN
+        shooting_war = 0.0
+        if curr_g is not None and curr_ixg is not None and curr_ixg > 0:
+            excess_goals = curr_g - curr_ixg
+            shrink = curr_ixg / (curr_ixg + SHOOTING_XG_SHRINK)
+            shooting_war = (excess_goals * shrink) / GOALS_PER_WIN
         print("\n--- WAR DIAGNOSTIC: Nathan MacKinnon ---")
         print(f"  rapm_off raw:   {rapm_off_raw:.4f}")
         print(f"  rapm_def raw:   {rapm_def_raw:.4f}")
         print(f"  toi_5v5 (min):  {toi_5v5:.2f}")
         print(f"  toi_pp  (min):  {toi_pp_sp:.2f}" if toi_pp_sp is not None else "  toi_pp  (min):  None")
+        print(f"  curr_g / ixG:   {curr_g:.2f} / {curr_ixg:.2f}" if curr_g is not None and curr_ixg is not None else "  curr_g / ixG:   None")
         print(f"  rapm_off xG/60: {rapm_off_xg60:.4f}  (raw / 60)")
         print(f"  rapm_def xG/60: {rapm_def_xg60:.4f}  (raw / 60)")
         print(f"  EV Off WAR = ({rapm_off_xg60:.4f} - ({REPLACEMENT_LEVEL:.2f})) * ({toi_5v5:.2f}/60) / {GOALS_PER_WIN:.1f} = {ev_off:.2f}")
@@ -368,7 +389,11 @@ if not spotlight.empty:
         if toi_pk_sp and toi_pk_sp > 0 and xga_pk_v is not None:
             pk_per60 = xga_pk_v / toi_pk_sp * 60
             print(f"  PK WAR     = ({PK_AVG_XGA_PER_60:.1f} - {pk_per60:.4f}) * ({toi_pk_sp:.2f}/60) / {GOALS_PER_WIN:.1f} = {pk_war:.2f}")
-        print(f"  Total WAR  = {ev_off + ev_def + pp_war + pk_war:.2f}")
+        if curr_g is not None and curr_ixg is not None and curr_ixg > 0:
+            excess_goals = curr_g - curr_ixg
+            shrink = curr_ixg / (curr_ixg + SHOOTING_XG_SHRINK)
+            print(f"  Shooting WAR = (({curr_g:.2f} - {curr_ixg:.2f}) * {shrink:.4f}) / {GOALS_PER_WIN:.1f} = {shooting_war:.2f}")
+        print(f"  Total WAR  = {ev_off + ev_def + pp_war + pk_war + shooting_war:.2f}")
 
 # Print top-20 WAR leaderboard
 name_pos = {row['player_id']: (row['full_name'], row['position']) for _, row in final.iterrows()}
@@ -377,12 +402,23 @@ war_list = sorted(
     key=lambda x: x[1]['war_total'], reverse=True
 )
 print(f"\n--- TOP 20 WAR ---")
-print(f"  {'Player':<26}  {'Pos':>3}  {'EV Off':>7}  {'EV Def':>7}  {'PP':>6}  {'PK':>6}  {'Total':>7}")
-print(f"  {'-'*26}  {'-'*3}  {'-'*7}  {'-'*7}  {'-'*6}  {'-'*6}  {'-'*7}")
+print(f"  {'Player':<26}  {'Pos':>3}  {'EV Off':>7}  {'EV Def':>7}  {'PP':>6}  {'PK':>6}  {'Shoot':>7}  {'Total':>7}")
+print(f"  {'-'*26}  {'-'*3}  {'-'*7}  {'-'*7}  {'-'*6}  {'-'*6}  {'-'*7}  {'-'*7}")
 for pid, d in war_list[:20]:
     name, pos = name_pos.get(pid, ('?', '?'))
     print(f"  {name:<26}  {pos:>3}  {d['war_ev_off']:>7.2f}  {d['war_ev_def']:>7.2f}"
-          f"  {d['war_pp']:>6.2f}  {d['war_pk']:>6.2f}  {d['war_total']:>7.2f}")
+          f"  {d['war_pp']:>6.2f}  {d['war_pk']:>6.2f}  {d['war_shooting']:>7.2f}  {d['war_total']:>7.2f}")
+
+shoot_list = sorted(
+    [(pid, d) for pid, d in war_data.items() if d.get('war_shooting') is not None],
+    key=lambda x: x[1]['war_shooting'], reverse=True
+)
+print(f"\n--- TOP 10 SHOOTING WAR ---")
+print(f"  {'Player':<26}  {'Pos':>3}  {'Shoot':>7}  {'Total':>7}")
+print(f"  {'-'*26}  {'-'*3}  {'-'*7}  {'-'*7}")
+for pid, d in shoot_list[:10]:
+    name, pos = name_pos.get(pid, ('?', '?'))
+    print(f"  {name:<26}  {pos:>3}  {d['war_shooting']:>7.2f}  {d['war_total']:>7.2f}")
 
 # ── Leaderboards ──────────────────────────────────────────────────────────────
 print("\n--- TOP 20 OVERALL ---")
@@ -432,12 +468,20 @@ for _, row in final.iterrows():
             'war_ev_def': war.get('war_ev_def'),
             'war_pp':     war.get('war_pp'),
             'war_pk':     war.get('war_pk'),
+            'war_shooting': war.get('war_shooting'),
+            'war_penalties': war.get('war_penalties'),
         })
-    result = sb.table('players').update(data).eq('player_id', row['player_id']).execute()
-    if result.data:
-        updated += 1
-    else:
+    try:
+        result = sb.table('players').update(data).eq('player_id', row['player_id']).execute()
+        if result.data:
+            updated += 1
+        else:
+            skipped += 1
+    except Exception as e:
         skipped += 1
+        if skipped == 1:
+            print(f"  Upload error: {e}")
+            print("  → Run data-pipeline/migrations/add_war_columns.sql in Supabase SQL editor, then re-run.")
 
 print(f"\nDone. Updated: {updated} | Skipped: {skipped}")
 
