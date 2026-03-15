@@ -1,10 +1,14 @@
 import { createServerClient } from "@/app/lib/supabase";
 import { TEAM_FULL } from "@/app/lib/nhlTeams";
+import { unstable_cache } from "next/cache";
 import { buildGameContextFromTeams, buildPlayerAggregates, buildTeamSeasonStatsFromLiveData, normalizeScheduleGame, normalizeStandingsSnapshot } from "@/src/data/livePredictionData";
 import { estimateExpectedScoring } from "@/src/models/expectedGoalsModel";
 import { predictGame } from "@/src/models/predictGame";
 import { buildTeamRatings } from "@/src/models/teamRatings";
 import { americanOddsToImpliedProbability, removeOverroundFromMoneylines } from "@/src/utils/odds";
+
+const MAX_ODDS_CALLS_PER_DAY = 15;
+const ODDS_CACHE_WINDOW_SECONDS = Math.floor((24 * 60 * 60) / MAX_ODDS_CALLS_PER_DAY);
 
 export function getTorontoDateParts(date = new Date()) {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -119,6 +123,34 @@ function normalizeTeamNameForOdds(name) {
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+function getTorontoClockParts(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value;
+  return {
+    year: Number(get("year")),
+    month: Number(get("month")),
+    day: Number(get("day")),
+    hour: Number(get("hour")),
+    minute: Number(get("minute")),
+  };
+}
+
+function getOddsCacheSlotKey(date = new Date()) {
+  const parts = getTorontoClockParts(date);
+  const minutesIntoDay = parts.hour * 60 + parts.minute;
+  const slotIndex = Math.floor((minutesIntoDay * 60) / ODDS_CACHE_WINDOW_SECONDS);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}-slot-${slotIndex}`;
 }
 
 function normalizeText(value) {
@@ -288,59 +320,69 @@ async function fetchMarketOddsMap() {
   const apiKey = process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY;
   if (!apiKey) return {};
 
-  try {
-    const url = `https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds/?apiKey=${apiKey}&regions=us&markets=h2h&oddsFormat=american&dateFormat=iso`;
-    const res = await fetch(url, { next: { revalidate: 900 } });
-    if (!res.ok) return {};
+  const slotKey = getOddsCacheSlotKey();
+  const fetchForSlot = unstable_cache(
+    async () => {
+      try {
+        const url = `https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds/?apiKey=${apiKey}&regions=us&markets=h2h&oddsFormat=american&dateFormat=iso`;
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) return {};
 
-    const data = await res.json();
-    const oddsMap = {};
+        const data = await res.json();
+        const oddsMap = {};
 
-    for (const event of data || []) {
-      const homeName = normalizeTeamNameForOdds(event.home_team);
-      const awayName = normalizeTeamNameForOdds(event.away_team);
-      const homePrices = [];
-      const awayPrices = [];
-      const books = [];
+        for (const event of data || []) {
+          const homeName = normalizeTeamNameForOdds(event.home_team);
+          const awayName = normalizeTeamNameForOdds(event.away_team);
+          const homePrices = [];
+          const awayPrices = [];
+          const books = [];
 
-      for (const bookmaker of event.bookmakers || []) {
-        const market = (bookmaker.markets || []).find((item) => item.key === "h2h");
-        if (!market) continue;
-        const homeOutcome = (market.outcomes || []).find(
-          (item) => normalizeTeamNameForOdds(item.name) === homeName
-        );
-        const awayOutcome = (market.outcomes || []).find(
-          (item) => normalizeTeamNameForOdds(item.name) === awayName
-        );
-        if (
-          typeof homeOutcome?.price === "number" &&
-          typeof awayOutcome?.price === "number"
-        ) {
-          homePrices.push(homeOutcome.price);
-          awayPrices.push(awayOutcome.price);
-          books.push(bookmaker.title);
+          for (const bookmaker of event.bookmakers || []) {
+            const market = (bookmaker.markets || []).find((item) => item.key === "h2h");
+            if (!market) continue;
+            const homeOutcome = (market.outcomes || []).find(
+              (item) => normalizeTeamNameForOdds(item.name) === homeName
+            );
+            const awayOutcome = (market.outcomes || []).find(
+              (item) => normalizeTeamNameForOdds(item.name) === awayName
+            );
+            if (
+              typeof homeOutcome?.price === "number" &&
+              typeof awayOutcome?.price === "number"
+            ) {
+              homePrices.push(homeOutcome.price);
+              awayPrices.push(awayOutcome.price);
+              books.push(bookmaker.title);
+            }
+          }
+
+          const homeMoneyline = median(homePrices);
+          const awayMoneyline = median(awayPrices);
+          if (homeMoneyline == null || awayMoneyline == null) continue;
+
+          const devigged = removeOverroundFromMoneylines(homeMoneyline, awayMoneyline);
+          oddsMap[`${awayName}__${homeName}`] = {
+            homeMoneyline: Math.round(homeMoneyline),
+            awayMoneyline: Math.round(awayMoneyline),
+            homeProbability: devigged.homeProbability,
+            awayProbability: devigged.awayProbability,
+            sourceCount: books.length,
+            sourceLabel: books.length > 0 ? `Median of ${books.length} books` : "Market median",
+            cacheWindowSeconds: ODDS_CACHE_WINDOW_SECONDS,
+          };
         }
+
+        return oddsMap;
+      } catch {
+        return {};
       }
+    },
+    ["the-odds-api-market", slotKey],
+    { revalidate: ODDS_CACHE_WINDOW_SECONDS }
+  );
 
-      const homeMoneyline = median(homePrices);
-      const awayMoneyline = median(awayPrices);
-      if (homeMoneyline == null || awayMoneyline == null) continue;
-
-      const devigged = removeOverroundFromMoneylines(homeMoneyline, awayMoneyline);
-      oddsMap[`${awayName}__${homeName}`] = {
-        homeMoneyline: Math.round(homeMoneyline),
-        awayMoneyline: Math.round(awayMoneyline),
-        homeProbability: devigged.homeProbability,
-        awayProbability: devigged.awayProbability,
-        sourceCount: books.length,
-        sourceLabel: books.length > 0 ? `Median of ${books.length} books` : "Market median",
-      };
-    }
-
-    return oddsMap;
-  } catch {
-    return {};
-  }
+  return fetchForSlot();
 }
 
 async function fetchScheduleForDate(dateString) {
