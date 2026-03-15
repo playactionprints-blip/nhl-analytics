@@ -207,13 +207,6 @@ def scrape_game_shots_v1(game_id_full, season_key):
         p_secs = int(parts[0]) * 60 + int(parts[1]) if len(parts) == 2 else 0
         abs_t  = (period - 1) * 1200 + p_secs
 
-        # Update running score for goals
-        if ev_type == 'goal':
-            if det.get('eventOwnerTeamId') == home_team_id:
-                home_score += 1
-            else:
-                away_score += 1
-
         # Only keep shooting events
         is_shot_ev = ev_type in ('shot-on-goal', 'goal', 'missed-shot')
         if not is_shot_ev:
@@ -278,6 +271,13 @@ def scrape_game_shots_v1(game_id_full, season_key):
         prior_secs = abs_t
         prior_x = xc
         prior_y = yc
+
+        # Update running score AFTER recording the shot so score_state reflects pre-shot context.
+        if ev_type == 'goal':
+            if det.get('eventOwnerTeamId') == home_team_id:
+                home_score += 1
+            else:
+                away_score += 1
 
     return rows
 
@@ -570,9 +570,6 @@ def train_models(df):
         X_test  = test[FEATURE_COLS].astype(float)
         y_test  = test['is_goal'].astype(int)
 
-        # Class balance
-        scale_pos_weight = (y_train == 0).sum() / max((y_train == 1).sum(), 1)
-
         model = XGBClassifier(
             n_estimators=300,
             max_depth=4,
@@ -580,7 +577,7 @@ def train_models(df):
             subsample=0.8,
             colsample_bytree=0.8,
             min_child_weight=10,   # guards against over-fitting on rare goals
-            scale_pos_weight=scale_pos_weight,
+            objective='binary:logistic',
             use_label_encoder=False,
             eval_metric='auc',
             random_state=42,
