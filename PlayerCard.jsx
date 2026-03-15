@@ -466,6 +466,9 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
         <div style={{ fontSize: 11, color: "#727880", marginTop: 12, fontFamily: "'DM Mono',monospace" }}>
           * `Competition` and `Teammates` are still first-pass deployment context metrics and are less stable than WAR or EV impact.
         </div>
+        <div style={{ fontSize: 11, color: "#727880", marginTop: 8, fontFamily: "'DM Mono',monospace" }}>
+          Stable right now: WAR3, EV Offence, Goals, Points, ixG, GSAx. Provisional right now: EV Defence, Penalties, Competition, Teammates.
+        </div>
       </div>
 
       <div style={{ paddingTop: 20, paddingBottom: 20, borderBottom: "1px solid #1b222a" }}>

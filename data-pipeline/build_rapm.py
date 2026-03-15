@@ -1055,6 +1055,25 @@ def print_leaderboards(results_df):
     top = df.nlargest(15, 'rapm_def')[['full_name', 'position', 'rapm_def', 'rapm_def_pct']]
     print(top.to_string(index=False, float_format=lambda x: f"{x:7.3f}"))
 
+    forwards = df[df['position'] != 'D'].copy()
+    defense = df[df['position'] == 'D'].copy()
+    if not forwards.empty:
+        print("\n--- TOP 10 OFFENSIVE FORWARDS ---")
+        top = forwards.nlargest(10, 'rapm_off')[['full_name', 'position', 'rapm_off', 'rapm_off_pct']]
+        print(top.to_string(index=False, float_format=lambda x: f"{x:7.3f}"))
+
+        print("\n--- TOP 10 DEFENSIVE FORWARDS ---")
+        top = forwards.nlargest(10, 'rapm_def')[['full_name', 'position', 'rapm_def', 'rapm_def_pct']]
+        print(top.to_string(index=False, float_format=lambda x: f"{x:7.3f}"))
+    if not defense.empty:
+        print("\n--- TOP 10 OFFENSIVE DEFENCEMEN ---")
+        top = defense.nlargest(10, 'rapm_off')[['full_name', 'position', 'rapm_off', 'rapm_off_pct']]
+        print(top.to_string(index=False, float_format=lambda x: f"{x:7.3f}"))
+
+        print("\n--- TOP 10 DEFENSIVE DEFENCEMEN ---")
+        top = defense.nlargest(10, 'rapm_def')[['full_name', 'position', 'rapm_def', 'rapm_def_pct']]
+        print(top.to_string(index=False, float_format=lambda x: f"{x:7.3f}"))
+
     # Spotlight: key players
     spotlight = {
         'Connor McDavid': MCDAVID_ID,

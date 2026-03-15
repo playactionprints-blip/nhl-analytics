@@ -36,6 +36,7 @@ warnings.filterwarnings('ignore')
 CKPT_EVERY      = 100    # save checkpoint every N games
 PROGRESS_EVERY  = 50     # print progress every N games
 AUC_THRESHOLDS  = {'5v5': 0.75, 'PP': 0.66, 'PK': 0.66}
+RINK_SHRINK_SHOTS = 8000.0
 
 SCHEDULE_API = "https://api-web.nhle.com/v1"
 DATA_DIR     = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
@@ -73,7 +74,7 @@ SESSION.headers.update({"User-Agent": "nhl-analytics/1.0"})
 
 SHOT_COLS = [
     'game_id', 'season', 'period', 'time_seconds',
-    'shooter_id', 'shooter_team', 'is_home',
+    'shooter_id', 'shooter_team', 'rink_team', 'is_home',
     'x_coord', 'y_coord', 'shot_type',
     'prior_event_type', 'prior_event_team', 'prior_event_x_coord', 'prior_event_y_coord',
     'seconds_since_prior',
@@ -251,6 +252,7 @@ def scrape_game_shots_v1(game_id_full, season_key):
             'time_seconds':        abs_t,
             'shooter_id':          int(shooter_id),
             'shooter_team':        shooter_team,
+            'rink_team':           home_abbr,
             'is_home':             is_home,
             'x_coord':             float(xc),
             'y_coord':             float(yc),
@@ -443,10 +445,25 @@ def engineer_features(df, apply_noise_filter=True):
     df['prior_x_normalized'] = prior_x_norm
     df['prior_y_normalized'] = prior_y.fillna(0.0).astype(float)
 
+    rink_corr = _compute_rink_corrections(df)
+    if not rink_corr.empty:
+        df = df.merge(rink_corr, on='rink_team', how='left')
+    df['rink_x_shift'] = pd.to_numeric(df.get('rink_x_shift'), errors='coerce').fillna(0.0)
+    df['rink_y_scale'] = pd.to_numeric(df.get('rink_y_scale'), errors='coerce').fillna(1.0)
+
+    x_corr = df['x_normalized'] - df['rink_x_shift']
+    y_corr = y * df['rink_y_scale']
+    prior_x_corr = df['prior_x_normalized'] - df['rink_x_shift']
+    prior_y_corr = df['prior_y_normalized'] * df['rink_y_scale']
+    df['x_normalized_corr'] = x_corr
+    df['y_normalized_corr'] = y_corr
+    df['prior_x_normalized_corr'] = prior_x_corr
+    df['prior_y_normalized_corr'] = prior_y_corr
+
     # Distance and angle from the attacking net (x=+89 after normalisation)
-    df['distance']      = np.sqrt((x_norm - 89) ** 2 + y ** 2)
-    df['angle']         = np.degrees(np.arctan2(y.abs(), (pd.Series(x_norm) - 89).abs().clip(lower=0.1).values))
-    df['is_behind_net'] = (x_norm > 89).astype(int)
+    df['distance']      = np.sqrt((x_corr - 89) ** 2 + y_corr ** 2)
+    df['angle']         = np.degrees(np.arctan2(y_corr.abs(), (pd.Series(x_corr) - 89).abs().clip(lower=0.1).values))
+    df['is_behind_net'] = (x_corr > 89).astype(int)
 
     # --- Noise filter ---
     if apply_noise_filter:
@@ -471,10 +488,10 @@ def engineer_features(df, apply_noise_filter=True):
         (df['prior_event_type'].isin(prior_shot_types))
     ).astype(int)
 
-    x_curr = pd.to_numeric(df['x_normalized'], errors='coerce')
-    y_curr = pd.to_numeric(df['y_coord'], errors='coerce')
-    prior_x_curr = pd.to_numeric(df['prior_x_normalized'], errors='coerce')
-    prior_y_curr = pd.to_numeric(df['prior_y_normalized'], errors='coerce')
+    x_curr = pd.to_numeric(df['x_normalized_corr'], errors='coerce')
+    y_curr = pd.to_numeric(df['y_normalized_corr'], errors='coerce')
+    prior_x_curr = pd.to_numeric(df['prior_x_normalized_corr'], errors='coerce')
+    prior_y_curr = pd.to_numeric(df['prior_y_normalized_corr'], errors='coerce')
 
     prior_dx = x_curr - prior_x_curr
     prior_dy = y_curr - prior_y_curr
@@ -519,6 +536,50 @@ def engineer_features(df, apply_noise_filter=True):
     df['strength_bucket'] = df['game_strength'].map(_strength_category)
 
     return df
+
+
+def _compute_rink_corrections(df):
+    """First-pass rink-bias correction from NHL API coordinates.
+
+    We estimate simple home-rink coordinate shifts using mostly away-team shots,
+    then shrink those corrections heavily toward league average so team style
+    does not overwhelm the signal.
+    """
+    if 'rink_team' not in df.columns:
+        return pd.DataFrame(columns=['rink_team', 'rink_x_shift', 'rink_y_scale'])
+
+    base = df[['rink_team', 'shooter_team', 'x_normalized', 'y_coord']].copy()
+    base['x_normalized'] = pd.to_numeric(base['x_normalized'], errors='coerce')
+    base['y_coord'] = pd.to_numeric(base['y_coord'], errors='coerce')
+    base = base.dropna(subset=['rink_team', 'x_normalized', 'y_coord'])
+    if base.empty:
+        return pd.DataFrame(columns=['rink_team', 'rink_x_shift', 'rink_y_scale'])
+
+    away_only = base[base['shooter_team'] != base['rink_team']].copy()
+    if len(away_only) >= max(5000, int(len(base) * 0.35)):
+        base = away_only
+
+    base['abs_y'] = base['y_coord'].abs()
+    league_x = float(base['x_normalized'].median())
+    league_y = float(base['abs_y'].median())
+    grouped = (
+        base.groupby('rink_team')
+        .agg(
+            shots=('rink_team', 'size'),
+            median_x=('x_normalized', 'median'),
+            median_abs_y=('abs_y', 'median'),
+        )
+        .reset_index()
+    )
+    grouped = grouped[grouped['shots'] >= 1500].copy()
+    if grouped.empty:
+        return pd.DataFrame(columns=['rink_team', 'rink_x_shift', 'rink_y_scale'])
+
+    shrink = grouped['shots'] / (grouped['shots'] + RINK_SHRINK_SHOTS)
+    grouped['rink_x_shift'] = ((grouped['median_x'] - league_x) * shrink).clip(-4.0, 4.0)
+    raw_y_scale = league_y / grouped['median_abs_y'].clip(lower=1.0)
+    grouped['rink_y_scale'] = (1.0 + ((raw_y_scale - 1.0) * shrink)).clip(0.92, 1.08)
+    return grouped[['rink_team', 'rink_x_shift', 'rink_y_scale']]
 
 
 FEATURE_COLS = [
@@ -669,6 +730,28 @@ def validate_models(df, models):
         print("  ✓ All calibration ratios within ±10%")
     else:
         print("  ⚠ Some calibration ratios are outside ±10% — review model")
+
+    print("\nDecile calibration (25-26 test season):")
+    for bucket in ['5v5', 'PP', 'PK']:
+        sub = df[(df['season'] == '25-26') & (df['strength_bucket'] == bucket)].copy()
+        if len(sub) < 500 or sub['xg_pred'].nunique() < 10:
+            continue
+        sub['decile'] = pd.qcut(sub['xg_pred'], 10, labels=False, duplicates='drop') + 1
+        calib = (
+            sub.groupby('decile')
+            .agg(
+                shots=('is_goal', 'size'),
+                pred_xg=('xg_pred', 'mean'),
+                goal_rate=('is_goal', 'mean'),
+            )
+            .reset_index()
+        )
+        print(f"  {bucket}:")
+        for row in calib.itertuples():
+            print(
+                f"    D{int(row.decile):>2}: shots={int(row.shots):>5}  "
+                f"pred={row.pred_xg:0.3f}  actual={row.goal_rate:0.3f}"
+            )
 
     # Feature importance
     print("\nFeature importance (top 5 per model):")
