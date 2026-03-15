@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/", label: "Players" },
   { href: "/teams", label: "Teams" },
+  { href: "/predictions", label: "Predictions" },
   { href: "/lottery", label: "NHL Lottery" },
 ];
 

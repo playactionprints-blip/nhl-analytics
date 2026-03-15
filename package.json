@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "predict:example": "tsx src/examples/example.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
@@ -16,9 +18,12 @@
     "recharts": "^3.8.0"
   },
   "devDependencies": {
+    "@types/node": "^24.6.1",
     "@tailwindcss/postcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
   }
 }
