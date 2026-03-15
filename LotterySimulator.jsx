@@ -77,6 +77,116 @@ function TeamLogo({ abbr, size = 34 }) {
   );
 }
 
+function ConditionTooltip({ note }) {
+  if (!note) return null;
+  return (
+    <span
+      className="lottery-tooltip"
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 18,
+        height: 18,
+        borderRadius: "50%",
+        border: "1px solid #29455f",
+        color: "#8ed0ff",
+        background: "#101a25",
+        fontSize: 11,
+        fontWeight: 800,
+        cursor: "help",
+        flexShrink: 0,
+      }}
+      aria-label={note}
+    >
+      i
+      <span
+        className="lottery-tooltip-panel"
+        style={{
+          position: "absolute",
+          left: "50%",
+          bottom: "calc(100% + 10px)",
+          transform: "translateX(-50%)",
+          minWidth: 240,
+          maxWidth: 320,
+          padding: "10px 12px",
+          borderRadius: 12,
+          background: "rgba(9, 16, 23, 0.98)",
+          border: "1px solid #25435a",
+          color: "#d9ecfa",
+          fontSize: 12,
+          lineHeight: 1.4,
+          boxShadow: "0 16px 36px rgba(0,0,0,0.35)",
+          opacity: 0,
+          pointerEvents: "none",
+          transition: "opacity 0.16s ease, transform 0.16s ease",
+          zIndex: 20,
+        }}
+      >
+        {note}
+      </span>
+    </span>
+  );
+}
+
+function PickOwnershipCluster({ originalTeam, selectionOwner, isProtected, note }) {
+  const ownerChanged = selectionOwner && selectionOwner !== originalTeam;
+  const isRetainedProtected = isProtected && !ownerChanged;
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            opacity: ownerChanged ? 0.38 : 1,
+            filter: ownerChanged ? "grayscale(0.7)" : "none",
+            transition: "opacity 0.16s ease, filter 0.16s ease",
+          }}
+        >
+          <TeamLogo abbr={originalTeam} size={34} />
+        </div>
+        {ownerChanged && (
+          <>
+            <span
+              style={{
+                color: isProtected ? "#ff9ca8" : "#5ed5ff",
+                fontSize: 14,
+                fontWeight: 900,
+                fontFamily: "'DM Mono',monospace",
+              }}
+            >
+              →
+            </span>
+            <TeamLogo abbr={selectionOwner} size={34} />
+          </>
+        )}
+      </div>
+      <ConditionTooltip note={note} />
+      {(ownerChanged || isRetainedProtected) && (
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "3px 8px",
+            borderRadius: 999,
+            background: isRetainedProtected ? "rgba(255, 111, 123, 0.14)" : "rgba(53, 227, 160, 0.14)",
+            color: isRetainedProtected ? "#ff8d9b" : "#47e8aa",
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            fontFamily: "'DM Mono',monospace",
+          }}
+        >
+          {isRetainedProtected ? "Protected" : "Conveyed"}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ResultBadge({ row }) {
   const meta = movementMeta(row.movement);
   return (
@@ -212,6 +322,10 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
       pickLedger,
     });
   }, [baseOrder, nonLotteryOrder, pickLedger, result]);
+  const resolvedByOriginalTeam = useMemo(
+    () => Object.fromEntries(resolvedDraftOrder.map((row) => [row.originalTeam, row])),
+    [resolvedDraftOrder]
+  );
   const ottawaRow = resolvedDraftOrder.find((row) => row.originalTeam === "OTT");
   const normalResolvedRows = resolvedDraftOrder.filter((row) => row.originalTeam !== "OTT");
 
@@ -238,6 +352,10 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
         }
         .lottery-ownership-row:hover {
           background: #101925;
+        }
+        .lottery-tooltip:hover .lottery-tooltip-panel {
+          opacity: 1 !important;
+          transform: translateX(-50%) translateY(-4px) !important;
         }
         @media (max-width: 980px) {
           .lottery-grid {
@@ -375,6 +493,17 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                 const simRow = result?.finalOrder.find((row) => row.pickId === entry.pickId);
                 const projected = simRow?.finalPick ?? entry.projectedPick;
                 const meta = movementMeta(entry.baseRank - projected);
+                const resolvedPick = resolvedByOriginalTeam[entry.originalTeam];
+                const conditionNote = resolvedPick
+                  ? [
+                      resolvedPick.notes,
+                      ...resolvedPick.conditionResults.map((item) =>
+                        `${item.triggered ? "Triggered" : "Checked"}: ${item.description}`
+                      ),
+                    ]
+                      .filter(Boolean)
+                      .join(" | ")
+                  : "";
                 return (
                   <div
                     key={entry.pickId}
@@ -388,16 +517,23 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                       borderBottom: "1px solid #111b28",
                       transition: "background 0.16s ease",
                     }}
-                  >
+                    >
                     <div style={{ fontSize: 14, color: "#9dc5e6", fontWeight: 700 }}>{entry.baseRank}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                      <TeamLogo abbr={entry.currentOwner} />
+                      <PickOwnershipCluster
+                        originalTeam={entry.originalTeam}
+                        selectionOwner={resolvedPick?.selectionOwner || entry.originalTeam}
+                        isProtected={resolvedPick?.protectionTriggered}
+                        note={conditionNote}
+                      />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 16, color: "#ecf7ff", fontWeight: 800, lineHeight: 1.1 }}>
                           {entry.standings.name}
                         </div>
                         <div style={{ fontSize: 11, color: "#5d7994", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
-                          {entry.currentOwner}
+                          {resolvedPick?.selectionOwner && resolvedPick.selectionOwner !== entry.originalTeam
+                            ? `${entry.originalTeam} · selects to ${resolvedPick.selectionOwner}`
+                            : entry.originalTeam}
                         </div>
                       </div>
                     </div>
@@ -601,6 +737,16 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         const resolvedPick = resolvedDraftOrder.find((pick) => pick.originalTeam === row.originalTeam);
                         const selectionOwner = resolvedPick?.selectionOwner || row.currentOwner;
                         const ownerChanged = selectionOwner !== row.originalTeam;
+                        const conditionNote = resolvedPick
+                          ? [
+                              resolvedPick.notes,
+                              ...resolvedPick.conditionResults.map((item) =>
+                                `${item.triggered ? "Triggered" : "Checked"}: ${item.description}`
+                              ),
+                            ]
+                              .filter(Boolean)
+                              .join(" | ")
+                          : "";
                         return (
                           <div
                             key={row.pickId}
@@ -617,7 +763,12 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                           >
                             <div style={{ color: "#b6d7f1", fontSize: 18, fontWeight: 900 }}>#{row.finalPick}</div>
                             <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                              <TeamLogo abbr={row.originalTeam} size={30} />
+                              <PickOwnershipCluster
+                                originalTeam={row.originalTeam}
+                                selectionOwner={selectionOwner}
+                                isProtected={resolvedPick?.protectionTriggered}
+                                note={conditionNote}
+                              />
                               <div style={{ minWidth: 0 }}>
                                 <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{row.standings.name}</div>
                                 <div style={{ color: "#63839f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
@@ -695,8 +846,11 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                           Original Team
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 5 }}>
-                          <TeamLogo abbr={row.originalTeam} size={28} />
+                          <div style={{ opacity: row.selectionOwner !== row.originalTeam ? 0.4 : 1, filter: row.selectionOwner !== row.originalTeam ? "grayscale(0.7)" : "none" }}>
+                            <TeamLogo abbr={row.originalTeam} size={28} />
+                          </div>
                           <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{row.originalTeam}</div>
+                          <ConditionTooltip note={conditionNote || row.notes || ""} />
                         </div>
                       </div>
                       <div style={{ minWidth: 0 }}>
