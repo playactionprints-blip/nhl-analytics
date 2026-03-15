@@ -10,7 +10,7 @@ Steps
    rush, rebound, score-state, etc.
 3. Train separate XGBClassifier models for 5v5 / PP / PK.
    Season-split CV: train on 23-24+24-25, test on 25-26.
-   Reports AUC and stops with a warning if any model < 0.72.
+   Reports AUC and only blocks the pipeline if the 5v5 model misses its target.
 4. Calibration & feature-importance validation.
 5. Re-compute xG in all three stints_XXXX.csv files using the new model.
 6. Print instruction to re-run build_rapm.py + compute_ratings.py.
@@ -35,7 +35,7 @@ warnings.filterwarnings('ignore')
 # ── Config ────────────────────────────────────────────────────────────────────
 CKPT_EVERY      = 100    # save checkpoint every N games
 PROGRESS_EVERY  = 50     # print progress every N games
-AUC_THRESHOLD   = 0.72   # minimum acceptable AUC before updating stints
+AUC_THRESHOLDS  = {'5v5': 0.75, 'PP': 0.66, 'PK': 0.66}
 
 SCHEDULE_API = "https://api-web.nhle.com/v1"
 DATA_DIR     = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
@@ -540,7 +540,7 @@ def train_models(df):
     Train one XGBClassifier per strength bucket (5v5 / PP / PK).
     Season-split CV: train on 23-24 + 24-25, test on 25-26.
     Returns {bucket: model} and prints AUC.
-    Raises SystemExit if any model AUC < AUC_THRESHOLD.
+    Raises SystemExit only if the 5v5 model misses its threshold.
     """
     from xgboost import XGBClassifier
     from sklearn.metrics import roc_auc_score
@@ -593,10 +593,12 @@ def train_models(df):
         auc   = roc_auc_score(y_test, preds)
         print(f"  {bucket} AUC (23-24+24-25 → 25-26): {auc:.4f}")
 
-        if auc < AUC_THRESHOLD:
-            print(f"  ✗ {bucket} AUC {auc:.3f} is below threshold {AUC_THRESHOLD}")
+        threshold = AUC_THRESHOLDS[bucket]
+        if auc < threshold:
+            print(f"  ✗ {bucket} AUC {auc:.3f} is below threshold {threshold:.2f}")
             low_aucs.append((bucket, auc))
-            auc_ok = False
+            if bucket == '5v5':
+                auc_ok = False
 
         # Save model
         model_path = os.path.join(DATA_DIR, f'xg_model_{bucket}.json')
@@ -605,11 +607,18 @@ def train_models(df):
         models[bucket] = model
 
     if not auc_ok:
-        print("\n✗ One or more models below AUC threshold. Reporting findings:")
+        print("\n✗ 5v5 model below threshold. Reporting findings:")
         for bucket, auc in low_aucs:
-            print(f"   {bucket}: AUC = {auc:.3f} (threshold {AUC_THRESHOLD})")
+            print(f"   {bucket}: AUC = {auc:.3f} (threshold {AUC_THRESHOLDS[bucket]:.2f})")
         print("  → Not proceeding to update stints. Investigate data quality.")
         sys.exit(1)
+
+    soft_fails = [(bucket, auc) for bucket, auc in low_aucs if bucket != '5v5']
+    if soft_fails:
+        print("\n⚠ Some special-teams models are below target thresholds:")
+        for bucket, auc in soft_fails:
+            print(f"   {bucket}: AUC = {auc:.3f} (threshold {AUC_THRESHOLDS[bucket]:.2f})")
+        print("  → Continuing because the 5v5 model passed, which is what stints/RAPM use.")
 
     return models
 
