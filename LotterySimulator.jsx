@@ -10,6 +10,12 @@ function formatPercent(value) {
   return `${Number(value || 0).toFixed(1)}%`;
 }
 
+function formatPointPct(value) {
+  const pct = Number(value || 0);
+  const display = pct <= 1 ? pct.toFixed(3).replace(/^0/, "") : (pct / 100).toFixed(3).replace(/^0/, "");
+  return display;
+}
+
 function movementMeta(movement) {
   if (movement > 0) return { label: `Up ${movement}`, color: "#35e3a0", symbol: "▲" };
   if (movement < 0) return { label: `Down ${Math.abs(movement)}`, color: "#ff6f7b", symbol: "▼" };
@@ -241,6 +247,24 @@ function HistoryRow({ item, index }) {
   );
 }
 
+function buildPickTooltip(asset, resolvedPick) {
+  if (!asset && !resolvedPick) return "";
+  const descriptions = (asset?.conditions || [])
+    .map((condition) => condition.description)
+    .filter(Boolean);
+
+  if (descriptions.length > 0) {
+    return descriptions.join(" | ");
+  }
+  if (resolvedPick?.isStaticSlot) {
+    return `Static slot at #${resolvedPick.slot}`;
+  }
+  if (resolvedPick?.selectionOwner && resolvedPick.selectionOwner !== resolvedPick.originalTeam) {
+    return `Selection owned by ${resolvedPick.selectionOwner}`;
+  }
+  return "";
+}
+
 export default function LotterySimulator({ initialEntries, nonLotteryOrder, pickLedger, generatedAt }) {
   const [entries] = useState(initialEntries);
   const [result, setResult] = useState(null);
@@ -325,6 +349,10 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
   const resolvedByOriginalTeam = useMemo(
     () => Object.fromEntries(resolvedDraftOrder.map((row) => [row.originalTeam, row])),
     [resolvedDraftOrder]
+  );
+  const assetByOriginalTeam = useMemo(
+    () => Object.fromEntries((pickLedger || []).map((asset) => [asset.originalTeam, asset])),
+    [pickLedger]
   );
   const ottawaRow = resolvedDraftOrder.find((row) => row.originalTeam === "OTT");
   const normalResolvedRows = resolvedDraftOrder.filter((row) => row.originalTeam !== "OTT");
@@ -476,12 +504,14 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               </div>
             </div>
 
-            <div className="lottery-table-head" style={{ display: "grid", gridTemplateColumns: "56px minmax(210px, 1fr) 116px 136px 126px", gap: 12, padding: "10px 20px", borderBottom: "1px solid #132131", color: "#4a6987", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            <div className="lottery-table-head" style={{ display: "grid", gridTemplateColumns: "56px minmax(280px, 1.2fr) 92px 92px 92px 116px 92px", gap: 12, padding: "10px 20px", borderBottom: "1px solid #132131", color: "#4a6987", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
               <div>Rank</div>
               <div>Original team</div>
+              <div>GP</div>
+              <div>P%</div>
+              <div>L10</div>
               <div>Odds</div>
               <div>Projection</div>
-              <div>Points</div>
             </div>
 
             <div style={{ display: "grid" }}>
@@ -494,23 +524,15 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                 const projected = simRow?.finalPick ?? entry.projectedPick;
                 const meta = movementMeta(entry.baseRank - projected);
                 const resolvedPick = resolvedByOriginalTeam[entry.originalTeam];
-                const conditionNote = resolvedPick
-                  ? [
-                      resolvedPick.notes,
-                      ...resolvedPick.conditionResults.map((item) =>
-                        `${item.triggered ? "Triggered" : "Checked"}: ${item.description}`
-                      ),
-                    ]
-                      .filter(Boolean)
-                      .join(" | ")
-                  : "";
+                const asset = assetByOriginalTeam[entry.originalTeam];
+                const conditionNote = buildPickTooltip(asset, resolvedPick);
                 return (
                   <div
                     key={entry.pickId}
                     className="lottery-table-row"
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "56px minmax(210px, 1fr) 116px 136px 126px",
+                      gridTemplateColumns: "56px minmax(280px, 1.2fr) 92px 92px 92px 116px 92px",
                       gap: 12,
                       alignItems: "center",
                       padding: "14px 20px",
@@ -537,12 +559,14 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         </div>
                       </div>
                     </div>
+                    <div style={{ fontSize: 14, color: "#c9d8e5", fontWeight: 700 }}>{entry.standings.gamesPlayed}</div>
+                    <div style={{ fontSize: 14, color: "#c9d8e5", fontWeight: 700 }}>{formatPointPct(entry.standings.pointPct)}</div>
+                    <div style={{ fontSize: 14, color: "#90a6bc", fontWeight: 700 }}>{entry.standings.last10Record || "—"}</div>
                     <div style={{ fontSize: 15, color: "#c9d8e5", fontWeight: 700 }}>{formatPercent(entry.odds)}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ color: "#edf7ff", fontSize: 15, fontWeight: 800 }}>#{projected}</span>
                       <span style={{ color: meta.color, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{meta.symbol}</span>
                     </div>
-                    <div style={{ fontSize: 14, color: "#90a6bc" }}>{entry.standings.points}</div>
                   </div>
                 );
               })}
@@ -737,16 +761,8 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         const resolvedPick = resolvedDraftOrder.find((pick) => pick.originalTeam === row.originalTeam);
                         const selectionOwner = resolvedPick?.selectionOwner || row.currentOwner;
                         const ownerChanged = selectionOwner !== row.originalTeam;
-                        const conditionNote = resolvedPick
-                          ? [
-                              resolvedPick.notes,
-                              ...resolvedPick.conditionResults.map((item) =>
-                                `${item.triggered ? "Triggered" : "Checked"}: ${item.description}`
-                              ),
-                            ]
-                              .filter(Boolean)
-                              .join(" | ")
-                          : "";
+                        const asset = assetByOriginalTeam[row.originalTeam];
+                        const conditionNote = buildPickTooltip(asset, resolvedPick);
                         return (
                           <div
                             key={row.pickId}
@@ -820,9 +836,8 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               <div style={{ display: "grid", gap: 10 }}>
                 {normalResolvedRows.map((row) => {
                   const meta = ownershipMeta(row);
-                  const conditionNote = row.conditionResults
-                    .map((item) => `${item.triggered ? "Triggered" : "Checked"}: ${item.description}`)
-                    .join(" | ");
+                  const asset = assetByOriginalTeam[row.originalTeam];
+                  const conditionNote = buildPickTooltip(asset, row);
                   return (
                     <div
                       key={row.assetId}

@@ -16,6 +16,14 @@ export const metadata = {
 
 function normalizeStandingsRow(row) {
   const abbr = typeof row.teamAbbrev === "object" ? row.teamAbbrev.default : row.teamAbbrev;
+  const l10Wins = row.l10Wins ?? row.last10Wins ?? row.last10?.wins ?? row.last10Record?.wins ?? null;
+  const l10Losses = row.l10Losses ?? row.last10Losses ?? row.last10?.losses ?? row.last10Record?.losses ?? null;
+  const l10OtLosses = row.l10OtLosses ?? row.last10OtLosses ?? row.last10?.otLosses ?? row.last10Record?.otLosses ?? null;
+  const last10Record =
+    l10Wins === null || l10Losses === null || l10OtLosses === null
+      ? "—"
+      : `${l10Wins}-${l10Losses}-${l10OtLosses}`;
+
   return {
     abbr,
     name: TEAM_FULL[abbr] || (typeof row.teamName === "object" ? row.teamName.default : row.teamName) || abbr,
@@ -24,6 +32,7 @@ function normalizeStandingsRow(row) {
     pointPct: row.pointPctg ?? row.pointPct ?? ((row.points || 0) / Math.max(1, (row.gamesPlayed || 0) * 2)),
     regulationWins: row.regulationWins || row.regPlusOtWins || 0,
     goalDiff: row.goalDifferential || 0,
+    last10Record,
   };
 }
 
