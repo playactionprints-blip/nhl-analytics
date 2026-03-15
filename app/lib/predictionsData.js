@@ -121,6 +121,169 @@ function normalizeTeamNameForOdds(name) {
     .toLowerCase();
 }
 
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^\w\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function decodeHtmlEntities(value) {
+  return value
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function stripHtmlToLines(html) {
+  return decodeHtmlEntities(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, "\n")
+      .replace(/<style[\s\S]*?<\/style>/gi, "\n")
+      .replace(/<(br|\/p|\/div|\/section|\/article|\/li|\/h\d)>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+  )
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+const TEAM_NAME_VARIANTS = Object.values(TEAM_FULL).reduce((acc, name) => {
+  acc.add(normalizeText(name));
+  acc.add(normalizeText(name.replace("St.", "St")));
+  acc.add(normalizeText(name.replace("Montréal", "Montreal")));
+  return acc;
+}, new Set());
+
+function isDailyFaceoffMatchupLine(line) {
+  if (!line.includes(" at ")) return false;
+  const [away, home] = line.split(" at ");
+  return TEAM_NAME_VARIANTS.has(normalizeText(away)) && TEAM_NAME_VARIANTS.has(normalizeText(home));
+}
+
+function parseDailyFaceoffSource(line) {
+  const sourceIndex = line.indexOf("Source:");
+  if (sourceIndex === -1) return null;
+  return line.slice(sourceIndex + "Source:".length).trim();
+}
+
+function parseDailyFaceoffGoalie(lines, startIndex) {
+  let index = startIndex;
+  const name = lines[index] || null;
+  if (!name) return null;
+  index += 1;
+
+  const statusPattern = /^(Confirmed|Likely|Unconfirmed|Expected)$/i;
+  const status = statusPattern.test(lines[index] || "") ? lines[index] : null;
+  if (status) index += 1;
+
+  let updatedAt = null;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(lines[index] || "")) {
+    updatedAt = lines[index];
+    index += 1;
+  }
+
+  while (index < lines.length && lines[index] === "Show More") {
+    index += 1;
+  }
+
+  let savePct = null;
+  let gaa = null;
+  let record = null;
+  let note = null;
+  let source = null;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    if (isDailyFaceoffMatchupLine(line)) break;
+    if (statusPattern.test(line)) break;
+    if (/^[A-Z][a-z]+ [A-Z]/.test(line) && !line.includes(":") && !line.includes(" at ")) break;
+
+    if (line.startsWith("W-L-OTL:")) {
+      record = line.replace("W-L-OTL:", "").trim();
+    } else if (line.startsWith("GAA:")) {
+      const value = Number(line.replace("GAA:", "").trim());
+      gaa = Number.isFinite(value) ? value : null;
+    } else if (line.startsWith("SV%:")) {
+      const value = Number(line.replace("SV%:", "").trim());
+      savePct = Number.isFinite(value) ? value : null;
+    } else if (line.includes("Source:")) {
+      note = line;
+      source = parseDailyFaceoffSource(line);
+      index += 1;
+      break;
+    }
+    index += 1;
+  }
+
+  return {
+    nextIndex: index,
+    goalie: {
+      starterName: name,
+      status: status || "Unconfirmed",
+      updatedAt,
+      savePct,
+      gaa,
+      record,
+      source,
+      note,
+    },
+  };
+}
+
+async function fetchDailyFaceoffGoalies(dateString) {
+  try {
+    const res = await fetch(`https://www.dailyfaceoff.com/starting-goalies/${dateString}`, {
+      next: { revalidate: 900 },
+      headers: {
+        "user-agent": "Mozilla/5.0 (compatible; NHLAnalyticsBot/1.0)",
+      },
+    });
+    if (!res.ok) return {};
+
+    const html = await res.text();
+    const lines = stripHtmlToLines(html);
+    const results = {};
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (!isDailyFaceoffMatchupLine(line)) continue;
+
+      const [awayTeamName, homeTeamName] = line.split(" at ");
+      let cursor = index + 1;
+      let gameTime = null;
+
+      if (/^\d{4}-\d{2}-\d{2}T/.test(lines[cursor] || "")) {
+        gameTime = lines[cursor];
+        cursor += 1;
+      }
+
+      const awayParsed = parseDailyFaceoffGoalie(lines, cursor);
+      if (!awayParsed) continue;
+      cursor = awayParsed.nextIndex;
+      const homeParsed = parseDailyFaceoffGoalie(lines, cursor);
+      if (!homeParsed) continue;
+
+      results[`${normalizeText(awayTeamName)}__${normalizeText(homeTeamName)}`] = {
+        gameTime,
+        away: awayParsed.goalie,
+        home: homeParsed.goalie,
+      };
+    }
+
+    return results;
+  } catch {
+    return {};
+  }
+}
+
 async function fetchMarketOddsMap() {
   const apiKey = process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY;
   if (!apiKey) return {};
@@ -339,6 +502,7 @@ export async function buildPredictionsForDate(dateString) {
     standingsByTeam,
     specialTeamsByTeam,
     marketOddsByGame,
+    dailyFaceoffGoalies,
     { data: players },
   ] = await Promise.all([
     fetchScheduleForDate(dateString),
@@ -346,6 +510,7 @@ export async function buildPredictionsForDate(dateString) {
     fetchStandingsMap(),
     fetchSpecialTeamsMap(),
     fetchMarketOddsMap(),
+    fetchDailyFaceoffGoalies(dateString),
     supabase
       .from("players")
       .select("team,position,off_rating,def_rating,overall_rating,xgf_pct,war_shooting,gp,save_pct,gsax,full_name"),
@@ -399,8 +564,42 @@ export async function buildPredictionsForDate(dateString) {
       const awayLeaders = buildTeamLeaders(safePlayers, awayTeam.teamId, awayTeam.teamName);
       const oddsKey = `${normalizeTeamNameForOdds(game.awayTeam.name)}__${normalizeTeamNameForOdds(game.homeTeam.name)}`;
       const market = marketOddsByGame[oddsKey] || null;
-      const projectedHomeGoalie = buildProjectedGoalie(homeLeaders, homeTeam, "home", context.homeBackToBack);
-      const projectedAwayGoalie = buildProjectedGoalie(awayLeaders, awayTeam, "away", context.awayBackToBack);
+      const goalieKey = `${normalizeText(game.awayTeam.name)}__${normalizeText(game.homeTeam.name)}`;
+      const dailyFaceoffGame = dailyFaceoffGoalies[goalieKey] || null;
+      const projectedHomeGoalie = dailyFaceoffGame?.home
+        ? {
+            sideLabel: "home",
+            confidence: dailyFaceoffGame.home.status === "Confirmed" ? "high" : dailyFaceoffGame.home.status === "Likely" ? "medium" : "low",
+            projectionLabel: dailyFaceoffGame.home.status,
+            starterName: dailyFaceoffGame.home.starterName,
+            alternateName: homeLeaders.goalies?.[1]?.full_name || null,
+            savePct: dailyFaceoffGame.home.savePct,
+            gsax: homeLeaders.goalies?.find((goalie) => goalie.full_name === dailyFaceoffGame.home.starterName)?.gsax ?? null,
+            source: dailyFaceoffGame.home.source,
+            updatedAt: dailyFaceoffGame.home.updatedAt,
+            notes: [
+              dailyFaceoffGame.home.note || null,
+              context.homeBackToBack ? "Back-to-back spot may affect late changes" : null,
+            ].filter(Boolean),
+          }
+        : buildProjectedGoalie(homeLeaders, homeTeam, "home", context.homeBackToBack);
+      const projectedAwayGoalie = dailyFaceoffGame?.away
+        ? {
+            sideLabel: "away",
+            confidence: dailyFaceoffGame.away.status === "Confirmed" ? "high" : dailyFaceoffGame.away.status === "Likely" ? "medium" : "low",
+            projectionLabel: dailyFaceoffGame.away.status,
+            starterName: dailyFaceoffGame.away.starterName,
+            alternateName: awayLeaders.goalies?.[1]?.full_name || null,
+            savePct: dailyFaceoffGame.away.savePct,
+            gsax: awayLeaders.goalies?.find((goalie) => goalie.full_name === dailyFaceoffGame.away.starterName)?.gsax ?? null,
+            source: dailyFaceoffGame.away.source,
+            updatedAt: dailyFaceoffGame.away.updatedAt,
+            notes: [
+              dailyFaceoffGame.away.note || null,
+              context.awayBackToBack ? "Back-to-back spot may affect late changes" : null,
+            ].filter(Boolean),
+          }
+        : buildProjectedGoalie(awayLeaders, awayTeam, "away", context.awayBackToBack);
 
       return {
         game,

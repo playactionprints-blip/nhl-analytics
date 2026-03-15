@@ -24,6 +24,21 @@ function formatGoalieValue(value, digits = 3) {
   return value.toFixed(digits);
 }
 
+function formatGoalieTimestamp(value) {
+  if (!value) return null;
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Toronto",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
 function teamPillStyle(color) {
   return {
     borderRadius: 999,
@@ -482,6 +497,12 @@ export default async function GamePredictionDetailPage({ params }) {
                   <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900 }}>
                     {row.goalie.starterName}
                   </div>
+                  {(row.goalie.source || row.goalie.updatedAt) ? (
+                    <div style={{ color: "#88a6bf", fontSize: 13, lineHeight: 1.5 }}>
+                      {row.goalie.source ? `Source: ${row.goalie.source}` : "Daily Faceoff"}
+                      {row.goalie.updatedAt ? ` · Updated ${formatGoalieTimestamp(row.goalie.updatedAt)}` : ""}
+                    </div>
+                  ) : null}
                   <div className="dual-grid" style={{ gap: 10 }}>
                     {[
                       ["Save %", formatGoalieValue(row.goalie.savePct, 3)],
