@@ -36,6 +36,10 @@ export function parseDateString(dateString) {
   return { year, month, day };
 }
 
+export function isValidDateString(dateString) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(dateString || ""));
+}
+
 export function shiftDateParts(parts, deltaDays) {
   const utc = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + deltaDays));
   return {
@@ -67,6 +71,22 @@ export function formatHeadlineDate(dateString) {
     }).format(new Date(`${dateString}T12:00:00Z`));
   } catch {
     return dateString;
+  }
+}
+
+export function dateStringFromUtcInToronto(utcString) {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Toronto",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const parts = formatter.formatToParts(new Date(utcString));
+    const get = (type) => parts.find((part) => part.type === type)?.value;
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  } catch {
+    return null;
   }
 }
 
@@ -571,6 +591,7 @@ export async function buildPredictionsForDate(dateString) {
   const normalizedGames = (todayGamesRaw || [])
     .map((game) => normalizeScheduleGame(game, TEAM_FULL))
     .filter(Boolean)
+    .filter((game) => dateStringFromUtcInToronto(game.startTimeUTC) === dateString)
     .filter((game) => !["FINAL", "OFF"].includes(game.gameState));
 
   const predictions = normalizedGames

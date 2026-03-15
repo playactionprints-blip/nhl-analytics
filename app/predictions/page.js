@@ -9,9 +9,12 @@ import {
   getTorontoDateParts,
   formatDateString,
   hexToRgba,
+  isValidDateString,
+  parseDateString,
   percent,
   predictionHref,
   signedOdds,
+  shiftDateParts,
 } from "@/app/lib/predictionsData";
 
 export const revalidate = 1800;
@@ -21,10 +24,16 @@ export const metadata = {
   description: "Tonight's NHL game predictions with win odds, expected goals, and score distributions.",
 };
 
-export default async function PredictionsPage() {
+export default async function PredictionsPage({ searchParams }) {
   const today = getTorontoDateParts();
-  const todayString = formatDateString(today);
-  const { predictions } = await buildPredictionsForDate(todayString);
+  const resolvedSearchParams = await searchParams;
+  const selectedDateString = isValidDateString(resolvedSearchParams?.date)
+    ? resolvedSearchParams.date
+    : formatDateString(today);
+  const selectedDateParts = parseDateString(selectedDateString);
+  const previousDate = formatDateString(shiftDateParts(selectedDateParts, -1));
+  const nextDate = formatDateString(shiftDateParts(selectedDateParts, 1));
+  const { predictions } = await buildPredictionsForDate(selectedDateString);
 
   return (
     <div
@@ -86,7 +95,7 @@ export default async function PredictionsPage() {
                   NHL Analytics · Game Model
                 </div>
                 <h1 style={{ margin: 0, color: "#eff8ff", fontSize: 46, lineHeight: 0.95, letterSpacing: "-0.04em", fontWeight: 900 }}>
-                  {formatHeadlineDate(todayString)} Predictions
+                  {formatHeadlineDate(selectedDateString)} Predictions
                 </h1>
                 <p style={{ margin: 0, maxWidth: 860, color: "#86a5c0", fontSize: 18, lineHeight: 1.35 }}>
                   A first-pass game model combining team scoring environment, shot quality proxies, finishing, goaltending, special teams, and 10,000-game Monte Carlo simulation.
@@ -105,11 +114,107 @@ export default async function PredictionsPage() {
                   Slate snapshot
                 </div>
                 <div style={{ fontSize: 24, fontWeight: 900, color: "#eaf7ff", marginTop: 4 }}>
-                  {predictions.length} games on {todayString}
+                  {predictions.length} games on {selectedDateString}
                 </div>
                 <div style={{ fontSize: 12, color: "#6d859e", marginTop: 4 }}>
                   Times shown in America/Toronto
                 </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "center",
+                flexWrap: "wrap",
+                border: "1px solid #172534",
+                borderRadius: 18,
+                background: "#0b1118",
+                padding: 16,
+              }}
+            >
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <Link
+                  href={`/predictions?date=${previousDate}`}
+                  style={{
+                    textDecoration: "none",
+                    borderRadius: 14,
+                    border: "1px solid #1d3c56",
+                    background: "#101a25",
+                    padding: "10px 14px",
+                    color: "#dff2ff",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    fontFamily: "'DM Mono',monospace",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Prev day
+                </Link>
+                <form action="/predictions" method="get" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <label
+                    htmlFor="prediction-date"
+                    style={{ color: "#6f879f", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}
+                  >
+                    Date
+                  </label>
+                  <input
+                    id="prediction-date"
+                    type="date"
+                    name="date"
+                    defaultValue={selectedDateString}
+                    style={{
+                      borderRadius: 14,
+                      border: "1px solid #1d3c56",
+                      background: "#101a25",
+                      color: "#eaf7ff",
+                      padding: "10px 12px",
+                      fontSize: 14,
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    style={{
+                      cursor: "pointer",
+                      borderRadius: 14,
+                      border: "1px solid #246da0",
+                      background: "linear-gradient(180deg, #16324b 0%, #0f2234 100%)",
+                      color: "#dff2ff",
+                      padding: "10px 14px",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      fontFamily: "'DM Mono',monospace",
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Go
+                  </button>
+                </form>
+                <Link
+                  href={`/predictions?date=${nextDate}`}
+                  style={{
+                    textDecoration: "none",
+                    borderRadius: 14,
+                    border: "1px solid #1d3c56",
+                    background: "#101a25",
+                    padding: "10px 14px",
+                    color: "#dff2ff",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    fontFamily: "'DM Mono',monospace",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Next day
+                </Link>
+              </div>
+              <div style={{ color: "#87a3bb", fontSize: 13 }}>
+                Viewing <span style={{ color: "#eff8ff", fontWeight: 800 }}>{formatHeadlineDate(selectedDateString)}</span>
               </div>
             </div>
 
@@ -139,7 +244,7 @@ export default async function PredictionsPage() {
               color: "#86a5c0",
             }}
           >
-            No upcoming games were found for {todayString}.
+            No upcoming games were found for {selectedDateString}.
           </section>
         ) : (
           <>
@@ -175,7 +280,7 @@ export default async function PredictionsPage() {
                   return (
                     <Link
                       key={`overview-${game.id}`}
-                      href={predictionHref(todayString, game.id)}
+                      href={predictionHref(selectedDateString, game.id)}
                       style={{
                         textDecoration: "none",
                         borderRadius: 18,
@@ -260,7 +365,7 @@ export default async function PredictionsPage() {
                 <Link
                   key={game.id}
                   className="prediction-card"
-                  href={predictionHref(todayString, game.id)}
+                  href={predictionHref(selectedDateString, game.id)}
                   style={{
                     display: "block",
                     textDecoration: "none",

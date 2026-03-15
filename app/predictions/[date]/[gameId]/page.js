@@ -624,7 +624,7 @@ export default async function GamePredictionDetailPage({ params }) {
                   lineHeight: 1.5,
                 }}
               >
-                No live market odds are available yet. Add `THE_ODDS_API_KEY` or `ODDS_API_KEY` to enable consensus moneyline comparison on this page.
+                No live market odds are available yet. The server runtime is not currently seeing `THE_ODDS_API_KEY` or `ODDS_API_KEY`, so this matchup is falling back to model-only pricing.
               </div>
             )}
           </div>
