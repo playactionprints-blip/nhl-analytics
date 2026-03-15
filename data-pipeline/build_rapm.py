@@ -849,7 +849,7 @@ def build_rapm(stints_df):
 
     coef = model.coef_
     rapm_off = coef[:n_players]
-    rapm_def = -coef[n_players:]  # lower xGA allowed = better defense
+    rapm_def = -coef[n_players:n_players * 2]  # lower xGA allowed = better defense
 
     results = pd.DataFrame({
         'player_id':     all_pids,
