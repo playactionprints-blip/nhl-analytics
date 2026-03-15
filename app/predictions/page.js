@@ -1,13 +1,18 @@
-import { createServerClient } from "@/app/lib/supabase";
-import { TEAM_COLOR, TEAM_FULL, logoUrl } from "@/app/lib/nhlTeams";
-import { predictGame } from "@/src/models/predictGame";
+import Link from "next/link";
+import { TEAM_COLOR, logoUrl } from "@/app/lib/nhlTeams";
 import {
-  buildGameContextFromTeams,
-  buildPlayerAggregates,
-  buildTeamSeasonStatsFromLiveData,
-  normalizeScheduleGame,
-  normalizeStandingsSnapshot,
-} from "@/src/data/livePredictionData";
+  buildPredictionsForDate,
+  confidenceMeta,
+  formatHeadlineDate,
+  formatStartTime,
+  formatRecord,
+  getTorontoDateParts,
+  formatDateString,
+  hexToRgba,
+  percent,
+  predictionHref,
+  signedOdds,
+} from "@/app/lib/predictionsData";
 
 export const revalidate = 1800;
 
@@ -16,238 +21,10 @@ export const metadata = {
   description: "Tonight's NHL game predictions with win odds, expected goals, and score distributions.",
 };
 
-function getTorontoDateParts(date = new Date()) {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Toronto",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-
-  const parts = formatter.formatToParts(date);
-  const get = (type) => parts.find((part) => part.type === type)?.value;
-  const year = Number(get("year"));
-  const month = Number(get("month"));
-  const day = Number(get("day"));
-  return { year, month, day };
-}
-
-function formatDateString({ year, month, day }) {
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function shiftDateParts(parts, deltaDays) {
-  const utc = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + deltaDays));
-  return {
-    year: utc.getUTCFullYear(),
-    month: utc.getUTCMonth() + 1,
-    day: utc.getUTCDate(),
-  };
-}
-
-async function fetchScheduleForDate(dateString) {
-  try {
-    const res = await fetch(`https://api-web.nhle.com/v1/schedule/${dateString}`, {
-      next: { revalidate: 1800 },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const gameWeekGames = (data.gameWeek || []).flatMap((day) => day.games || []);
-    return (data.games || gameWeekGames || []);
-  } catch {
-    return [];
-  }
-}
-
-async function fetchStandingsMap() {
-  try {
-    const res = await fetch("https://api-web.nhle.com/v1/standings/now", {
-      next: { revalidate: 1800 },
-    });
-    if (!res.ok) return {};
-    const data = await res.json();
-    const map = {};
-    for (const raw of data.standings || []) {
-      const row = normalizeStandingsSnapshot(raw, TEAM_FULL);
-      if (!row) continue;
-      map[row.abbr] = row;
-    }
-    return map;
-  } catch {
-    return {};
-  }
-}
-
-async function fetchSpecialTeamsMap() {
-  try {
-    const seasonExpr = "seasonId=20252026";
-    const [ppRes, pkRes] = await Promise.all([
-      fetch(`https://api.nhle.com/stats/rest/en/team/powerplay?cayenneExp=${seasonExpr}`, {
-        next: { revalidate: 1800 },
-      }),
-      fetch(`https://api.nhle.com/stats/rest/en/team/penaltykill?cayenneExp=${seasonExpr}`, {
-        next: { revalidate: 1800 },
-      }),
-    ]);
-
-    const map = {};
-    if (ppRes.ok) {
-      const data = await ppRes.json();
-      for (const row of data.data || []) {
-        const abbr = Object.entries(TEAM_FULL).find(([, name]) => name === row.teamFullName)?.[0];
-        if (!abbr) continue;
-        map[abbr] = {
-          ...(map[abbr] || {}),
-          ppPct: row.powerPlayPct != null ? row.powerPlayPct : null,
-        };
-      }
-    }
-    if (pkRes.ok) {
-      const data = await pkRes.json();
-      for (const row of data.data || []) {
-        const abbr = Object.entries(TEAM_FULL).find(([, name]) => name === row.teamFullName)?.[0];
-        if (!abbr) continue;
-        map[abbr] = {
-          ...(map[abbr] || {}),
-          pkPct: row.penaltyKillPct != null ? row.penaltyKillPct : null,
-        };
-      }
-    }
-    return map;
-  } catch {
-    return {};
-  }
-}
-
-function formatStartTime(utcString) {
-  try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Toronto",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(utcString));
-  } catch {
-    return utcString || "TBD";
-  }
-}
-
-function percent(value) {
-  return `${(value * 100).toFixed(1)}%`;
-}
-
-function signedOdds(value) {
-  return value > 0 ? `+${value}` : `${value}`;
-}
-
-function confidenceMeta(band) {
-  if (band === "high") return { color: "#35e3a0", bg: "rgba(53,227,160,0.14)" };
-  if (band === "medium") return { color: "#f0c040", bg: "rgba(240,192,64,0.14)" };
-  return { color: "#ff8d9b", bg: "rgba(255,111,123,0.14)" };
-}
-
-function hexToRgba(hex, alpha) {
-  if (!hex) return `rgba(255,255,255,${alpha})`;
-  const normalized = hex.replace("#", "");
-  const safe = normalized.length === 3
-    ? normalized.split("").map((char) => char + char).join("")
-    : normalized;
-  const value = Number.parseInt(safe, 16);
-  const red = (value >> 16) & 255;
-  const green = (value >> 8) & 255;
-  const blue = value & 255;
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-}
-
-function formatHeadlineDate(dateString) {
-  try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Toronto",
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-    }).format(new Date(`${dateString}T12:00:00Z`));
-  } catch {
-    return dateString;
-  }
-}
-
-function formatRecord(record) {
-  if (!record) return "—";
-  return `${record.wins}-${record.losses}-${record.overtimeLosses}`;
-}
-
 export default async function PredictionsPage() {
   const today = getTorontoDateParts();
-  const yesterday = shiftDateParts(today, -1);
   const todayString = formatDateString(today);
-  const yesterdayString = formatDateString(yesterday);
-
-  const supabase = createServerClient();
-  const [
-    todayGamesRaw,
-    yesterdayGamesRaw,
-    standingsByTeam,
-    specialTeamsByTeam,
-    { data: players },
-  ] = await Promise.all([
-    fetchScheduleForDate(todayString),
-    fetchScheduleForDate(yesterdayString),
-    fetchStandingsMap(),
-    fetchSpecialTeamsMap(),
-    supabase
-      .from("players")
-      .select("team,position,off_rating,def_rating,overall_rating,xgf_pct,war_shooting,gp,save_pct,gsax,full_name"),
-  ]);
-
-  const playerAggregates = buildPlayerAggregates(players || [], TEAM_FULL);
-  const yesterdayTeams = new Set(
-    (yesterdayGamesRaw || [])
-      .flatMap((game) => {
-        const normalized = normalizeScheduleGame(game, TEAM_FULL);
-        return normalized ? [normalized.homeTeam.abbr, normalized.awayTeam.abbr] : [];
-      })
-  );
-
-  const normalizedGames = (todayGamesRaw || [])
-    .map((game) => normalizeScheduleGame(game, TEAM_FULL))
-    .filter(Boolean)
-    .filter((game) => !["FINAL", "OFF"].includes(game.gameState));
-
-  const predictions = normalizedGames
-    .map((game) => {
-      const homeTeam = buildTeamSeasonStatsFromLiveData(
-        game.homeTeam.abbr,
-        standingsByTeam,
-        specialTeamsByTeam,
-        playerAggregates
-      );
-      const awayTeam = buildTeamSeasonStatsFromLiveData(
-        game.awayTeam.abbr,
-        standingsByTeam,
-        specialTeamsByTeam,
-        playerAggregates
-      );
-
-      if (!homeTeam || !awayTeam) return null;
-
-      const context = buildGameContextFromTeams(homeTeam, awayTeam, playerAggregates);
-      context.homeBackToBack = yesterdayTeams.has(homeTeam.teamId);
-      context.awayBackToBack = yesterdayTeams.has(awayTeam.teamId);
-      context.homeRestDays = context.homeBackToBack ? 0 : 1;
-      context.awayRestDays = context.awayBackToBack ? 0 : 1;
-      context.homeTravelDisadvantage = false;
-      context.awayTravelDisadvantage = context.awayBackToBack;
-
-      const prediction = predictGame(context);
-      return {
-        game,
-        prediction,
-        homeTeam,
-        awayTeam,
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => new Date(a.game.startTimeUTC).getTime() - new Date(b.game.startTimeUTC).getTime());
+  const { predictions } = await buildPredictionsForDate(todayString);
 
   return (
     <div
@@ -396,9 +173,11 @@ export default async function PredictionsPage() {
                   const awayColor = TEAM_COLOR[game.awayTeam.abbr] || "#1f5b85";
                   const favoriteIsHome = prediction.homeWinPct >= prediction.awayWinPct;
                   return (
-                    <div
+                    <Link
                       key={`overview-${game.id}`}
+                      href={predictionHref(todayString, game.id)}
                       style={{
+                        textDecoration: "none",
                         borderRadius: 18,
                         border: "1px solid #1a2d40",
                         background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.18)} 0%, rgba(9,16,23,0.96) 36%, rgba(9,16,23,0.96) 64%, ${hexToRgba(homeColor, 0.18)} 100%)`,
@@ -406,6 +185,7 @@ export default async function PredictionsPage() {
                         display: "grid",
                         gap: 10,
                         minHeight: 148,
+                        transition: "transform 0.16s ease, border-color 0.16s ease",
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -451,7 +231,7 @@ export default async function PredictionsPage() {
                           </div>
                         </div>
                       ))}
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
@@ -477,10 +257,13 @@ export default async function PredictionsPage() {
               );
 
               return (
-                <section
+                <Link
                   key={game.id}
                   className="prediction-card"
+                  href={predictionHref(todayString, game.id)}
                   style={{
+                    display: "block",
+                    textDecoration: "none",
                     border: "1px solid #17283b",
                     borderRadius: 24,
                     background: "#091017",
@@ -752,7 +535,7 @@ export default async function PredictionsPage() {
                       </div>
                     </div>
                   </div>
-                </section>
+                </Link>
               );
             })}
             </div>
