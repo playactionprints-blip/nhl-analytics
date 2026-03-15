@@ -145,6 +145,37 @@ function confidenceMeta(band) {
   return { color: "#ff8d9b", bg: "rgba(255,111,123,0.14)" };
 }
 
+function hexToRgba(hex, alpha) {
+  if (!hex) return `rgba(255,255,255,${alpha})`;
+  const normalized = hex.replace("#", "");
+  const safe = normalized.length === 3
+    ? normalized.split("").map((char) => char + char).join("")
+    : normalized;
+  const value = Number.parseInt(safe, 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function formatHeadlineDate(dateString) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Toronto",
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    }).format(new Date(`${dateString}T12:00:00Z`));
+  } catch {
+    return dateString;
+  }
+}
+
+function formatRecord(record) {
+  if (!record) return "—";
+  return `${record.wins}-${record.losses}-${record.overtimeLosses}`;
+}
+
 export default async function PredictionsPage() {
   const today = getTorontoDateParts();
   const yesterday = shiftDateParts(today, -1);
@@ -211,6 +242,8 @@ export default async function PredictionsPage() {
       return {
         game,
         prediction,
+        homeTeam,
+        awayTeam,
       };
     })
     .filter(Boolean)
@@ -224,6 +257,41 @@ export default async function PredictionsPage() {
         padding: "36px 20px 64px",
       }}
     >
+      <style>{`
+        .predictions-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+          gap: 18px;
+        }
+        .prediction-card {
+          position: relative;
+          overflow: hidden;
+        }
+        .prediction-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 18px 42px rgba(0,0,0,0.28);
+        }
+        .slate-scroll {
+          display: grid;
+          grid-auto-flow: column;
+          grid-auto-columns: minmax(240px, 1fr);
+          gap: 12px;
+          overflow-x: auto;
+          padding-bottom: 4px;
+        }
+        .slate-scroll::-webkit-scrollbar {
+          height: 8px;
+        }
+        .slate-scroll::-webkit-scrollbar-thumb {
+          background: #183247;
+          border-radius: 999px;
+        }
+        @media (max-width: 900px) {
+          .predictions-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
       <div style={{ maxWidth: 1320, margin: "0 auto", display: "grid", gap: 18 }}>
         <section
           style={{
@@ -241,7 +309,7 @@ export default async function PredictionsPage() {
                   NHL Analytics · Game Model
                 </div>
                 <h1 style={{ margin: 0, color: "#eff8ff", fontSize: 46, lineHeight: 0.95, letterSpacing: "-0.04em", fontWeight: 900 }}>
-                  Tonight&apos;s NHL Predictions
+                  {formatHeadlineDate(todayString)} Predictions
                 </h1>
                 <p style={{ margin: 0, maxWidth: 860, color: "#86a5c0", fontSize: 18, lineHeight: 1.35 }}>
                   A first-pass game model combining team scoring environment, shot quality proxies, finishing, goaltending, special teams, and 10,000-game Monte Carlo simulation.
@@ -297,14 +365,100 @@ export default async function PredictionsPage() {
             No upcoming games were found for {todayString}.
           </section>
         ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
-              gap: 16,
-            }}
-          >
-            {predictions.map(({ game, prediction }) => {
+          <>
+            <section
+              style={{
+                border: "1px solid #17283b",
+                borderRadius: 24,
+                background: "#091017",
+                padding: 18,
+                display: "grid",
+                gap: 14,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                    Slate overview
+                  </div>
+                  <div style={{ fontSize: 26, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+                    Tonight&apos;s edge board
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: "#6f879f", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Win odds · xG · score distribution
+                </div>
+              </div>
+
+              <div className="slate-scroll">
+                {predictions.map(({ game, prediction }) => {
+                  const homeColor = TEAM_COLOR[game.homeTeam.abbr] || "#1f5b85";
+                  const awayColor = TEAM_COLOR[game.awayTeam.abbr] || "#1f5b85";
+                  const favoriteIsHome = prediction.homeWinPct >= prediction.awayWinPct;
+                  return (
+                    <div
+                      key={`overview-${game.id}`}
+                      style={{
+                        borderRadius: 18,
+                        border: "1px solid #1a2d40",
+                        background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.18)} 0%, rgba(9,16,23,0.96) 36%, rgba(9,16,23,0.96) 64%, ${hexToRgba(homeColor, 0.18)} 100%)`,
+                        padding: 14,
+                        display: "grid",
+                        gap: 10,
+                        minHeight: 148,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                        <div style={{ color: "#7bcfff", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                          {formatStartTime(game.startTimeUTC)}
+                        </div>
+                        <div style={{ color: "#617b96", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>
+                          {favoriteIsHome ? "home edge" : "away edge"}
+                        </div>
+                      </div>
+                      {[
+                        {
+                          abbr: game.awayTeam.abbr,
+                          team: game.awayTeam.name,
+                          pct: prediction.awayWinPct,
+                        },
+                        {
+                          abbr: game.homeTeam.abbr,
+                          team: game.homeTeam.name,
+                          pct: prediction.homeWinPct,
+                        },
+                      ].map((row) => (
+                        <div key={`${game.id}-${row.abbr}`} style={{ display: "grid", gridTemplateColumns: "28px minmax(0, 1fr) auto", gap: 10, alignItems: "center" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={logoUrl(row.abbr)} alt={row.abbr} width={28} height={28} style={{ width: 28, height: 28, objectFit: "contain" }} />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ color: "#e9f6ff", fontSize: 16, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {row.abbr}
+                            </div>
+                          </div>
+                          <div
+                            style={{
+                              padding: "5px 8px",
+                              borderRadius: 10,
+                              background: row.pct >= 0.5 ? "rgba(83, 177, 255, 0.2)" : "rgba(255, 111, 123, 0.18)",
+                              color: row.pct >= 0.5 ? "#9dd8ff" : "#ff9aa4",
+                              fontWeight: 900,
+                              fontSize: 18,
+                              lineHeight: 1,
+                            }}
+                          >
+                            {Math.round(row.pct * 100)}%
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="predictions-grid">
+            {predictions.map(({ game, prediction, homeTeam, awayTeam }) => {
               const homeMeta = confidenceMeta(
                 prediction.homeWinPct >= prediction.awayWinPct
                   ? prediction.modelDiagnostics.confidenceBand
@@ -315,112 +469,192 @@ export default async function PredictionsPage() {
                   ? prediction.modelDiagnostics.confidenceBand
                   : "low"
               );
+              const homeColor = TEAM_COLOR[game.homeTeam.abbr] || "#1f5b85";
+              const awayColor = TEAM_COLOR[game.awayTeam.abbr] || "#1f5b85";
+              const winGap = Math.abs(prediction.homeWinPct - prediction.awayWinPct);
+              const tieColor = confidenceMeta(
+                prediction.regulationTiePct > 0.24 ? "high" : prediction.regulationTiePct > 0.2 ? "medium" : "low"
+              );
 
               return (
                 <section
                   key={game.id}
+                  className="prediction-card"
                   style={{
                     border: "1px solid #17283b",
                     borderRadius: 24,
                     background: "#091017",
                     overflow: "hidden",
+                    transition: "transform 0.18s ease, box-shadow 0.18s ease",
                   }}
                 >
-                  <div style={{ padding: 18, borderBottom: "1px solid #132131", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                        {formatStartTime(game.startTimeUTC)}
+                  <div
+                    style={{
+                      padding: 18,
+                      borderBottom: "1px solid #132131",
+                      background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.22)} 0%, rgba(9,16,23,0.94) 38%, rgba(9,16,23,0.94) 62%, ${hexToRgba(homeColor, 0.22)} 100%)`,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 16 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: "#7db8e5", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                          {formatStartTime(game.startTimeUTC)} · {game.gameState}
+                        </div>
+                        <div style={{ fontSize: 22, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+                          {game.awayTeam.abbr} at {game.homeTeam.abbr}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 22, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
-                        {game.awayTeam.name} at {game.homeTeam.name}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 10, color: "#6f879f", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      {prediction.modelDiagnostics.simulationCount.toLocaleString()} sims
-                    </div>
-                  </div>
-
-                  <div style={{ padding: 18, display: "grid", gap: 16 }}>
-                    {[
-                      {
-                        side: "Away",
-                        abbr: game.awayTeam.abbr,
-                        team: prediction.awayTeam,
-                        winPct: prediction.awayWinPct,
-                        fairOdds: prediction.fairOdds.awayMoneyline,
-                        expectedGoals: prediction.expectedAwayGoals,
-                        expectedShots: prediction.expectedAwayShots,
-                        meta: awayMeta,
-                      },
-                      {
-                        side: "Home",
-                        abbr: game.homeTeam.abbr,
-                        team: prediction.homeTeam,
-                        winPct: prediction.homeWinPct,
-                        fairOdds: prediction.fairOdds.homeMoneyline,
-                        expectedGoals: prediction.expectedHomeGoals,
-                        expectedShots: prediction.expectedHomeShots,
-                        meta: homeMeta,
-                      },
-                    ].map((teamRow) => (
-                      <div
-                        key={teamRow.side}
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "minmax(0, 1fr) auto",
-                          gap: 12,
-                          alignItems: "center",
-                          padding: "14px 16px",
-                          borderRadius: 18,
-                          background: "#0d1620",
-                          border: "1px solid #182736",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={logoUrl(teamRow.abbr)}
-                            alt={teamRow.abbr}
-                            width={38}
-                            height={38}
-                            style={{ width: 38, height: 38, objectFit: "contain" }}
-                          />
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ color: "#eff8ff", fontSize: 18, fontWeight: 900 }}>{teamRow.team}</div>
-                            <div style={{ color: "#6f879f", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
-                              xG {teamRow.expectedGoals.toFixed(2)} · shots {teamRow.expectedShots.toFixed(1)} · fair {signedOdds(teamRow.fairOdds)}
-                            </div>
-                          </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 10, color: "#6f879f", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          model confidence
                         </div>
                         <div
                           style={{
-                            minWidth: 88,
-                            textAlign: "right",
-                            padding: "8px 10px",
-                            borderRadius: 14,
-                            background: teamRow.meta.bg,
-                            color: teamRow.meta.color,
+                            marginTop: 6,
+                            display: "inline-flex",
+                            padding: "7px 10px",
+                            borderRadius: 999,
+                            background: winGap > 0.16 ? "rgba(53,227,160,0.14)" : winGap > 0.08 ? "rgba(240,192,64,0.14)" : "rgba(255,111,123,0.14)",
+                            color: winGap > 0.16 ? "#35e3a0" : winGap > 0.08 ? "#f0c040" : "#ff8d9b",
+                            fontSize: 11,
+                            fontWeight: 800,
+                            letterSpacing: "0.08em",
+                            textTransform: "uppercase",
+                            fontFamily: "'DM Mono',monospace",
                           }}
                         >
-                          <div style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                            {teamRow.side} win
-                          </div>
-                          <div style={{ fontSize: 24, fontWeight: 900, lineHeight: 1 }}>{percent(teamRow.winPct)}</div>
+                          {prediction.modelDiagnostics.confidenceBand}
                         </div>
                       </div>
-                    ))}
+                    </div>
 
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)",
+                        gap: 16,
+                        alignItems: "center",
+                      }}
+                    >
+                      {[
+                        {
+                          side: "away",
+                          abbr: game.awayTeam.abbr,
+                          name: game.awayTeam.name,
+                          record: formatRecord(awayTeam.awayRecord),
+                          winPct: prediction.awayWinPct,
+                          expectedGoals: prediction.expectedAwayGoals,
+                          expectedShots: prediction.expectedAwayShots,
+                          fairOdds: prediction.fairOdds.awayMoneyline,
+                          meta: awayMeta,
+                          align: "left",
+                        },
+                        {
+                          side: "home",
+                          abbr: game.homeTeam.abbr,
+                          name: game.homeTeam.name,
+                          record: formatRecord(homeTeam.homeRecord),
+                          winPct: prediction.homeWinPct,
+                          expectedGoals: prediction.expectedHomeGoals,
+                          expectedShots: prediction.expectedHomeShots,
+                          fairOdds: prediction.fairOdds.homeMoneyline,
+                          meta: homeMeta,
+                          align: "right",
+                        },
+                      ].map((teamRow, index) => (
+                        <div
+                          key={`${game.id}-${teamRow.side}`}
+                          style={{
+                            display: "grid",
+                            gap: 12,
+                            justifyItems: teamRow.align === "right" ? "end" : "start",
+                            textAlign: teamRow.align,
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, flexDirection: teamRow.align === "right" ? "row-reverse" : "row" }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={logoUrl(teamRow.abbr)}
+                              alt={teamRow.abbr}
+                              width={56}
+                              height={56}
+                              style={{ width: 56, height: 56, objectFit: "contain" }}
+                            />
+                            <div>
+                              <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900, lineHeight: 0.95 }}>{Math.round(teamRow.winPct * 100)}%</div>
+                              <div style={{ color: teamRow.meta.color, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4 }}>
+                                {teamRow.side} win probability
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ color: "#ecf7ff", fontSize: 20, fontWeight: 900 }}>{teamRow.name}</div>
+                            <div style={{ color: "#7f9ab5", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
+                              {teamRow.align === "right" ? "home" : "away"} split {teamRow.record}
+                            </div>
+                          </div>
+                          <div style={{ width: "100%", maxWidth: 240, height: 10, borderRadius: 999, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                            <div
+                              style={{
+                                width: `${teamRow.winPct * 100}%`,
+                                height: "100%",
+                                background: `linear-gradient(90deg, ${hexToRgba(teamRow.align === "right" ? homeColor : awayColor, 0.7)} 0%, ${teamRow.align === "right" ? homeColor : awayColor} 100%)`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: 10,
+                          justifyItems: "center",
+                          alignContent: "center",
+                          minWidth: 120,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            background: tieColor.bg,
+                            color: tieColor.color,
+                            fontSize: 11,
+                            fontWeight: 800,
+                            letterSpacing: "0.08em",
+                            textTransform: "uppercase",
+                            fontFamily: "'DM Mono',monospace",
+                          }}
+                        >
+                          Tie {percent(prediction.regulationTiePct)}
+                        </div>
+                        <div style={{ color: "#89a8c1", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                          {prediction.modelDiagnostics.simulationCount.toLocaleString()} sims
+                        </div>
+                        <div style={{ color: "#eff8ff", fontSize: 16, fontWeight: 900 }}>
+                          xG {prediction.expectedAwayGoals.toFixed(2)} - {prediction.expectedHomeGoals.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: 18, display: "grid", gap: 16 }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
                         gap: 12,
                       }}
                     >
                       {[
-                        ["Regulation tie", percent(prediction.regulationTiePct)],
-                        ["Overtime rate", percent(prediction.overtimePct)],
-                        ["Confidence", prediction.modelDiagnostics.confidenceBand],
+                        ["Away fair", signedOdds(prediction.fairOdds.awayMoneyline)],
+                        ["Home fair", signedOdds(prediction.fairOdds.homeMoneyline)],
+                        ["Overtime", percent(prediction.overtimePct)],
+                        ["Win gap", percent(winGap)],
                       ].map(([label, value]) => (
                         <div
                           key={label}
@@ -435,6 +669,49 @@ export default async function PredictionsPage() {
                             {label}
                           </div>
                           <div style={{ color: "#eff8ff", fontSize: 20, fontWeight: 900, marginTop: 6 }}>{value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div
+                      style={{
+                        borderRadius: 18,
+                        background: "#0d1620",
+                        border: "1px solid #182736",
+                        padding: "14px 16px",
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                        gap: 10,
+                      }}
+                    >
+                      {[
+                        {
+                          label: game.awayTeam.abbr,
+                          color: awayColor,
+                          xg: prediction.expectedAwayGoals,
+                          shots: prediction.expectedAwayShots,
+                        },
+                        {
+                          label: game.homeTeam.abbr,
+                          color: homeColor,
+                          xg: prediction.expectedHomeGoals,
+                          shots: prediction.expectedHomeShots,
+                        },
+                      ].map((row) => (
+                        <div key={`${game.id}-${row.label}-metrics`} style={{ borderRadius: 14, background: hexToRgba(row.color, 0.1), border: `1px solid ${hexToRgba(row.color, 0.28)}`, padding: "12px 14px" }}>
+                          <div style={{ color: row.color, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                            {row.label} attack outlook
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 10 }}>
+                            <div>
+                              <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>Expected goals</div>
+                              <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{row.xg.toFixed(2)}</div>
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                              <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>Expected shots</div>
+                              <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{row.shots.toFixed(1)}</div>
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -478,7 +755,8 @@ export default async function PredictionsPage() {
                 </section>
               );
             })}
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>
