@@ -471,16 +471,21 @@ def engineer_features(df, apply_noise_filter=True):
         (df['prior_event_type'].isin(prior_shot_types))
     ).astype(int)
 
-    prior_dx = pd.Series(x_norm) - pd.Series(prior_x_norm)
-    prior_dy = y - df['prior_y_normalized']
+    x_curr = pd.to_numeric(df['x_normalized'], errors='coerce')
+    y_curr = pd.to_numeric(df['y_coord'], errors='coerce')
+    prior_x_curr = pd.to_numeric(df['prior_x_normalized'], errors='coerce')
+    prior_y_curr = pd.to_numeric(df['prior_y_normalized'], errors='coerce')
+
+    prior_dx = x_curr - prior_x_curr
+    prior_dy = y_curr - prior_y_curr
     df['pre_shot_lateral_movement'] = prior_dy.abs().fillna(0.0)
     df['pre_shot_north_south_movement'] = prior_dx.abs().fillna(0.0)
     df['pre_shot_distance'] = np.sqrt(prior_dx.fillna(0.0) ** 2 + prior_dy.fillna(0.0) ** 2)
     secs = df['seconds_since_prior'].clip(lower=0.1)
     df['pre_shot_speed'] = (df['pre_shot_distance'] / secs).clip(upper=120.0)
     prior_angle = np.degrees(np.arctan2(
-        df['prior_y_normalized'].abs(),
-        (pd.Series(prior_x_norm) - 89).abs().clip(lower=0.1).fillna(0.1).values
+        prior_y_curr.abs(),
+        (prior_x_curr - 89).abs().clip(lower=0.1).fillna(0.1)
     ))
     df['rebound_angle_change'] = (df['angle'] - prior_angle).abs().fillna(0.0)
     df.loc[df['is_rebound'] == 0, 'rebound_angle_change'] = 0.0
