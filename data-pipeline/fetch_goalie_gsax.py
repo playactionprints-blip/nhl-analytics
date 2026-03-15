@@ -198,6 +198,8 @@ def aggregate_goalie_shots(game_ids, season_key, models):
                     'period': period,
                     'time_seconds': abs_t,
                     'goalie_id': int(goalie_id),
+                    'shooter_team': shooter_team,
+                    'rink_team': home_abbr,
                     'is_home': is_home,
                     'x_coord': float(xc),
                     'y_coord': float(yc),

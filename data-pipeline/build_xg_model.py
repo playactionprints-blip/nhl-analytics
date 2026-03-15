@@ -437,9 +437,9 @@ def engineer_features(df, apply_noise_filter=True):
              np.where(sign == -1, -x, np.abs(x)))
     df['x_normalized'] = x_norm
     y = df['y_coord'].astype(float)
-    prior_x = pd.to_numeric(df.get('prior_event_x_coord'), errors='coerce')
-    prior_y = pd.to_numeric(df.get('prior_event_y_coord'), errors='coerce')
-    prior_x_values = prior_x.to_numpy() if isinstance(prior_x, pd.Series) else np.full(len(df), np.nan)
+    prior_x = _numeric_series(df, 'prior_event_x_coord')
+    prior_y = _numeric_series(df, 'prior_event_y_coord')
+    prior_x_values = prior_x.to_numpy()
     prior_x_norm = np.where(sign ==  1,  prior_x_values,
                    np.where(sign == -1, -prior_x_values, np.abs(prior_x_values)))
     df['prior_x_normalized'] = prior_x_norm
@@ -448,8 +448,8 @@ def engineer_features(df, apply_noise_filter=True):
     rink_corr = _compute_rink_corrections(df)
     if not rink_corr.empty:
         df = df.merge(rink_corr, on='rink_team', how='left')
-    df['rink_x_shift'] = pd.to_numeric(df.get('rink_x_shift'), errors='coerce').fillna(0.0)
-    df['rink_y_scale'] = pd.to_numeric(df.get('rink_y_scale'), errors='coerce').fillna(1.0)
+    df['rink_x_shift'] = _numeric_series(df, 'rink_x_shift', default=0.0).fillna(0.0)
+    df['rink_y_scale'] = _numeric_series(df, 'rink_y_scale', default=1.0).fillna(1.0)
 
     x_corr = df['x_normalized'] - df['rink_x_shift']
     y_corr = y * df['rink_y_scale']
@@ -530,7 +530,7 @@ def engineer_features(df, apply_noise_filter=True):
     df['game_strength_encoded'] = pd.Categorical(
         df['game_strength'], categories=STRENGTH_ORDER
     ).codes.clip(0)
-    df['is_empty_net'] = pd.to_numeric(df.get('is_empty_net'), errors='coerce').fillna(0).astype(int)
+    df['is_empty_net'] = _numeric_series(df, 'is_empty_net', default=0.0).fillna(0).astype(int)
 
     # --- Strength category bucket for per-model split ---
     df['strength_bucket'] = df['game_strength'].map(_strength_category)
@@ -580,6 +580,13 @@ def _compute_rink_corrections(df):
     raw_y_scale = league_y / grouped['median_abs_y'].clip(lower=1.0)
     grouped['rink_y_scale'] = (1.0 + ((raw_y_scale - 1.0) * shrink)).clip(0.92, 1.08)
     return grouped[['rink_team', 'rink_x_shift', 'rink_y_scale']]
+
+
+def _numeric_series(df, column, default=np.nan):
+    """Return a numeric Series aligned to df.index even if the column is missing."""
+    if column in df.columns:
+        return pd.to_numeric(df[column], errors='coerce')
+    return pd.Series(default, index=df.index, dtype='float64')
 
 
 FEATURE_COLS = [
