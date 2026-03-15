@@ -4,6 +4,7 @@ import { buildGameContextFromTeams, buildPlayerAggregates, buildTeamSeasonStatsF
 import { estimateExpectedScoring } from "@/src/models/expectedGoalsModel";
 import { predictGame } from "@/src/models/predictGame";
 import { buildTeamRatings } from "@/src/models/teamRatings";
+import { americanOddsToImpliedProbability, removeOverroundFromMoneylines } from "@/src/utils/odds";
 
 export function getTorontoDateParts(date = new Date()) {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -99,6 +100,84 @@ export function hexToRgba(hex, alpha) {
 
 export function predictionHref(dateString, gameId) {
   return `/predictions/${dateString}/${gameId}`;
+}
+
+function median(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
+
+function normalizeTeamNameForOdds(name) {
+  return String(name || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[.']/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+async function fetchMarketOddsMap() {
+  const apiKey = process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY;
+  if (!apiKey) return {};
+
+  try {
+    const url = `https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds/?apiKey=${apiKey}&regions=us&markets=h2h&oddsFormat=american&dateFormat=iso`;
+    const res = await fetch(url, { next: { revalidate: 900 } });
+    if (!res.ok) return {};
+
+    const data = await res.json();
+    const oddsMap = {};
+
+    for (const event of data || []) {
+      const homeName = normalizeTeamNameForOdds(event.home_team);
+      const awayName = normalizeTeamNameForOdds(event.away_team);
+      const homePrices = [];
+      const awayPrices = [];
+      const books = [];
+
+      for (const bookmaker of event.bookmakers || []) {
+        const market = (bookmaker.markets || []).find((item) => item.key === "h2h");
+        if (!market) continue;
+        const homeOutcome = (market.outcomes || []).find(
+          (item) => normalizeTeamNameForOdds(item.name) === homeName
+        );
+        const awayOutcome = (market.outcomes || []).find(
+          (item) => normalizeTeamNameForOdds(item.name) === awayName
+        );
+        if (
+          typeof homeOutcome?.price === "number" &&
+          typeof awayOutcome?.price === "number"
+        ) {
+          homePrices.push(homeOutcome.price);
+          awayPrices.push(awayOutcome.price);
+          books.push(bookmaker.title);
+        }
+      }
+
+      const homeMoneyline = median(homePrices);
+      const awayMoneyline = median(awayPrices);
+      if (homeMoneyline == null || awayMoneyline == null) continue;
+
+      const devigged = removeOverroundFromMoneylines(homeMoneyline, awayMoneyline);
+      oddsMap[`${awayName}__${homeName}`] = {
+        homeMoneyline: Math.round(homeMoneyline),
+        awayMoneyline: Math.round(awayMoneyline),
+        homeProbability: devigged.homeProbability,
+        awayProbability: devigged.awayProbability,
+        sourceCount: books.length,
+        sourceLabel: books.length > 0 ? `Median of ${books.length} books` : "Market median",
+      };
+    }
+
+    return oddsMap;
+  } catch {
+    return {};
+  }
 }
 
 async function fetchScheduleForDate(dateString) {
@@ -208,6 +287,47 @@ export function buildTeamLeaders(players, teamId, teamName) {
   };
 }
 
+function buildProjectedGoalie(teamLeaders, teamStats, sideLabel, isBackToBack) {
+  const [starter, backup] = teamLeaders.goalies || [];
+  const projected = starter || backup || null;
+  if (!projected) {
+    return {
+      sideLabel,
+      confidence: "low",
+      projectionLabel: "No goalie projection available",
+      starterName: `${teamStats.teamName} starter`,
+      alternateName: null,
+      savePct: null,
+      gsax: null,
+      notes: ["Based on team aggregate only"],
+    };
+  }
+
+  const gpGap = (starter?.gp || 0) - (backup?.gp || 0);
+  const confidence = backup
+    ? gpGap >= 10
+      ? "high"
+      : gpGap >= 4
+        ? "medium"
+        : "low"
+    : "medium";
+
+  const notes = [];
+  if (isBackToBack) notes.push("Back-to-back spot may affect starter choice");
+  if (backup?.full_name) notes.push(`Alternate: ${backup.full_name}`);
+
+  return {
+    sideLabel,
+    confidence,
+    projectionLabel: confidence === "high" ? "Projected starter" : "Likely starter",
+    starterName: projected.full_name || `${teamStats.teamName} starter`,
+    alternateName: backup?.full_name || null,
+    savePct: typeof projected.save_pct === "number" ? projected.save_pct : null,
+    gsax: typeof projected.gsax === "number" ? projected.gsax : null,
+    notes,
+  };
+}
+
 export async function buildPredictionsForDate(dateString) {
   const dateParts = parseDateString(dateString);
   const yesterdayString = formatDateString(shiftDateParts(dateParts, -1));
@@ -218,12 +338,14 @@ export async function buildPredictionsForDate(dateString) {
     yesterdayGamesRaw,
     standingsByTeam,
     specialTeamsByTeam,
+    marketOddsByGame,
     { data: players },
   ] = await Promise.all([
     fetchScheduleForDate(dateString),
     fetchScheduleForDate(yesterdayString),
     fetchStandingsMap(),
     fetchSpecialTeamsMap(),
+    fetchMarketOddsMap(),
     supabase
       .from("players")
       .select("team,position,off_rating,def_rating,overall_rating,xgf_pct,war_shooting,gp,save_pct,gsax,full_name"),
@@ -273,6 +395,12 @@ export async function buildPredictionsForDate(dateString) {
       const awayRatings = buildTeamRatings(awayTeam, "away", context);
       const scoring = estimateExpectedScoring(homeRatings, awayRatings, context);
       const prediction = predictGame(context);
+      const homeLeaders = buildTeamLeaders(safePlayers, homeTeam.teamId, homeTeam.teamName);
+      const awayLeaders = buildTeamLeaders(safePlayers, awayTeam.teamId, awayTeam.teamName);
+      const oddsKey = `${normalizeTeamNameForOdds(game.awayTeam.name)}__${normalizeTeamNameForOdds(game.homeTeam.name)}`;
+      const market = marketOddsByGame[oddsKey] || null;
+      const projectedHomeGoalie = buildProjectedGoalie(homeLeaders, homeTeam, "home", context.homeBackToBack);
+      const projectedAwayGoalie = buildProjectedGoalie(awayLeaders, awayTeam, "away", context.awayBackToBack);
 
       return {
         game,
@@ -283,8 +411,19 @@ export async function buildPredictionsForDate(dateString) {
         awayTeam,
         homeRatings,
         awayRatings,
-        homeLeaders: buildTeamLeaders(safePlayers, homeTeam.teamId, homeTeam.teamName),
-        awayLeaders: buildTeamLeaders(safePlayers, awayTeam.teamId, awayTeam.teamName),
+        homeLeaders,
+        awayLeaders,
+        projectedHomeGoalie,
+        projectedAwayGoalie,
+        market: market
+          ? {
+              ...market,
+              homeEdge: prediction.homeWinPct - market.homeProbability,
+              awayEdge: prediction.awayWinPct - market.awayProbability,
+              homeRawProbability: americanOddsToImpliedProbability(market.homeMoneyline),
+              awayRawProbability: americanOddsToImpliedProbability(market.awayMoneyline),
+            }
+          : null,
       };
     })
     .filter(Boolean)

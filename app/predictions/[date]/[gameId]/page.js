@@ -140,6 +140,9 @@ export default async function GamePredictionDetailPage({ params }) {
     awayRatings,
     homeLeaders,
     awayLeaders,
+    projectedHomeGoalie,
+    projectedAwayGoalie,
+    market,
   } = matchup;
 
   const awayColor = TEAM_COLOR[game.awayTeam.abbr] || "#4d82af";
@@ -166,9 +169,10 @@ export default async function GamePredictionDetailPage({ params }) {
       recentLabel: "Last 10",
       recentValue: `${Math.round((awayTeam.recent10.pointsPct || 0.5) * 100)} pts%`,
       restValue: context.awayBackToBack ? "Back-to-back" : `${context.awayRestDays} day rest`,
-      goalieName: context.awayStartingGoalie?.goalieName || `${game.awayTeam.name} starter`,
-      goalieSv: formatGoalieValue(context.awayStartingGoalie?.savePct, 3),
-      goalieGsax: formatGoalieValue((context.awayStartingGoalie?.gsaxPer60 || 0) * 60, 2),
+      goalieName: projectedAwayGoalie.starterName,
+      goalieSv: formatGoalieValue(projectedAwayGoalie.savePct, 3),
+      goalieGsax: formatGoalieValue(projectedAwayGoalie.gsax, 2),
+      goalieProjectionLabel: projectedAwayGoalie.projectionLabel,
     },
     {
       team: game.homeTeam.abbr,
@@ -179,9 +183,10 @@ export default async function GamePredictionDetailPage({ params }) {
       recentLabel: "Last 10",
       recentValue: `${Math.round((homeTeam.recent10.pointsPct || 0.5) * 100)} pts%`,
       restValue: context.homeBackToBack ? "Back-to-back" : `${context.homeRestDays} day rest`,
-      goalieName: context.homeStartingGoalie?.goalieName || `${game.homeTeam.name} starter`,
-      goalieSv: formatGoalieValue(context.homeStartingGoalie?.savePct, 3),
-      goalieGsax: formatGoalieValue((context.homeStartingGoalie?.gsaxPer60 || 0) * 60, 2),
+      goalieName: projectedHomeGoalie.starterName,
+      goalieSv: formatGoalieValue(projectedHomeGoalie.savePct, 3),
+      goalieGsax: formatGoalieValue(projectedHomeGoalie.gsax, 2),
+      goalieProjectionLabel: projectedHomeGoalie.projectionLabel,
     },
   ];
 
@@ -433,6 +438,174 @@ export default async function GamePredictionDetailPage({ params }) {
                 </Link>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="dual-grid">
+          <div
+            style={{
+              border: "1px solid #17283b",
+              borderRadius: 24,
+              background: "#091017",
+              padding: 20,
+              display: "grid",
+              gap: 16,
+            }}
+          >
+            <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              Projected goalies
+            </div>
+            <div className="dual-grid">
+              {[
+                { team: game.awayTeam, color: awayColor, goalie: projectedAwayGoalie },
+                { team: game.homeTeam, color: homeColor, goalie: projectedHomeGoalie },
+              ].map((row) => (
+                <div
+                  key={`${row.team.abbr}-goalie`}
+                  style={{
+                    borderRadius: 20,
+                    border: `1px solid ${hexToRgba(row.color, 0.28)}`,
+                    background: hexToRgba(row.color, 0.1),
+                    padding: "16px 18px",
+                    display: "grid",
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                    <div style={{ color: row.color, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                      {row.team.abbr} {row.goalie.projectionLabel}
+                    </div>
+                    <div style={teamPillStyle(row.color)}>
+                      {row.goalie.confidence} confidence
+                    </div>
+                  </div>
+                  <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900 }}>
+                    {row.goalie.starterName}
+                  </div>
+                  <div className="dual-grid" style={{ gap: 10 }}>
+                    {[
+                      ["Save %", formatGoalieValue(row.goalie.savePct, 3)],
+                      ["GSAx", formatGoalieValue(row.goalie.gsax, 2)],
+                    ].map(([label, value]) => (
+                      <div key={`${row.team.abbr}-${label}`} style={{ borderRadius: 14, background: "#111c28", border: "1px solid #1c3044", padding: "10px 12px" }}>
+                        <div style={{ color: "#738da5", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          {label}
+                        </div>
+                        <div style={{ color: "#eaf6ff", fontSize: 20, fontWeight: 900, marginTop: 6 }}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {row.goalie.notes?.length ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {row.goalie.notes.map((note) => (
+                        <div key={`${row.team.abbr}-${note}`} style={{ color: "#8ea9c2", fontSize: 13 }}>
+                          {note}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid #17283b",
+              borderRadius: 24,
+              background: "#091017",
+              padding: 20,
+              display: "grid",
+              gap: 16,
+            }}
+          >
+            <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              Market odds comparison
+            </div>
+            {market ? (
+              <>
+                <div style={{ color: "#9fb7cc", fontSize: 14, lineHeight: 1.5 }}>
+                  Using <span style={{ color: "#eff8ff", fontWeight: 800 }}>{market.sourceLabel}</span> for the current consensus moneyline.
+                </div>
+                <div className="dual-grid">
+                  {[
+                    {
+                      label: game.awayTeam.abbr,
+                      color: awayColor,
+                      marketOdds: market.awayMoneyline,
+                      marketProb: market.awayProbability,
+                      fairOdds: prediction.fairOdds.awayMoneyline,
+                      modelProb: prediction.awayWinPct,
+                      edge: market.awayEdge,
+                    },
+                    {
+                      label: game.homeTeam.abbr,
+                      color: homeColor,
+                      marketOdds: market.homeMoneyline,
+                      marketProb: market.homeProbability,
+                      fairOdds: prediction.fairOdds.homeMoneyline,
+                      modelProb: prediction.homeWinPct,
+                      edge: market.homeEdge,
+                    },
+                  ].map((row) => (
+                    <div
+                      key={`${row.label}-market`}
+                      style={{
+                        borderRadius: 18,
+                        border: `1px solid ${hexToRgba(row.color, 0.3)}`,
+                        background: hexToRgba(row.color, 0.1),
+                        padding: "16px 18px",
+                        display: "grid",
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ color: row.color, fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        {row.label} market vs model
+                      </div>
+                      <div className="dual-grid" style={{ gap: 10 }}>
+                        {[
+                          ["Market line", signedOdds(row.marketOdds)],
+                          ["Fair line", signedOdds(row.fairOdds)],
+                          ["Market win %", formatPct(row.marketProb)],
+                          ["Model win %", formatPct(row.modelProb)],
+                        ].map(([label, value]) => (
+                          <div key={`${row.label}-${label}`} style={{ borderRadius: 14, background: "#111c28", border: "1px solid #1c3044", padding: "10px 12px" }}>
+                            <div style={{ color: "#738da5", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                              {label}
+                            </div>
+                            <div style={{ color: "#eaf6ff", fontSize: 20, fontWeight: 900, marginTop: 6 }}>{value}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div
+                        style={{
+                          borderRadius: 14,
+                          padding: "10px 12px",
+                          background: row.edge >= 0 ? "rgba(53,227,160,0.14)" : "rgba(255,111,123,0.14)",
+                          color: row.edge >= 0 ? "#35e3a0" : "#ff8d9b",
+                          fontWeight: 800,
+                        }}
+                      >
+                        Model edge {row.edge >= 0 ? "+" : ""}{(row.edge * 100).toFixed(1)} pts
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div
+                style={{
+                  borderRadius: 18,
+                  border: "1px solid #1b2c3f",
+                  background: "#0d1620",
+                  padding: "16px 18px",
+                  color: "#8ea8c1",
+                  lineHeight: 1.5,
+                }}
+              >
+                No live market odds are available yet. Add `THE_ODDS_API_KEY` or `ODDS_API_KEY` to enable consensus moneyline comparison on this page.
+              </div>
+            )}
           </div>
         </section>
 
