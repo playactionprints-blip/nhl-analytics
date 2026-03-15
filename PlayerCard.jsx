@@ -335,10 +335,10 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
   ];
   const barsRight = [
     { label: "Goals", value: percentiles["Goals/60"], color: "#ffb51f" },
-    { label: "1st Assists", value: percentiles["Pts/60"], color: "#ffb11a" },
+    { label: "Points", value: percentiles["Pts/60"], color: "#ffb11a" },
     { label: "Penalties", value: percentiles["Penalties"], color: "#ffb31c" },
-    { label: "Competition", value: percentiles["Competition"], color: "#f6a91c" },
-    { label: "Teammates", value: percentiles["Teammates"], color: "#ffb927" },
+    { label: "Competition*", value: percentiles["Competition"], color: "#f6a91c" },
+    { label: "Teammates*", value: percentiles["Teammates"], color: "#ffb927" },
   ];
   const summaryBars = [
     { label: "Offence", value: percentiles["Off Rating"] ?? player.off_rating, color: "linear-gradient(90deg,#24566d 0%,#16c6ff 100%)", textColor: "#19c2ff" },
@@ -463,6 +463,9 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
             {barsRight.map((item) => <RankedBar key={item.label} {...item} valueColor="#f1efe9" />)}
           </div>
         </div>
+        <div style={{ fontSize: 11, color: "#727880", marginTop: 12, fontFamily: "'DM Mono',monospace" }}>
+          * `Competition` and `Teammates` are still first-pass deployment context metrics and are less stable than WAR or EV impact.
+        </div>
       </div>
 
       <div style={{ paddingTop: 20, paddingBottom: 20, borderBottom: "1px solid #1b222a" }}>
@@ -492,9 +495,9 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
           color="#19c2ff"
         />
         <SummaryMetricTile
-          label="Defensive ±"
+          label="Defensive ±*"
           value={formatSigned(player.rapm_def, 2)}
-          subtitle={`${Math.round(percentiles["RAPM Def"] ?? player.rapm_def_pct ?? 0)}th %ile`}
+          subtitle={`provisional | ${Math.round(percentiles["RAPM Def"] ?? player.rapm_def_pct ?? 0)}th %ile`}
           color="#8e9398"
         />
         <SummaryMetricTile

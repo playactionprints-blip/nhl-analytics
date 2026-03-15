@@ -92,6 +92,10 @@ CARD_SEASON_WEIGHTS = {
 }
 MIN_TOI_MINUTES = 200
 MAX_RAPM = 5.0
+QOT_QOC_TOI_SHRINK = 600.0
+QOT_QOC_MAX_ABS = 2.5
+QOT_IMPACT_OFF_WEIGHT = 0.7
+QOT_IMPACT_DEF_WEIGHT = 0.3
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
@@ -251,7 +255,7 @@ def filter_qualified_results(results_df, min_toi_minutes=MIN_TOI_MINUTES, max_ra
 
 def compute_context_metrics(stints_df, results_df):
     """
-    First-pass QoT/QoC from season RAPM.
+    First-pass QoT/QoC from season RAPM, shrunk toward neutral context.
     QoT = TOI-weighted average teammate impact.
     QoC = TOI-weighted average opponent impact.
     """
@@ -259,7 +263,11 @@ def compute_context_metrics(stints_df, results_df):
         return pd.DataFrame(columns=['player_id', 'qot_impact', 'qoc_impact', 'qot_impact_pct', 'qoc_impact_pct'])
 
     impact_map = {
-        int(row.player_id): float(row.rapm_off) + float(row.rapm_def)
+        int(row.player_id): (float(row.rapm_off) * QOT_IMPACT_OFF_WEIGHT) + (float(row.rapm_def) * QOT_IMPACT_DEF_WEIGHT)
+        for row in results_df.itertuples()
+    }
+    toi_map = {
+        int(row.player_id): float(getattr(row, 'toi_5v5_total', 0.0) or 0.0)
         for row in results_df.itertuples()
     }
     qot_num = defaultdict(float)
@@ -306,8 +314,12 @@ def compute_context_metrics(stints_df, results_df):
 
     rows = []
     for pid in results_df['player_id'].tolist():
-        qot = qot_num[pid] / qot_den[pid] if qot_den[pid] > 0 else None
-        qoc = qoc_num[pid] / qoc_den[pid] if qoc_den[pid] > 0 else None
+        qot_raw = qot_num[pid] / qot_den[pid] if qot_den[pid] > 0 else None
+        qoc_raw = qoc_num[pid] / qoc_den[pid] if qoc_den[pid] > 0 else None
+        toi_minutes = toi_map.get(int(pid), 0.0)
+        shrink = toi_minutes / (toi_minutes + QOT_QOC_TOI_SHRINK) if toi_minutes > 0 else 0.0
+        qot = max(-QOT_QOC_MAX_ABS, min(QOT_QOC_MAX_ABS, qot_raw * shrink)) if qot_raw is not None else None
+        qoc = max(-QOT_QOC_MAX_ABS, min(QOT_QOC_MAX_ABS, qoc_raw * shrink)) if qoc_raw is not None else None
         rows.append({
             'player_id': int(pid),
             'qot_impact': qot,
@@ -354,6 +366,9 @@ def project_season_results(season_results):
             den = 0.0
             for season_key, row in season_map.items():
                 weight = CARD_SEASON_WEIGHTS.get(season_key, 0.0)
+                if metric in ('qot_impact', 'qoc_impact'):
+                    reliability = min(1.0, float(getattr(row, 'toi_5v5_total', 0.0) or 0.0) / 500.0)
+                    weight *= reliability
                 value = getattr(row, metric, None)
                 if value is None or pd.isna(value):
                     continue
@@ -433,6 +448,7 @@ def _merge_stints(stints):
         if (s['home_players'] == prev['home_players'] and
                 s['away_players'] == prev['away_players'] and
                 s['period'] == prev['period'] and
+                s.get('home_score_diff') == prev.get('home_score_diff') and
                 s['start_sec'] <= prev['end_sec'] + 1):
             prev['end_sec']          = max(prev['end_sec'], s['end_sec'])
             prev['duration_seconds'] = prev['end_sec'] - prev['start_sec']
@@ -519,12 +535,12 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
     for p in range(1, 4):
         change_pts.add((p - 1) * 1200)
         change_pts.add(p * 1200)
-    change_pts = sorted(change_pts)
 
     # xG events from PBP
     # xC/yC used when available; fall back to distance parsed from Description
     XG_TYPES = {'SHOT', 'GOAL', 'MISS'}
     xg_events = []
+    goal_events = []
     for _, ev in pbp_df.iterrows():
         if str(ev.get('Event', '')).upper() not in XG_TYPES:
             continue
@@ -553,6 +569,12 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
 
         is_home = (str(ev.get('Ev_Team', '')).upper().strip() == home_team)
         xg_events.append((t, xg, is_home))
+        if str(ev.get('Event', '')).upper() == 'GOAL':
+            goal_events.append((t, is_home))
+
+    for goal_time, _ in goal_events:
+        change_pts.add(goal_time)
+    change_pts = sorted(change_pts)
 
     # Build micro-stints from consecutive change-point intervals
     raw_stints = []
@@ -583,6 +605,8 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
 
         h_xg = sum(xg for t, xg, ih in xg_events if t_start <= t < t_end and ih)
         a_xg = sum(xg for t, xg, ih in xg_events if t_start <= t < t_end and not ih)
+        home_goals_before = sum(1 for t, ih in goal_events if t < t_start and ih)
+        away_goals_before = sum(1 for t, ih in goal_events if t < t_start and not ih)
 
         raw_stints.append({
             'game_id':          full_game_id,
@@ -594,6 +618,7 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
             'away_players':     '|'.join(str(p) for p in sorted(away_sk)),
             'home_xg':          round(h_xg, 4),
             'away_xg':          round(a_xg, 4),
+            'home_score_diff':  int(home_goals_before - away_goals_before),
         })
 
     return _merge_stints(raw_stints)
@@ -601,7 +626,7 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
 
 STINT_COLS = [
     'game_id', 'period', 'start_sec', 'end_sec', 'duration_seconds',
-    'home_players', 'away_players', 'home_xg', 'away_xg',
+    'home_players', 'away_players', 'home_xg', 'away_xg', 'home_score_diff',
 ]
 
 
@@ -734,6 +759,8 @@ def build_rapm(stints_df):
     all_pids  = sorted(all_pids)
     pid_idx   = {p: i for i, p in enumerate(all_pids)}
     n_players = len(all_pids)
+    context_features = ['is_home_attack', 'score_state', 'score_state_abs', 'period_2', 'period_3']
+    n_context = len(context_features)
 
     # Vectorised per-player 5v5 TOI (seconds) — used later for min-TOI filter
     def _explode_toi(col):
@@ -749,7 +776,7 @@ def build_rapm(stints_df):
     player_toi_sec = toi_home.add(toi_away, fill_value=0)
 
     has_season_weight = 'season_weight' in stints_df.columns
-    print(f"Building RAPM matrix: {n_stints*2:,} rows × {n_players * 2} features"
+    print(f"Building RAPM matrix: {n_stints*2:,} rows × {n_players * 2 + n_context} features"
           + (" (season-weighted)" if has_season_weight else ""))
 
     r_idx, c_idx, vals = [], [], []
@@ -757,6 +784,7 @@ def build_rapm(stints_df):
     weights = np.zeros(n_stints * 2)
     off_offset = 0
     def_offset = n_players
+    ctx_offset = n_players * 2
 
     for i, (_, stint) in enumerate(stints_df.iterrows()):
         dur    = float(stint['duration_seconds'])
@@ -772,6 +800,9 @@ def build_rapm(stints_df):
 
         home_row = i * 2
         away_row = home_row + 1
+        home_score_state = max(-2.0, min(2.0, float(stint.get('home_score_diff', 0) or 0)))
+        away_score_state = -home_score_state
+        period = int(stint.get('period', 0) or 0)
 
         for pid in h_pids:
             if pid in pid_idx:
@@ -784,12 +815,30 @@ def build_rapm(stints_df):
                 r_idx.append(away_row); c_idx.append(off_offset + col); vals.append(1.0)
                 r_idx.append(home_row); c_idx.append(def_offset + col); vals.append(1.0)
 
+        for row_idx, is_home_attack, score_state in (
+            (home_row, 1.0, home_score_state),
+            (away_row, 0.0, away_score_state),
+        ):
+            ctx_vals = [
+                is_home_attack,
+                score_state,
+                abs(score_state),
+                1.0 if period == 2 else 0.0,
+                1.0 if period == 3 else 0.0,
+            ]
+            for ctx_col, ctx_val in enumerate(ctx_vals):
+                if ctx_val == 0.0:
+                    continue
+                r_idx.append(row_idx)
+                c_idx.append(ctx_offset + ctx_col)
+                vals.append(ctx_val)
+
         y[home_row] = hxg
         y[away_row] = axg
         weights[home_row] = w
         weights[away_row] = w
 
-    X = sparse.csr_matrix((vals, (r_idx, c_idx)), shape=(n_stints * 2, n_players * 2))
+    X = sparse.csr_matrix((vals, (r_idx, c_idx)), shape=(n_stints * 2, n_players * 2 + n_context))
 
     alphas = [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
 

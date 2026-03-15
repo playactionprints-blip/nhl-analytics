@@ -110,6 +110,10 @@ def safe(v):
     except: return None
 
 
+def fmt_metric(value):
+    return f"{value:.2f}" if value is not None and not pd.isna(value) else "  — "
+
+
 # ── Build per-player weighted stats ──────────────────────────────────────────
 seasons_by_player = defaultdict(dict)
 for row in ps_rows:
@@ -417,7 +421,7 @@ def compute_season_war_component(row, position):
     def_share = DEF_RAPM_SHARE_D if is_defense else DEF_RAPM_SHARE_FWD
     def_replacement = EV_DEF_REPLACEMENT_D if is_defense else EV_DEF_REPLACEMENT_FWD
 
-    ev_off = ev_def = pp_war = pk_war = shooting_war = penalties_war = 0.0
+    ev_off = ev_def = pp_war = pk_war = shooting_war = penalties_war = None
     if rapm_off_v is not None and toi_5v5 and toi_5v5 > 0:
         rapm_off_xg60 = rapm_off_v * RAPM_OFF_PLAYER_SHARE
         ev_off = (rapm_off_xg60 - EV_OFF_REPLACEMENT) * (toi_5v5 / 60.0) / GOALS_PER_WIN
@@ -445,15 +449,15 @@ def compute_season_war_component(row, position):
     if pmd or pmt:
         penalties_war = ((pmd - pmt) * NET_XG_PER_PENALTY_MIN) / GOALS_PER_WIN
 
-    total_war = ev_off + ev_def + pp_war + pk_war + shooting_war + penalties_war
+    total_war = sum(v for v in (ev_off, ev_def, pp_war, pk_war, shooting_war, penalties_war) if v is not None)
     return {
-        'war_ev_off': round(ev_off, 2),
-        'war_ev_def': round(ev_def, 2),
-        'war_pp': round(pp_war, 2),
-        'war_pk': round(pk_war, 2),
-        'war_shooting': round(shooting_war, 2),
-        'war_penalties': round(penalties_war, 2),
-        'war_total': round(total_war, 2),
+        'war_ev_off': round(ev_off, 2) if ev_off is not None else None,
+        'war_ev_def': round(ev_def, 2) if ev_def is not None else None,
+        'war_pp': round(pp_war, 2) if pp_war is not None else None,
+        'war_pk': round(pk_war, 2) if pk_war is not None else None,
+        'war_shooting': round(shooting_war, 2) if shooting_war is not None else None,
+        'war_penalties': round(penalties_war, 2) if penalties_war is not None else None,
+        'war_total': round(total_war, 2) if total_war is not None else None,
     }
 
 
@@ -474,6 +478,8 @@ for pid, season_data in seasons_by_player.items():
         })
         weight = SEASON_WEIGHTS.get(season_key, 0.0)
         for key in SEASON_WAR_KEYS:
+            if season_war[key] is None:
+                continue
             projected[key] += season_war[key] * weight
             weight_sums[key] += weight
 
@@ -501,18 +507,18 @@ if not spotlight.empty:
         if not season_war:
             continue
         print(
-            f"  {season_key}: EV Off {season_war['war_ev_off']:.2f} | EV Def {season_war['war_ev_def']:.2f} | "
-            f"PP {season_war['war_pp']:.2f} | PK {season_war['war_pk']:.2f} | "
-            f"Shoot {season_war['war_shooting']:.2f} | Pen {season_war['war_penalties']:.2f} | "
-            f"Total {season_war['war_total']:.2f}"
+            f"  {season_key}: EV Off {fmt_metric(season_war['war_ev_off'])} | EV Def {fmt_metric(season_war['war_ev_def'])} | "
+            f"PP {fmt_metric(season_war['war_pp'])} | PK {fmt_metric(season_war['war_pk'])} | "
+            f"Shoot {fmt_metric(season_war['war_shooting'])} | Pen {fmt_metric(season_war['war_penalties'])} | "
+            f"Total {fmt_metric(season_war['war_total'])}"
         )
     projected_war = war_data.get(pid, {})
     if projected_war:
         print(
-            f"  Projected: EV Off {projected_war['war_ev_off']:.2f} | EV Def {projected_war['war_ev_def']:.2f} | "
-            f"PP {projected_war['war_pp']:.2f} | PK {projected_war['war_pk']:.2f} | "
-            f"Shoot {projected_war['war_shooting']:.2f} | Pen {projected_war['war_penalties']:.2f} | "
-            f"Total {projected_war['war_total']:.2f}"
+            f"  Projected: EV Off {fmt_metric(projected_war['war_ev_off'])} | EV Def {fmt_metric(projected_war['war_ev_def'])} | "
+            f"PP {fmt_metric(projected_war['war_pp'])} | PK {fmt_metric(projected_war['war_pk'])} | "
+            f"Shoot {fmt_metric(projected_war['war_shooting'])} | Pen {fmt_metric(projected_war['war_penalties'])} | "
+            f"Total {fmt_metric(projected_war['war_total'])}"
         )
 
 # Print top-20 WAR leaderboard
@@ -526,8 +532,8 @@ print(f"  {'Player':<26}  {'Pos':>3}  {'EV Off':>7}  {'EV Def':>7}  {'PP':>6}  {
 print(f"  {'-'*26}  {'-'*3}  {'-'*7}  {'-'*7}  {'-'*6}  {'-'*6}  {'-'*7}  {'-'*6}  {'-'*7}")
 for pid, d in war_list[:20]:
     name, pos = name_pos.get(pid, ('?', '?'))
-    print(f"  {name:<26}  {pos:>3}  {d['war_ev_off']:>7.2f}  {d['war_ev_def']:>7.2f}"
-          f"  {d['war_pp']:>6.2f}  {d['war_pk']:>6.2f}  {d['war_shooting']:>7.2f}  {d['war_penalties']:>6.2f}  {d['war_total']:>7.2f}")
+    print(f"  {name:<26}  {pos:>3}  {fmt_metric(d['war_ev_off']):>7}  {fmt_metric(d['war_ev_def']):>7}"
+          f"  {fmt_metric(d['war_pp']):>6}  {fmt_metric(d['war_pk']):>6}  {fmt_metric(d['war_shooting']):>7}  {fmt_metric(d['war_penalties']):>6}  {fmt_metric(d['war_total']):>7}")
 
 shoot_list = sorted(
     [(pid, d) for pid, d in war_data.items() if d.get('war_shooting') is not None],
@@ -538,7 +544,7 @@ print(f"  {'Player':<26}  {'Pos':>3}  {'Shoot':>7}  {'Total':>7}")
 print(f"  {'-'*26}  {'-'*3}  {'-'*7}  {'-'*7}")
 for pid, d in shoot_list[:10]:
     name, pos = name_pos.get(pid, ('?', '?'))
-    print(f"  {name:<26}  {pos:>3}  {d['war_shooting']:>7.2f}  {d['war_total']:>7.2f}")
+    print(f"  {name:<26}  {pos:>3}  {fmt_metric(d['war_shooting']):>7}  {fmt_metric(d['war_total']):>7}")
 
 print("\nUploading season WAR components to player_seasons...")
 season_war_updated = 0
