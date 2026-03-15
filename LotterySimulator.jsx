@@ -360,7 +360,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
 
             <div className="lottery-table-head" style={{ display: "grid", gridTemplateColumns: "56px minmax(210px, 1fr) 116px 136px 126px", gap: 12, padding: "10px 20px", borderBottom: "1px solid #132131", color: "#4a6987", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
               <div>Rank</div>
-              <div>Team</div>
+              <div>Original team</div>
               <div>Odds</div>
               <div>Projection</div>
               <div>Points</div>
@@ -597,31 +597,43 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                       Simulated top order
                     </div>
                     {visibleOrder.map((row) => (
-                      <div
-                        key={row.pickId}
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "48px minmax(0, 1fr) auto",
-                          gap: 12,
-                          alignItems: "center",
-                          padding: "12px 14px",
-                          borderRadius: 16,
-                          background: "#0e1620",
-                          border: "1px solid #182736",
-                        }}
-                      >
-                        <div style={{ color: "#b6d7f1", fontSize: 18, fontWeight: 900 }}>#{row.finalPick}</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                          <TeamLogo abbr={row.currentOwner} size={30} />
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{row.standings.name}</div>
-                            <div style={{ color: "#63839f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
-                              Started #{row.baseRank}
+                      (() => {
+                        const resolvedPick = resolvedDraftOrder.find((pick) => pick.originalTeam === row.originalTeam);
+                        const selectionOwner = resolvedPick?.selectionOwner || row.currentOwner;
+                        const ownerChanged = selectionOwner !== row.originalTeam;
+                        return (
+                          <div
+                            key={row.pickId}
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "48px minmax(0, 1fr) auto",
+                              gap: 12,
+                              alignItems: "center",
+                              padding: "12px 14px",
+                              borderRadius: 16,
+                              background: "#0e1620",
+                              border: "1px solid #182736",
+                            }}
+                          >
+                            <div style={{ color: "#b6d7f1", fontSize: 18, fontWeight: 900 }}>#{row.finalPick}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                              <TeamLogo abbr={row.originalTeam} size={30} />
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{row.standings.name}</div>
+                                <div style={{ color: "#63839f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
+                                  Original team · started #{row.baseRank}
+                                </div>
+                                <div style={{ color: ownerChanged ? "#35e3a0" : "#7d95ab", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
+                                  Selection owner: {selectionOwner}
+                                  {resolvedPick?.protectionTriggered ? " · protection triggered" : ""}
+                                  {resolvedPick?.requiresManualReview ? " · manual review" : ""}
+                                </div>
+                              </div>
                             </div>
+                            <ResultBadge row={row} />
                           </div>
-                        </div>
-                        <ResultBadge row={row} />
-                      </div>
+                        );
+                      })()
                     ))}
                   </div>
                 </>

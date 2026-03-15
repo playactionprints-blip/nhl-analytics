@@ -1,5 +1,14 @@
 import { NHL_LOTTERY_RULES } from "@/app/lib/lotteryConfig";
 
+export function sortStandingsForLotteryOrder(standingsRows) {
+  return [...standingsRows].sort((a, b) => {
+    if (a.points !== b.points) return a.points - b.points;
+    if (a.pointPct !== b.pointPct) return a.pointPct - b.pointPct;
+    if (a.regulationWins !== b.regulationWins) return a.regulationWins - b.regulationWins;
+    return a.goalDiff - b.goalDiff;
+  });
+}
+
 export function createSeededRandom(seedInput) {
   let seed = Number(seedInput);
   if (!Number.isFinite(seed)) {
@@ -15,14 +24,7 @@ export function createSeededRandom(seedInput) {
 }
 
 export function buildLotteryEntriesFromStandings(standingsRows, config = NHL_LOTTERY_RULES) {
-  const sorted = [...standingsRows]
-    .sort((a, b) => {
-      if (a.points !== b.points) return a.points - b.points;
-      if (a.pointPct !== b.pointPct) return a.pointPct - b.pointPct;
-      if (a.regulationWins !== b.regulationWins) return a.regulationWins - b.regulationWins;
-      return a.goalDiff - b.goalDiff;
-    })
-    .slice(0, config.lotteryTeamCount);
+  const sorted = sortStandingsForLotteryOrder(standingsRows).slice(0, config.lotteryTeamCount);
 
   return sorted.map((team, index) => ({
     pickId: `pick-${team.abbr}-${index + 1}`,

@@ -1,8 +1,8 @@
 import LotterySimulator from "@/LotterySimulator";
-import { buildLotteryEntriesFromStandings } from "@/app/lib/lotteryEngine";
+import { NHL_LOTTERY_RULES } from "@/app/lib/lotteryConfig";
+import { buildLotteryEntriesFromStandings, sortStandingsForLotteryOrder } from "@/app/lib/lotteryEngine";
 import { TEAM_FULL } from "@/app/lib/nhlTeams";
 import {
-  isLotteryEligibleOriginalTeam,
   getStaticSpecialSlots,
   nhl2026FirstRoundPicks,
 } from "@/app/lib/nhl2026PickLedger";
@@ -47,10 +47,11 @@ async function fetchStandingsRows() {
 export default async function LotteryPage() {
   const standingsRows = await fetchStandingsRows();
   const staticTeams = new Set(getStaticSpecialSlots().map((pick) => pick.originalTeam));
-  const lotteryRows = standingsRows.filter((row) => isLotteryEligibleOriginalTeam(row.abbr));
-  const nonLotteryRows = standingsRows.filter(
-    (row) => !isLotteryEligibleOriginalTeam(row.abbr) && !staticTeams.has(row.abbr)
+  const orderableRows = sortStandingsForLotteryOrder(
+    standingsRows.filter((row) => !staticTeams.has(row.abbr))
   );
+  const lotteryRows = orderableRows.slice(0, NHL_LOTTERY_RULES.lotteryTeamCount);
+  const nonLotteryRows = orderableRows.slice(NHL_LOTTERY_RULES.lotteryTeamCount);
   const entries = buildLotteryEntriesFromStandings(lotteryRows);
   const generatedAt = new Intl.DateTimeFormat("en-CA", {
     month: "short",
