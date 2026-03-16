@@ -4,6 +4,17 @@ import { useState } from "react";
 import Link from "next/link";
 import { PlayerCard } from "@/PlayerCard";
 import { GoalieCard } from "@/GoalieCard";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Cell,
+  ReferenceLine,
+} from "recharts";
 
 // ── Shared constants (mirrored from PlayerCard.jsx) ──────────────────────────
 const TEAM_COLOR = {
@@ -119,6 +130,78 @@ function StatBox({ label, value, sub, subColor }) {
           {sub}
         </div>
       )}
+    </div>
+  );
+}
+
+function TeamSeasonTooltip({ active, payload, label, formatter }) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0];
+  return (
+    <div style={{
+      background: "#09131d",
+      border: "1px solid #243445",
+      borderRadius: 10,
+      padding: "8px 10px",
+      boxShadow: "0 10px 24px rgba(0,0,0,0.35)",
+    }}>
+      <div style={{ fontSize: 11, color: "#a2b5c9", fontFamily: "'DM Mono',monospace", marginBottom: 4 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 12, color: "#e8f4ff", fontWeight: 700, fontFamily: "'DM Mono',monospace" }}>
+        {formatter(item?.value)}
+      </div>
+    </div>
+  );
+}
+
+function SeasonTrendCard({ label, data, dataKey, accent, mutedColor, formatter, showLeagueReference = false }) {
+  return (
+    <div style={{
+      background: "#060b12",
+      border: "1px solid #1e2d40",
+      borderRadius: 16,
+      padding: "16px 18px 14px",
+    }}>
+      <div style={{
+        fontSize: 11,
+        color: "#5a7a99",
+        fontFamily: "'DM Mono',monospace",
+        textTransform: "uppercase",
+        letterSpacing: "0.08em",
+        marginBottom: 12,
+      }}>
+        {label}
+      </div>
+      <ResponsiveContainer width="100%" height={160}>
+        <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+          <CartesianGrid stroke="#122030" vertical={false} />
+          <XAxis
+            dataKey="season"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 10, fill: "#5a7a99", fontFamily: "DM Mono,monospace" }}
+          />
+          <YAxis
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 10, fill: "#5a7a99", fontFamily: "DM Mono,monospace" }}
+            width={34}
+          />
+          {showLeagueReference && (
+            <ReferenceLine y={50} stroke="#6a8299" strokeDasharray="4 4" ifOverflow="extendDomain" />
+          )}
+          <Tooltip content={<TeamSeasonTooltip formatter={formatter} />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+          <Bar dataKey={dataKey} radius={[6, 6, 0, 0]}>
+            {data.map((entry) => (
+              <Cell
+                key={`${entry.season}-${dataKey}`}
+                fill={entry.isCurrent ? accent : mutedColor}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -247,7 +330,7 @@ function PlayerModal({ player, onClose }) {
 }
 
 // ── Main TeamPage component ───────────────────────────────────────────────────
-export default function TeamPage({ teamCode, players, record, teamStats }) {
+export default function TeamPage({ teamCode, players, record, teamStats, seasonCharts = [] }) {
   const [tab, setTab] = useState("forwards");
   const [selectedPlayer, setSelectedPlayer] = useState(null);
 
@@ -382,6 +465,28 @@ export default function TeamPage({ teamCode, players, record, teamStats }) {
             />
           </div>
 
+          {seasonCharts.length > 0 && (
+            <div className="team-season-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 24 }}>
+              <SeasonTrendCard
+                label="WAR · By Season"
+                data={seasonCharts}
+                dataKey="totalWAR"
+                accent="#38bdf8"
+                mutedColor="#415468"
+                formatter={(value) => value != null ? `${Number(value).toFixed(2)} WAR` : "—"}
+              />
+              <SeasonTrendCard
+                label="CF% 5v5 · By Season"
+                data={seasonCharts}
+                dataKey="avgCFPct"
+                accent={seasonCharts.find((entry) => entry.isCurrent)?.avgCFPct >= 50 ? "#00e5a0" : "#f08040"}
+                mutedColor="#415468"
+                formatter={(value) => value != null ? `${Number(value).toFixed(1)}%` : "—"}
+                showLeagueReference
+              />
+            </div>
+          )}
+
           {/* ── Roster tabs ── */}
           <div style={{ marginBottom: 4 }}>
             <div style={{ display: "flex", gap: 0, background: "#0d1825",
@@ -461,6 +566,14 @@ export default function TeamPage({ teamCode, players, record, teamStats }) {
 
       {/* Player modal */}
       <PlayerModal player={selectedPlayer} onClose={() => setSelectedPlayer(null)} />
+
+      <style jsx>{`
+        @media (max-width: 640px) {
+          .team-season-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </>
   );
 }

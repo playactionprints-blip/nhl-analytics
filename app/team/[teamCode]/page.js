@@ -115,6 +115,7 @@ export default async function TeamPageRoute({ params }) {
   const [
     { data: teamPlayers },
     { data: allPlayers },
+    { data: teamSeasonRows },
     standings,
   ] = await Promise.all([
     supabase
@@ -125,6 +126,10 @@ export default async function TeamPageRoute({ params }) {
     supabase
       .from('players')
       .select('player_id,team,war_total,cf_pct,xgf_pct,toi'),
+    supabase
+      .from('player_seasons')
+      .select('season,cf_pct,war_total')
+      .eq('team', teamCode),
     fetchStandings(),
   ]);
 
@@ -170,6 +175,35 @@ export default async function TeamPageRoute({ params }) {
     leagueAvgXGF,
   };
 
+  const seasonSummaryMap = {};
+  for (const row of (teamSeasonRows || [])) {
+    if (!row?.season) continue;
+    if (!seasonSummaryMap[row.season]) {
+      seasonSummaryMap[row.season] = {
+        season: row.season,
+        cfSum: 0,
+        cfCount: 0,
+        totalWAR: 0,
+      };
+    }
+    if (row.cf_pct != null && !Number.isNaN(Number(row.cf_pct))) {
+      seasonSummaryMap[row.season].cfSum += Number(row.cf_pct);
+      seasonSummaryMap[row.season].cfCount += 1;
+    }
+    if (row.war_total != null && !Number.isNaN(Number(row.war_total))) {
+      seasonSummaryMap[row.season].totalWAR += Number(row.war_total);
+    }
+  }
+
+  const seasonCharts = Object.values(seasonSummaryMap)
+    .map((row) => ({
+      season: row.season,
+      avgCFPct: row.cfCount > 0 ? +((row.cfSum / row.cfCount).toFixed(1)) : null,
+      totalWAR: +(row.totalWAR.toFixed(2)),
+      isCurrent: row.season === '25-26',
+    }))
+    .sort((a, b) => String(a.season).localeCompare(String(b.season)));
+
   const record = standings[teamCode] || null;
 
   // ── Map player objects to the shape PlayerCard expects ─────────────────────
@@ -190,6 +224,7 @@ export default async function TeamPageRoute({ params }) {
       players={mappedPlayers}
       record={record}
       teamStats={teamStats}
+      seasonCharts={seasonCharts}
     />
   );
 }
