@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { GoalieCard } from "./GoalieCard";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip,
-         LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
+         AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 
 // ── Team metadata ────────────────────────────────────────────────────────────
 const TEAM_COLOR = {
@@ -76,6 +76,13 @@ function formatSigned(value, digits = 2) {
   if (value == null || Number.isNaN(value)) return "—";
   const n = Number(value);
   return `${n > 0 ? "+" : ""}${n.toFixed(digits)}`;
+}
+
+function formatChartValue(value) {
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  const numeric = Number(value);
+  if (Number.isInteger(numeric)) return `${numeric}`;
+  return `${numeric.toFixed(1)}`;
 }
 
 function formatMoneyShort(value) {
@@ -241,16 +248,27 @@ function TrendPanel({ title, subtitle, data, lines, accent }) {
       <div style={{ fontSize: 15, color: "#f1efe9", fontWeight: 700, marginBottom: 10 }}>
         {subtitle}
       </div>
-      <ResponsiveContainer width="100%" height={150}>
-        <LineChart data={valid} margin={{ top: 6, right: 6, left: -22, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={160}>
+        <AreaChart data={valid} margin={{ top: 8, right: 10, left: -22, bottom: 2 }}>
           <CartesianGrid stroke="#1f2833" strokeDasharray="0" vertical={true} />
           <XAxis dataKey="season" tick={{ fontSize: 11, fill: "#7f8388", fontFamily: "DM Mono,monospace" }} axisLine={false} tickLine={false} />
           <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#7f8388", fontFamily: "DM Mono,monospace" }} axisLine={false} tickLine={false} />
           <Tooltip
             contentStyle={{ background: "#0a1016", border: "1px solid #283240", borderRadius: 10, fontSize: 12, fontFamily: "DM Mono,monospace" }}
             labelStyle={{ color: "#9da4ad" }}
-            formatter={(v) => [`${v}`, ""]}
+            formatter={(v, _name, item) => [formatChartValue(v), item?.payload?.label || item?.name || "Value"]}
           />
+          {lines.map((line) => (
+            <Area
+              key={`${line.key}-area`}
+              type="monotone"
+              dataKey={line.key}
+              stroke="none"
+              fill={line.color || accent}
+              fillOpacity={0.15}
+              connectNulls
+            />
+          ))}
           {lines.map((line) => (
             <Line
               key={line.key}
@@ -264,7 +282,7 @@ function TrendPanel({ title, subtitle, data, lines, accent }) {
               connectNulls
             />
           ))}
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
