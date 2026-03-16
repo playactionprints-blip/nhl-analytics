@@ -15,6 +15,9 @@ import {
 
 export const revalidate = 1800;
 
+const CONFIDENCE_TOOLTIP =
+  "Confidence is based on available team data quality, recency of goaltender info, and home/away sample size. LOW = less reliable inputs.";
+
 function formatPct(value, digits = 1) {
   return `${(value * 100).toFixed(digits)}%`;
 }
@@ -37,6 +40,60 @@ function formatGoalieTimestamp(value) {
   } catch {
     return value;
   }
+}
+
+function ConfidenceHelpIcon() {
+  return (
+    <span
+      title={CONFIDENCE_TOOLTIP}
+      aria-label={CONFIDENCE_TOOLTIP}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        border: "1px solid #35506a",
+        color: "#9fc3df",
+        fontSize: 10,
+        fontWeight: 900,
+        lineHeight: 1,
+        fontFamily: "'DM Mono',monospace",
+        cursor: "help",
+        background: "#101a25",
+      }}
+    >
+      ?
+    </span>
+  );
+}
+
+function SectionDivider({ label }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "auto 1fr",
+        gap: 12,
+        alignItems: "center",
+      }}
+    >
+      <div
+        style={{
+          color: "#8db9dc",
+          fontSize: 11,
+          fontFamily: "'DM Mono',monospace",
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          fontWeight: 600,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ height: 1, background: "linear-gradient(90deg, rgba(115,141,165,0.55) 0%, rgba(23,40,59,0.4) 100%)" }} />
+    </div>
+  );
 }
 
 function teamPillStyle(color) {
@@ -305,21 +362,25 @@ export default async function GamePredictionDetailPage({ params }) {
                 ))}
 
                 <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
-                  <div
-                    style={{
-                      padding: "7px 12px",
-                      borderRadius: 999,
-                      background: confidence.bg,
-                      color: confidence.color,
-                      fontWeight: 800,
-                      fontSize: 11,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      fontFamily: "'DM Mono',monospace",
-                    }}
-                  >
-                    {prediction.modelDiagnostics.confidenceBand} confidence
-                  </div>
+                    <div
+                      style={{
+                        padding: "7px 12px",
+                        borderRadius: 999,
+                        background: confidence.bg,
+                        color: confidence.color,
+                        fontWeight: 800,
+                        fontSize: 11,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        fontFamily: "'DM Mono',monospace",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      {prediction.modelDiagnostics.confidenceBand} confidence
+                      <ConfidenceHelpIcon />
+                    </div>
                   <div style={{ color: "#7d98b1", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                     {prediction.modelDiagnostics.simulationCount.toLocaleString()} sims
                   </div>
@@ -456,6 +517,7 @@ export default async function GamePredictionDetailPage({ params }) {
           </div>
         </section>
 
+        <SectionDivider label="Projected goalies" />
         <section className="dual-grid">
           <div
             style={{
@@ -467,7 +529,7 @@ export default async function GamePredictionDetailPage({ params }) {
               gap: 16,
             }}
           >
-            <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
               Projected goalies
             </div>
             <div className="dual-grid">
@@ -540,7 +602,7 @@ export default async function GamePredictionDetailPage({ params }) {
               gap: 16,
             }}
           >
-            <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
               Market odds comparison
             </div>
             {market ? (
@@ -630,6 +692,7 @@ export default async function GamePredictionDetailPage({ params }) {
           </div>
         </section>
 
+        <SectionDivider label="Team context" />
         <section className="dual-grid">
           <div
             style={{
@@ -641,7 +704,7 @@ export default async function GamePredictionDetailPage({ params }) {
               gap: 16,
             }}
           >
-            <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
               Team context
             </div>
             {teamContextCards.map((row) => (
@@ -681,7 +744,7 @@ export default async function GamePredictionDetailPage({ params }) {
               gap: 16,
             }}
           >
-            <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
               Team ratings matchup
             </div>
             {comparisonRows.map(([label, awayValue, homeValue]) =>
@@ -690,6 +753,7 @@ export default async function GamePredictionDetailPage({ params }) {
           </div>
         </section>
 
+        <SectionDivider label="Player backbones" />
         <section className="dual-grid">
           <div
             style={{
@@ -703,7 +767,7 @@ export default async function GamePredictionDetailPage({ params }) {
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
               <div>
-                <div style={{ color: awayColor, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                <div style={{ color: awayColor, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
                   {game.awayTeam.abbr} player backbone
                 </div>
                 <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900, marginTop: 4 }}>{game.awayTeam.name}</div>
@@ -729,7 +793,7 @@ export default async function GamePredictionDetailPage({ params }) {
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
               <div>
-                <div style={{ color: homeColor, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                <div style={{ color: homeColor, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
                   {game.homeTeam.abbr} player backbone
                 </div>
                 <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900, marginTop: 4 }}>{game.homeTeam.name}</div>

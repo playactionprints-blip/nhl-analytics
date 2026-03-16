@@ -24,6 +24,9 @@ export const metadata = {
   description: "Tonight's NHL game predictions with win odds, expected goals, and score distributions.",
 };
 
+const CONFIDENCE_TOOLTIP =
+  "Confidence is based on available team data quality, recency of goaltender info, and home/away sample size. LOW = less reliable inputs.";
+
 function formatQuickDateLabel(dateString, todayString) {
   if (dateString === todayString) return "Today";
 
@@ -44,6 +47,33 @@ function formatQuickDateLabel(dateString, todayString) {
   } catch {
     return dateString;
   }
+}
+
+function ConfidenceHelpIcon() {
+  return (
+    <span
+      title={CONFIDENCE_TOOLTIP}
+      aria-label={CONFIDENCE_TOOLTIP}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        border: "1px solid #35506a",
+        color: "#9fc3df",
+        fontSize: 10,
+        fontWeight: 900,
+        lineHeight: 1,
+        fontFamily: "'DM Mono',monospace",
+        cursor: "help",
+        background: "#101a25",
+      }}
+    >
+      ?
+    </span>
+  );
 }
 
 export default async function PredictionsPage({ searchParams }) {
@@ -474,9 +504,12 @@ export default async function PredictionsPage({ searchParams }) {
                             letterSpacing: "0.08em",
                             textTransform: "uppercase",
                             fontFamily: "'DM Mono',monospace",
+                            alignItems: "center",
+                            gap: 8,
                           }}
                         >
                           {prediction.modelDiagnostics.confidenceBand}
+                          <ConfidenceHelpIcon />
                         </div>
                       </div>
                     </div>
