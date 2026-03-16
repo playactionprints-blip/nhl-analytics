@@ -21,6 +21,7 @@ export interface StartingGoalieContext {
   savePct?: number;
   gsaxPer60?: number;
   qualityAdjustment?: number;
+  confidence?: "confirmed" | "projected" | "unknown";
 }
 
 export interface TeamSeasonStats {
@@ -34,6 +35,8 @@ export interface TeamSeasonStats {
   xgfPer60: number;
   xgaPer60: number;
   fiveOnFiveXgfPct: number;
+  homeCfPct?: number | null;
+  awayCfPct?: number | null;
   shootingPct: number;
   savePct: number;
   powerPlayPct: number;
@@ -209,6 +212,13 @@ export interface FairOdds {
   awayMoneyline: number;
 }
 
+export interface BackToBackAdjustment {
+  away: boolean;
+  home: boolean;
+  penaltyApplied: "road" | "home" | "both" | "none";
+  adjustment: number;
+}
+
 export interface ModelDiagnostics {
   simulationCount: number;
   modelVersion: string;
@@ -235,6 +245,8 @@ export interface GamePrediction {
   expectedAwayShots: number;
   mostLikelyScores: ScoreOutcome[];
   fairOdds: FairOdds;
+  b2b: BackToBackAdjustment;
+  goalieConfidence: "confirmed" | "projected" | "unknown";
   modelDiagnostics: ModelDiagnostics;
 }
 

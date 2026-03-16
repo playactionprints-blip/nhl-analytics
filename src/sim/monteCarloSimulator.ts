@@ -163,6 +163,13 @@ export function simulateGameOutcomes(
     expectedAwayShots: scoring.expectedAwayShots,
     mostLikelyScores: topScoreOutcomes(scoreCounts, config.simulationCount, 3),
     fairOdds,
+    b2b: {
+      away: false,
+      home: false,
+      penaltyApplied: "none",
+      adjustment: 0,
+    },
+    goalieConfidence: "unknown",
     modelDiagnostics: diagnostics,
   };
 }

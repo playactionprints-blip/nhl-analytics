@@ -1,4 +1,4 @@
-import { DEFAULT_MARKET_CALIBRATION_WEIGHT, DEFAULT_MODEL_CONFIG } from "../data/leagueConstants";
+import { B2B_BOTH_TEAMS, B2B_PENALTY, DEFAULT_MARKET_CALIBRATION_WEIGHT, DEFAULT_MODEL_CONFIG } from "../data/leagueConstants";
 import { estimateExpectedScoring } from "./expectedGoalsModel";
 import { buildTeamRatings } from "./teamRatings";
 import { simulateGameOutcomes } from "../sim/monteCarloSimulator";
@@ -27,6 +27,78 @@ function blendMarketProbability(
   };
 }
 
+function goalieConfidenceFromContext(context: GameContext): GamePrediction["goalieConfidence"] {
+  const homeConfidence = context.homeStartingGoalie?.confidence || "unknown";
+  const awayConfidence = context.awayStartingGoalie?.confidence || "unknown";
+  if (homeConfidence === "confirmed" && awayConfidence === "confirmed") {
+    return "confirmed";
+  }
+  if (homeConfidence === "projected" || awayConfidence === "projected" || homeConfidence === "confirmed" || awayConfidence === "confirmed") {
+    return "projected";
+  }
+  return "unknown";
+}
+
+function resolveBackToBackAdjustment(context: GameContext): GamePrediction["b2b"] {
+  const home = Boolean(context.homeBackToBack);
+  const away = Boolean(context.awayBackToBack);
+
+  if (home && away) {
+    return {
+      away,
+      home,
+      penaltyApplied: "both",
+      adjustment: B2B_BOTH_TEAMS,
+    };
+  }
+
+  if (away) {
+    return {
+      away,
+      home,
+      penaltyApplied: "road",
+      adjustment: B2B_PENALTY.road,
+    };
+  }
+
+  if (home) {
+    return {
+      away,
+      home,
+      penaltyApplied: "home",
+      adjustment: B2B_PENALTY.home,
+    };
+  }
+
+  return {
+    away,
+    home,
+    penaltyApplied: "none",
+    adjustment: 0,
+  };
+}
+
+function applyBackToBackPenalty(
+  prediction: GamePrediction,
+  context: GameContext
+): GamePrediction {
+  const b2b = resolveBackToBackAdjustment(context);
+  let awayWinPct = prediction.awayWinPct + b2b.adjustment;
+  awayWinPct = clampProbability(awayWinPct);
+  const homeWinPct = clampProbability(1 - awayWinPct);
+
+  return {
+    ...prediction,
+    b2b,
+    homeWinPct,
+    awayWinPct,
+    fairOdds: {
+      homeMoneyline: impliedProbabilityToAmericanOdds(homeWinPct),
+      awayMoneyline: impliedProbabilityToAmericanOdds(awayWinPct),
+    },
+  };
+}
+
 export function predictGame(
   context: GameContext,
   marketInputs?: MarketInputs,
@@ -45,22 +117,27 @@ export function predictGame(
     awayRatings,
     config
   );
+  const penaltyAdjustedPrediction = applyBackToBackPenalty(basePrediction, context);
 
   const { probability: blendedHomeWinPct, marketBlendApplied } = blendMarketProbability(
-    basePrediction.homeWinPct,
+    penaltyAdjustedPrediction.homeWinPct,
     marketInputs
   );
 
   if (!marketBlendApplied) {
-    return basePrediction;
+    return {
+      ...penaltyAdjustedPrediction,
+      goalieConfidence: goalieConfidenceFromContext(context),
+    };
   }
 
   const blendedAwayWinPct = clampProbability(1 - blendedHomeWinPct);
 
   return {
-    ...basePrediction,
+    ...penaltyAdjustedPrediction,
     homeWinPct: blendedHomeWinPct,
     awayWinPct: blendedAwayWinPct,
+    goalieConfidence: goalieConfidenceFromContext(context),
     fairOdds: {
       homeMoneyline: impliedProbabilityToAmericanOdds(blendedHomeWinPct),
       awayMoneyline: impliedProbabilityToAmericanOdds(blendedAwayWinPct),

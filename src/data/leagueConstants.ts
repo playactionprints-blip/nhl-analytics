@@ -1,5 +1,15 @@
 import type { ModelConfig } from "../types/types";
 
+// B2B penalties based on empirical NHL data (~5 seasons)
+// Road b2b: ~6% win prob drop, Home b2b: ~3% drop
+// Both teams b2b: effects partially cancel, net ~1% to away team
+export const B2B_PENALTY = {
+  road: -0.06,
+  home: -0.03,
+} as const;
+
+export const B2B_BOTH_TEAMS = -0.01;
+
 export const NHL_LEAGUE_AVERAGES = {
   goalsPerTeamGame: 3.05,
   shotsPerTeamGame: 29.8,
