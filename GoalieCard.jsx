@@ -139,6 +139,16 @@ export function GoalieCard({ player }) {
   const gaa      = player.gaa      != null ? player.gaa.toFixed(2) : null;
   const wlRecord = (player.wins != null && player.losses != null)
     ? `${player.wins}-${player.losses}` : null;
+  const gsax = player.gsax != null ? player.gsax.toFixed(1) : null;
+  const xga = player.expected_goals_against != null ? player.expected_goals_against.toFixed(1) : null;
+  const expectedSvPct = player.expected_save_pct != null
+    ? `.${String(Math.round(player.expected_save_pct * 1000)).padStart(3, "0")}`
+    : null;
+  const svAboveExpected = player.save_pct_above_expected != null
+    ? `${player.save_pct_above_expected >= 0 ? "+" : ""}${(player.save_pct_above_expected * 100).toFixed(1)}%`
+    : null;
+  const gsaxPct = player.gsax_pct ?? player.percentiles?.GSAx ?? null;
+  const svAboveExpectedPct = player.sv_ae_pct ?? null;
 
   const tabs = ["overview", "stats", "ratings"];
 
@@ -275,12 +285,14 @@ export function GoalieCard({ player }) {
             <RatingBar label="Goals Against" pct={player.gaa_pct} note="lower GAA = higher rating" />
             <RatingBar label="Win %" pct={player.win_pct_pct} />
             <RatingBar label="Shutout Rate" pct={player.shutout_pct} />
+            {gsaxPct != null && <RatingBar label="GSAx" pct={gsaxPct} />}
+            {svAboveExpectedPct != null && <RatingBar label="SV% Above Expected" pct={svAboveExpectedPct} />}
 
-            <div style={{ marginTop:14, padding:"10px 12px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8 }}>
-              <div style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>Coming Soon</div>
-              <div style={{ fontSize:11, color:"#4a6a88", fontFamily:"'DM Mono',monospace", lineHeight:1.5 }}>
-                GSAX (Goals Saved Above Expected) — requires custom xG model currently in training
-              </div>
+            <div style={{ marginTop:14, display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
+              <StatBox label="GSAx" value={gsax} highlight={player.gsax > 0} />
+              <StatBox label="xGA" value={xga} />
+              <StatBox label="Exp SV%" value={expectedSvPct} />
+              <StatBox label="SV% Above Exp" value={svAboveExpected} highlight={player.save_pct_above_expected > 0} />
             </div>
           </div>
         )}
