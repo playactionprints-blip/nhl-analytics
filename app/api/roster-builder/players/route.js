@@ -3,11 +3,37 @@
  * Depends on Supabase player_seasons for season WAR/team snapshots and
  * players for names, ratings, and contract metadata used in roster building.
  */
+import { NextResponse } from "next/server";
 import { createServerClient } from "@/app/lib/supabase";
-import { jsonError, jsonWithCache } from "@/app/lib/apiCache";
 import { CURRENT_SEASON } from "@/app/components/roster-builder/rosterBuilderConfig";
 
 export const revalidate = 300;
+
+function cacheHeaders(seconds) {
+  return {
+    "Cache-Control": `public, s-maxage=${seconds}, stale-while-revalidate=60`,
+  };
+}
+
+function jsonWithCache(payload, seconds, init = {}) {
+  return NextResponse.json(payload, {
+    ...init,
+    headers: {
+      ...cacheHeaders(seconds),
+      ...(init.headers || {}),
+    },
+  });
+}
+
+function jsonError(message, status = 500) {
+  return NextResponse.json(
+    { error: message },
+    {
+      status,
+      headers: cacheHeaders(300),
+    }
+  );
+}
 
 function toNumber(value, fallback = null) {
   const numeric = Number(value);
