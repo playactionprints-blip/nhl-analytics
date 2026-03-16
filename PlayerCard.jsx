@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { createClient } from "@supabase/supabase-js";
 import { GoalieCard } from "./GoalieCard";
 import { useRecentPlayers } from "@/useRecentPlayers";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip,
@@ -33,6 +34,12 @@ const TEAM_FULL = {
 };
 
 const ALL_TEAMS = Object.keys(TEAM_FULL).sort();
+const CURRENT_SEASON = "25-26";
+
+const clientSupabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 // NHL API URL helpers
 function headshotUrl(playerId) {
@@ -1590,7 +1597,7 @@ function enrichPlayersWithSeasonTrends(players, seasonStats) {
 }
 
 // ── App Shell ────────────────────────────────────────────────────────────────
-export default function App({ players: propPlayers, seasonStats }) {
+export default function App({ players: propPlayers, seasonStats, defaultSearchPlayers = [] }) {
   const basePlayers = useMemo(() => (propPlayers?.length ? propPlayers : []), [propPlayers]);
   const allPlayers = useMemo(
     () => enrichPlayersWithSeasonTrends(basePlayers, seasonStats),
@@ -1600,18 +1607,9 @@ export default function App({ players: propPlayers, seasonStats }) {
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [browseMode, setBrowseMode] = useState("search"); // "search" | "teams"
-  const { recentPlayers, pushRecentPlayer, removeRecentPlayer } = useRecentPlayers();
-
-  // Filter players
-  const filtered = useMemo(() => {
-    let list = allPlayers;
-    if (selectedTeam) list = list.filter(p => (p.team||"").toUpperCase() === selectedTeam);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(p => (p.full_name||p.name||"").toLowerCase().includes(q));
-    }
-    return list.slice(0, 50);
-  }, [allPlayers, selectedTeam, search]);
+  const [searchResults, setSearchResults] = useState(defaultSearchPlayers);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const { pushRecentPlayer } = useRecentPlayers();
 
   const playerLookup = useMemo(
     () => Object.fromEntries(allPlayers.map((player) => [player.player_id, player])),
@@ -1626,6 +1624,79 @@ export default function App({ players: propPlayers, seasonStats }) {
     setSelectedPlayer(player);
     pushRecentPlayer(player);
   }
+
+  useEffect(() => {
+    if (browseMode !== "search") return;
+
+    const handle = setTimeout(async () => {
+      try {
+        setSearchLoading(true);
+
+        if (!search.trim()) {
+          setSearchResults(defaultSearchPlayers);
+          return;
+        }
+
+        const { data: matchingPlayers, error: playersError } = await clientSupabase
+          .from("players")
+          .select("player_id,full_name,team,position,jersey")
+          .ilike("full_name", `%${search.trim()}%`)
+          .limit(40);
+
+        if (playersError) throw playersError;
+
+        const matchingIds = (matchingPlayers || []).map((player) => player.player_id);
+        if (!matchingIds.length) {
+          setSearchResults([]);
+          return;
+        }
+
+        const { data: seasonRows, error: seasonError } = await clientSupabase
+          .from("player_seasons")
+          .select("player_id,team,war_total")
+          .eq("season", CURRENT_SEASON)
+          .in("player_id", matchingIds)
+          .order("war_total", { ascending: false, nullsFirst: false })
+          .limit(20);
+
+        if (seasonError) throw seasonError;
+
+        const matchedPlayerMap = Object.fromEntries(
+          (matchingPlayers || []).map((player) => [player.player_id, player])
+        );
+
+        const merged = (seasonRows || [])
+          .map((row) => {
+            const livePlayer = playerLookup[row.player_id];
+            const matchedPlayer = matchedPlayerMap[row.player_id];
+            const player = livePlayer || matchedPlayer;
+            if (!player) return null;
+            return {
+              ...player,
+              team: row.team || player.team,
+              war_total: row.war_total ?? player.war_total ?? null,
+            };
+          })
+          .filter(Boolean);
+
+        setSearchResults(merged);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 120);
+
+    return () => clearTimeout(handle);
+  }, [browseMode, defaultSearchPlayers, playerLookup, search]);
+
+  const teamFilteredPlayers = useMemo(() => {
+    let list = allPlayers;
+    if (selectedTeam) list = list.filter(p => (p.team || "").toUpperCase() === selectedTeam);
+    return list.slice(0, 50);
+  }, [allPlayers, selectedTeam]);
+
+  const visiblePlayers = browseMode === "search" ? searchResults : teamFilteredPlayers;
 
   return (
     <>
@@ -1683,67 +1754,6 @@ export default function App({ players: propPlayers, seasonStats }) {
         {/* Search mode */}
         {browseMode === "search" && (
           <div style={{ width:"100%", maxWidth:500, marginBottom:20 }}>
-            {recentPlayers.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11, color: "#5a7a99", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Recent:
-                  </span>
-                  {recentPlayers.map((recent) => {
-                    const livePlayer = playerLookup[recent.player_id];
-                    const isActive = selectedPlayer?.player_id === recent.player_id;
-                    return (
-                      <button
-                        key={recent.player_id}
-                        onClick={() => livePlayer && openPlayer(livePlayer)}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 8,
-                          padding: "6px 8px 6px 12px",
-                          background: isActive ? "#14304a" : "#0d1825",
-                          border: `1px solid ${isActive ? "#2fb4ff" : "#1e2d40"}`,
-                          borderRadius: 999,
-                          color: isActive ? "#e8f4ff" : "#a9c1d7",
-                          fontSize: 12,
-                          fontWeight: 700,
-                          fontFamily: "'Barlow Condensed',sans-serif",
-                          cursor: livePlayer ? "pointer" : "default",
-                          letterSpacing: "0.02em",
-                        }}
-                        title={recent.full_name}
-                      >
-                        <span>{recent.full_name}</span>
-                        <span
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeRecentPlayer(recent.player_id);
-                          }}
-                          role="button"
-                          aria-label={`Remove ${recent.full_name} from recent players`}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            width: 18,
-                            height: 18,
-                            borderRadius: "50%",
-                            background: "#111f2e",
-                            border: "1px solid #24384f",
-                            color: "#7f9ab5",
-                            fontSize: 10,
-                            fontFamily: "'DM Mono',monospace",
-                            lineHeight: 1,
-                          }}
-                        >
-                          ✕
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
             <input
               type="text"
               placeholder="Search any player..."
@@ -1751,6 +1761,67 @@ export default function App({ players: propPlayers, seasonStats }) {
               onChange={e => { setSearch(e.target.value); setSelectedPlayer(null); }}
               style={{ width:"100%", padding:"14px 20px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:12, color:"#e8f4ff", fontSize:16, fontFamily:"'Barlow Condensed',sans-serif", outline:"none", letterSpacing:"0.03em" }}
             />
+            <div style={{ marginTop: 10, background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 14, overflow: "hidden", boxShadow: "0 14px 34px rgba(0,0,0,0.26)" }}>
+              {!searchLoading && (
+                <div style={{
+                  padding: "10px 14px",
+                  borderBottom: visiblePlayers.length > 0 ? "1px solid #142231" : "none",
+                  fontSize: 10,
+                  color: "#5f7d99",
+                  fontFamily: "'DM Mono',monospace",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                  background: "#0b141e",
+                }}>
+                  {search.trim() ? "Matching current-season players" : "Top 10 current-season WAR"}
+                </div>
+              )}
+              {visiblePlayers.map((p, index) => {
+                const livePlayer = playerLookup[p.player_id] || p;
+                const isSelected = displayPlayer?.player_id === p.player_id;
+                return (
+                  <button
+                    key={p.player_id}
+                    onClick={() => openPlayer(livePlayer)}
+                    style={{
+                      width: "100%",
+                      display: "grid",
+                      gridTemplateColumns: "36px 1fr",
+                      gap: 12,
+                      alignItems: "center",
+                      padding: "12px 14px",
+                      background: isSelected ? "#132538" : index % 2 === 0 ? "#0d1825" : "#0b141e",
+                      border: "none",
+                      borderBottom: index === visiblePlayers.length - 1 ? "none" : "1px solid #142231",
+                      color: "#e8f4ff",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                    title={`${TEAM_FULL[p.team] || p.team} · #${p.jersey ?? "—"} · ${(p.position || "—").toUpperCase()}`}
+                  >
+                    <img src={logoUrl(p.team)} alt={p.team} width={28} height={28} style={{ objectFit: "contain" }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, fontStyle: "italic", textTransform: "uppercase", letterSpacing: "0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {p.full_name || p.name}
+                      </div>
+                      <div style={{ marginTop: 3, fontSize: 10, color: "#62809f", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        {p.team} · {p.position || "—"}{p.war_total != null ? ` · WAR ${Number(p.war_total).toFixed(2)}` : ""}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              {searchLoading && (
+                <div style={{ padding: "12px 14px", color: "#6f8aa6", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Searching…
+                </div>
+              )}
+              {!searchLoading && visiblePlayers.length === 0 && (
+                <div style={{ padding: "14px 16px", color: "#6f8aa6", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>
+                  No players found.
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1779,10 +1850,10 @@ export default function App({ players: propPlayers, seasonStats }) {
           </div>
         )}
 
-        {/* Player list (search/teams modes only) */}
-        {browseMode !== "table" && (
+        {/* Player list (team browse mode only) */}
+        {browseMode === "teams" && (
         <div style={{ display:"flex", gap:8, marginBottom:28, flexWrap:"wrap", justifyContent:"center", maxWidth:800 }}>
-          {filtered.map(p => {
+          {visiblePlayers.map(p => {
             const color = TEAM_COLOR[p.team] || "#4a6a88";
             const isSelected = displayPlayer?.player_id === p.player_id;
             const position = (p.position || "—").toUpperCase();
@@ -1856,7 +1927,7 @@ export default function App({ players: propPlayers, seasonStats }) {
           </>
         )}
 
-        {browseMode !== "table" && filtered.length === 0 && (
+        {browseMode === "teams" && visiblePlayers.length === 0 && (
           <div style={{ color:"#2a4060", fontFamily:"'DM Mono',monospace", fontSize:13, marginTop:40 }}>
             No players found. Try a different search.
           </div>

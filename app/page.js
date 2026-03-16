@@ -8,6 +8,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+const CURRENT_SEASON = '25-26';
+
 const PS_COLS = 'player_id,season,gp,toi,toi_5v5,g,a1,a2,ixg,icf,iff,hits,blk,gva,tka,fow,fol,cf_pct,xgf_pct,hdcf_pct,scf_pct,rapm_off,rapm_def,war_total,war_ev_off,war_ev_def,war_pp,war_pk,war_shooting,war_penalties';
 
 function formatAvgToi(totalMin, gp) {
@@ -73,11 +75,18 @@ export default async function Home() {
     { data: ps2526 },
     { data: ps2425 },
     { data: ps2324 },
+    { data: defaultWarRows },
   ] = await Promise.all([
     supabase.from('players').select('*').order('pts', { ascending: false, nullsFirst: false }).limit(1000),
     supabase.from('player_seasons').select(PS_COLS).eq('season', '25-26'),
     supabase.from('player_seasons').select(PS_COLS).eq('season', '24-25'),
     supabase.from('player_seasons').select(PS_COLS).eq('season', '23-24'),
+    supabase
+      .from('player_seasons')
+      .select('player_id,team,war_total')
+      .eq('season', CURRENT_SEASON)
+      .order('war_total', { ascending: false, nullsFirst: false })
+      .limit(10),
   ]);
 
   const safePlayers = (players || []).map(p => ({
@@ -101,7 +110,19 @@ export default async function Home() {
     '23-24': mapSeasonRows(ps2324 || [], playerLookup),
   };
 
-  return <App players={safePlayers} seasonStats={seasonStats} />;
+  const defaultSearchPlayers = (defaultWarRows || [])
+    .map((row) => {
+      const player = playerLookup[row.player_id];
+      if (!player) return null;
+      return {
+        ...player,
+        team: row.team || player.team,
+        war_total: row.war_total ?? player.war_total ?? null,
+      };
+    })
+    .filter(Boolean);
+
+  return <App players={safePlayers} seasonStats={seasonStats} defaultSearchPlayers={defaultSearchPlayers} />;
 }
 
 const TEAM_COLOR = {
