@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { GoalieCard } from "./GoalieCard";
+import { useRecentPlayers } from "@/useRecentPlayers";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip,
          AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 
@@ -1599,6 +1600,7 @@ export default function App({ players: propPlayers, seasonStats }) {
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [browseMode, setBrowseMode] = useState("search"); // "search" | "teams"
+  const { recentPlayers, pushRecentPlayer, removeRecentPlayer } = useRecentPlayers();
 
   // Filter players
   const filtered = useMemo(() => {
@@ -1619,6 +1621,11 @@ export default function App({ players: propPlayers, seasonStats }) {
   const displayPlayer = selectedPlayer
     ? { ...(playerLookup[selectedPlayer.player_id] || {}), ...selectedPlayer }
     : null;
+
+  function openPlayer(player) {
+    setSelectedPlayer(player);
+    pushRecentPlayer(player);
+  }
 
   return (
     <>
@@ -1676,6 +1683,67 @@ export default function App({ players: propPlayers, seasonStats }) {
         {/* Search mode */}
         {browseMode === "search" && (
           <div style={{ width:"100%", maxWidth:500, marginBottom:20 }}>
+            {recentPlayers.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, color: "#5a7a99", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Recent:
+                  </span>
+                  {recentPlayers.map((recent) => {
+                    const livePlayer = playerLookup[recent.player_id];
+                    const isActive = selectedPlayer?.player_id === recent.player_id;
+                    return (
+                      <button
+                        key={recent.player_id}
+                        onClick={() => livePlayer && openPlayer(livePlayer)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "6px 8px 6px 12px",
+                          background: isActive ? "#14304a" : "#0d1825",
+                          border: `1px solid ${isActive ? "#2fb4ff" : "#1e2d40"}`,
+                          borderRadius: 999,
+                          color: isActive ? "#e8f4ff" : "#a9c1d7",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          fontFamily: "'Barlow Condensed',sans-serif",
+                          cursor: livePlayer ? "pointer" : "default",
+                          letterSpacing: "0.02em",
+                        }}
+                        title={recent.full_name}
+                      >
+                        <span>{recent.full_name}</span>
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeRecentPlayer(recent.player_id);
+                          }}
+                          role="button"
+                          aria-label={`Remove ${recent.full_name} from recent players`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: 18,
+                            height: 18,
+                            borderRadius: "50%",
+                            background: "#111f2e",
+                            border: "1px solid #24384f",
+                            color: "#7f9ab5",
+                            fontSize: 10,
+                            fontFamily: "'DM Mono',monospace",
+                            lineHeight: 1,
+                          }}
+                        >
+                          ✕
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <input
               type="text"
               placeholder="Search any player..."
@@ -1699,7 +1767,13 @@ export default function App({ players: propPlayers, seasonStats }) {
             <StatsTable
               players={allPlayers}
               seasonStats={seasonStats}
-              onSelectPlayer={p => setSelectedPlayer(prev => prev?.player_id === p.player_id ? null : p)}
+              onSelectPlayer={p => {
+                if (selectedPlayer?.player_id === p.player_id) {
+                  setSelectedPlayer(null);
+                  return;
+                }
+                openPlayer(p);
+              }}
               selectedId={selectedPlayer?.player_id}
             />
           </div>
@@ -1718,7 +1792,7 @@ export default function App({ players: propPlayers, seasonStats }) {
               <button
                 key={p.player_id}
                 title={tooltip}
-                onClick={() => setSelectedPlayer(p)}
+                onClick={() => openPlayer(p)}
                 style={{
                   padding:"6px 14px 6px 11px",
                   background:isSelected?`${color}22`:"#0d1825",
