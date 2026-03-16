@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BreadcrumbSetter } from "@/Breadcrumbs";
 import { TEAM_COLOR, logoUrl } from "@/app/lib/nhlTeams";
 import {
   buildPredictionsForDate,
@@ -104,6 +105,7 @@ export default async function PredictionsPage({ searchParams }) {
         padding: "36px 20px 64px",
       }}
     >
+      <BreadcrumbSetter items={[{ href: "/predictions", label: "Predictions" }]} />
       <style>{`
         .predictions-grid {
           display: grid;

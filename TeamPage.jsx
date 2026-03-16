@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { PlayerCard } from "@/PlayerCard";
 import { GoalieCard } from "@/GoalieCard";
+import { BreadcrumbSetter } from "@/Breadcrumbs";
 import {
   ResponsiveContainer,
   BarChart,
@@ -363,6 +364,12 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
 
   return (
     <>
+      <BreadcrumbSetter
+        items={[
+          { href: "/teams", label: "Teams" },
+          { href: `/team/${teamCode}`, label: teamName },
+        ]}
+      />
       <div style={{
         minHeight: "100vh",
         background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)",

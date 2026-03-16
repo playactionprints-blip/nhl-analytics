@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BreadcrumbSetter } from "@/Breadcrumbs";
 import { TEAM_COLOR, logoUrl } from "@/app/lib/nhlTeams";
 import {
   buildPredictionsForDate,
@@ -270,6 +271,12 @@ export default async function GamePredictionDetailPage({ params }) {
         padding: "28px 20px 64px",
       }}
     >
+      <BreadcrumbSetter
+        items={[
+          { href: "/predictions", label: "Predictions" },
+          { href: predictionHref(date, game.id), label: `${game.awayTeam.abbr} at ${game.homeTeam.abbr}` },
+        ]}
+      />
       <style>{`
         .detail-grid {
           display: grid;

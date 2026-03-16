@@ -1,5 +1,6 @@
 import "./globals.css";
 import TopNav from "@/TopNav";
+import { BreadcrumbBar, BreadcrumbProvider } from "@/Breadcrumbs";
 
 export const metadata = {
   title: "NHL Analytics",
@@ -10,8 +11,11 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className="antialiased">
-        <TopNav />
-        {children}
+        <BreadcrumbProvider>
+          <TopNav />
+          <BreadcrumbBar />
+          {children}
+        </BreadcrumbProvider>
       </body>
     </html>
   );
