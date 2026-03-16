@@ -24,15 +24,46 @@ export const metadata = {
   description: "Tonight's NHL game predictions with win odds, expected goals, and score distributions.",
 };
 
+function formatQuickDateLabel(dateString, todayString) {
+  if (dateString === todayString) return "Today";
+
+  const today = parseDateString(todayString);
+  const current = parseDateString(dateString);
+  const todayUtc = Date.UTC(today.year, today.month - 1, today.day);
+  const currentUtc = Date.UTC(current.year, current.month - 1, current.day);
+  const diffDays = Math.round((currentUtc - todayUtc) / (24 * 60 * 60 * 1000));
+  if (diffDays === 1) return "Tomorrow";
+
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Toronto",
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    }).format(new Date(`${dateString}T12:00:00Z`));
+  } catch {
+    return dateString;
+  }
+}
+
 export default async function PredictionsPage({ searchParams }) {
   const today = getTorontoDateParts();
+  const todayString = formatDateString(today);
   const resolvedSearchParams = await searchParams;
   const selectedDateString = isValidDateString(resolvedSearchParams?.date)
     ? resolvedSearchParams.date
-    : formatDateString(today);
+    : todayString;
   const selectedDateParts = parseDateString(selectedDateString);
   const previousDate = formatDateString(shiftDateParts(selectedDateParts, -1));
   const nextDate = formatDateString(shiftDateParts(selectedDateParts, 1));
+  const quickDates = Array.from({ length: 7 }, (_, index) => {
+    const dateString = formatDateString(shiftDateParts(today, index));
+    return {
+      dateString,
+      label: formatQuickDateLabel(dateString, todayString),
+      active: dateString === selectedDateString,
+    };
+  });
   const { predictions } = await buildPredictionsForDate(selectedDateString);
 
   return (
@@ -216,6 +247,40 @@ export default async function PredictionsPage({ searchParams }) {
               <div style={{ color: "#87a3bb", fontSize: 13 }}>
                 Viewing <span style={{ color: "#eff8ff", fontWeight: 800 }}>{formatHeadlineDate(selectedDateString)}</span>
               </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              <div style={{ color: "#6f879f", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                Quick jump
+              </div>
+              {quickDates.map((quickDate) => (
+                <Link
+                  key={quickDate.dateString}
+                  href={`/predictions?date=${quickDate.dateString}`}
+                  style={{
+                    textDecoration: "none",
+                    borderRadius: 999,
+                    border: quickDate.active ? "1px solid #2fb4ff" : "1px solid #1d3c56",
+                    background: quickDate.active ? "rgba(47,180,255,0.14)" : "#101a25",
+                    padding: "8px 12px",
+                    color: quickDate.active ? "#dff5ff" : "#a9c1d7",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    fontFamily: "'DM Mono',monospace",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {quickDate.label}
+                </Link>
+              ))}
             </div>
 
             <div
