@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { GoalieCard } from "./GoalieCard";
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip,
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip,
          LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 
 // ── Team metadata ────────────────────────────────────────────────────────────
@@ -302,6 +302,60 @@ function SummaryMetricTile({ label, value, subtitle, color }) {
   );
 }
 
+function CompactPercentileSummary({ player }) {
+  const percentiles = player.percentiles || {};
+  const summaryStats = [
+    { label: "WAR", value: percentiles["WAR"] ?? percentiles["Overall"] ?? player.overall_rating },
+    { label: "EV Off", value: percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct },
+    { label: "EV Def", value: percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct },
+    { label: "PP", value: percentiles["PP"] },
+    { label: "Penalties", value: percentiles["Penalties"] },
+    { label: "Shooting", value: percentiles["Shooting"] },
+  ].filter((item) => item.value != null);
+
+  if (!summaryStats.length) {
+    return (
+      <div style={{ background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 10, padding: "14px 16px" }}>
+        <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+          Percentile Snapshot
+        </div>
+        <div style={{ fontSize: 11, color: "#5a7a99", fontFamily: "'DM Mono',monospace" }}>No percentile summary available yet.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 10, padding: "14px 16px" }}>
+      <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+        Percentile Snapshot
+      </div>
+      <div style={{ display: "grid", gap: 10 }}>
+        {summaryStats.map((item) => (
+          <div key={item.label} style={{ display: "grid", gridTemplateColumns: "76px 1fr 40px", gap: 10, alignItems: "center" }}>
+            <div style={{ fontSize: 11, color: "#9aacbf", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              {item.label}
+            </div>
+            <div style={{ height: 8, background: "#172231", borderRadius: 999, overflow: "hidden" }}>
+              <div
+                style={{
+                  width: `${clamp(item.value || 0, 0, 100)}%`,
+                  height: "100%",
+                  background: `linear-gradient(90deg, ${pctColor(item.value)}88, ${pctColor(item.value)})`,
+                  borderRadius: 999,
+                  transition: "width 0.8s cubic-bezier(0.22,1,0.36,1)",
+                }}
+              />
+            </div>
+            <div style={{ fontSize: 14, color: pctColor(item.value), fontWeight: 800, textAlign: "right", fontFamily: "'DM Mono',monospace" }}>
+              {Math.round(item.value)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
   const avgToi = parseAvgToi(player.toi);
   const totalToiHours = avgToi && player.gp ? (avgToi * player.gp) / 60 : null;
@@ -490,6 +544,13 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
         </div>
       </div>
 
+      <div style={{ paddingTop: 20, paddingBottom: 20, borderBottom: "1px solid #1b222a" }}>
+        <div style={{ fontSize: 12, color: "#7a7f86", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 16 }}>
+          Detailed Percentile Radar
+        </div>
+        <RadarViz percentiles={percentiles} color={accent} detailed />
+      </div>
+
       <div className="pc-percentile-tiles" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, paddingTop: 20 }}>
         <SummaryMetricTile
           label="Offensive ±"
@@ -559,7 +620,7 @@ function RapmBox({ label, value, pct, subtitle }) {
   );
 }
 
-function RadarViz({ percentiles, color }) {
+function RadarViz({ percentiles, color, detailed = false }) {
   const preferredOrder = [
     "WAR",
     "EV Off",
@@ -576,18 +637,70 @@ function RadarViz({ percentiles, color }) {
     .map((key) => [key, percentiles[key]]);
   const entries = preferredEntries.length ? preferredEntries : allEntries.slice(0, 8);
   if (!entries.length) return (
-    <div style={{ height:120, display:"flex", alignItems:"center", justifyContent:"center" }}>
+    <div style={{ height:detailed ? 320 : 120, display:"flex", alignItems:"center", justifyContent:"center" }}>
       <span style={{ fontSize:11, color:"#2a4060", fontFamily:"'DM Mono',monospace" }}>No percentile data yet</span>
     </div>
   );
-  const data = entries.map(([k,v]) => ({ metric:k, value:v, fullMark:100 }));
+
+  const shortLabelMap = {
+    "WAR": "WAR",
+    "EV Off": "EV Off",
+    "EV Def": "EV Def",
+    "PP": "PP",
+    "Shooting": "Shoot",
+    "Penalties": "Pens",
+    "RAPM Off": "ROff",
+    "RAPM Def": "RDef",
+  };
+  const data = entries.map(([k,v]) => ({ metric:k, shortMetric: shortLabelMap[k] || k, value:v, fullMark:100 }));
+  const chartHeight = detailed ? 320 : 200;
+  const outerRadius = detailed ? "74%" : "72%";
+
+  const renderAngleTick = ({ payload, x, y, textAnchor, cx, cy }) => {
+    const value = payload?.payload?.shortMetric || payload?.value;
+    if (!value) return null;
+    const angle = detailed && String(value).length > 4 ? (x < cx ? -28 : 28) : 0;
+    return (
+      <text
+        x={x}
+        y={y}
+        textAnchor={textAnchor}
+        fill="#8ea5bc"
+        fontSize={11}
+        fontFamily="DM Mono,monospace"
+        transform={angle ? `rotate(${angle}, ${x}, ${y})` : undefined}
+      >
+        {value}
+      </text>
+    );
+  };
+
+  const renderTooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null;
+    const point = payload[0]?.payload;
+    if (!point) return null;
+    return (
+      <div style={{ background:"#0a1520", border:`1px solid ${color}44`, borderRadius:8, padding:"8px 10px", boxShadow:"0 8px 24px rgba(0,0,0,0.35)" }}>
+        <div style={{ color:"#dce7f2", fontSize:12, fontWeight:700, fontFamily:"'DM Mono',monospace" }}>{point.metric}</div>
+        <div style={{ color:color, fontSize:12, marginTop:2, fontFamily:"'DM Mono',monospace" }}>{Math.round(point.value)}th percentile</div>
+      </div>
+    );
+  };
+
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <RadarChart data={data} cx="50%" cy="50%" outerRadius="72%">
+    <ResponsiveContainer width="100%" height={chartHeight} minWidth={300} minHeight={300}>
+      <RadarChart data={data} cx="50%" cy="50%" outerRadius={outerRadius} margin={{ top: detailed ? 28 : 16, right: detailed ? 28 : 12, bottom: detailed ? 28 : 12, left: detailed ? 28 : 12 }}>
         <PolarGrid stroke="#1e2d40" />
-        <PolarAngleAxis dataKey="metric" tick={{ fontSize:10, fill:"#5a7a99", fontFamily:"DM Mono,monospace" }} />
-        <Radar dataKey="value" stroke={color} fill={color} fillOpacity={0.18} strokeWidth={2} dot={{ r:3, fill:color }} />
-        <Tooltip contentStyle={{ background:"#0a1520", border:`1px solid ${color}44`, borderRadius:6, fontSize:12, fontFamily:"DM Mono,monospace" }} labelStyle={{ color:"#8899aa" }} itemStyle={{ color }} formatter={(v) => [`${v}th pct`,""]} />
+        <PolarRadiusAxis
+          angle={90}
+          domain={[0, 100]}
+          tickCount={5}
+          tick={{ fill:"#566b81", fontSize:10, fontFamily:"DM Mono,monospace" }}
+          axisLine={false}
+        />
+        <PolarAngleAxis dataKey="metric" tick={renderAngleTick} />
+        <Radar dataKey="value" stroke={color} fill={color} fillOpacity={detailed ? 0.22 : 0.18} strokeWidth={2.5} dot={{ r:detailed ? 4 : 3, fill:color, stroke:"#081016", strokeWidth:1 }} />
+        <Tooltip content={renderTooltip} />
       </RadarChart>
     </ResponsiveContainer>
   );
@@ -811,8 +924,7 @@ function PlayerCard({ player }) {
               </div>
             )}
             <div style={{ marginBottom:4 }}>
-              <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>{player.position === "D" ? "Percentile Profile vs. Defensemen" : player.position === "G" ? "Percentile Profile vs. Goalies" : "Percentile Profile vs. Forwards"}</div>
-              <RadarViz percentiles={player.percentiles} color={accent} />
+              <CompactPercentileSummary player={player} />
             </div>
           </div>
         )}
