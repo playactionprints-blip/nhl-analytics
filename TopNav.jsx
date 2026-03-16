@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Players" },
   { href: "/teams", label: "Teams" },
   { href: "/predictions", label: "Predictions" },
+  { href: "/roster-builder", label: "Roster Builder" },
   { href: "/lottery", label: "NHL Lottery" },
 ];
 
