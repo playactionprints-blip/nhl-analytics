@@ -320,6 +320,46 @@ function SummaryMetricTile({ label, value, subtitle, color }) {
   );
 }
 
+function CollapsibleMetricSection({ title, isOpen, onToggle, children }) {
+  return (
+    <div style={{ borderTop: "1px solid #182432", paddingTop: 12, marginTop: 12 }}>
+      <button
+        onClick={onToggle}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "none",
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+        }}
+      >
+        <span style={{ fontSize: 10, color: "#5a7a99", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          {title}
+        </span>
+        <span
+          style={{
+            fontSize: 12,
+            color: "#6c8aa8",
+            fontFamily: "'DM Mono',monospace",
+            transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)",
+            transition: "transform 0.2s ease",
+          }}
+        >
+          ▾
+        </span>
+      </button>
+      {isOpen && (
+        <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CompactPercentileSummary({ player }) {
   const percentiles = player.percentiles || {};
   const summaryStats = [
@@ -813,6 +853,12 @@ function GoalieContent({ player, accent }) {
 // ── Main Player Card ─────────────────────────────────────────────────────────
 function PlayerCard({ player }) {
   const [tab, setTab] = useState("overview");
+  const [onIceSections, setOnIceSections] = useState({
+    offensive: true,
+    defensive: true,
+    specialTeams: true,
+    advanced: true,
+  });
   const teamAbbr = player.team || "";
   const accent = TEAM_COLOR[teamAbbr] || player.teamColor || "#4a6a88";
   const teamFull = TEAM_FULL[teamAbbr] || player.teamFull || teamAbbr;
@@ -833,6 +879,9 @@ function PlayerCard({ player }) {
   const ptsPer82 = gp > 0 ? Math.round((pts / gp) * 82) : 0;
   const tabs = isGoalie ? ["goalie stats"] : ["overview", "percentile card", "on-ice", "war / rapm", "ratings"];
   const cardWidth = !isGoalie && tab === "percentile card" ? 1080 : 420;
+  const toggleOnIceSection = (key) => {
+    setOnIceSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   return (
     <div className="pc-card" style={{ width:cardWidth, background:"linear-gradient(160deg,#0c1a28 0%,#081016 100%)", borderRadius:16, border:"1px solid #1e2d40", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
@@ -949,30 +998,103 @@ function PlayerCard({ player }) {
 
         {!isGoalie && tab === "on-ice" && (
           <div>
-            <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:14 }}>5v5 On-Ice Rates</div>
-            {[
-              { label:"CF% (Corsi For)", value:player.cf_pct },
-              { label:"xGF% (Exp. Goals For)", value:player.xgf_pct },
-              { label:"HDCF% (High Danger)", value:player.hdcf_pct },
-              { label:"SCF% (Scoring Chances)", value:player.scf_pct },
-            ].filter(s => s.value != null).map(stat => (
-              <div key={stat.label} style={{ marginBottom:14 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                  <span style={{ fontSize:11, color:"#8899aa", fontFamily:"'DM Mono',monospace" }}>{stat.label}</span>
-                  <span style={{ fontSize:13, fontWeight:700, color:statColor(stat.value), fontFamily:"'DM Mono',monospace" }}>{stat.value}%</span>
-                </div>
-                <div style={{ height:8, background:"#1a2535", borderRadius:4, position:"relative", overflow:"hidden" }}>
-                  <div style={{ position:"absolute", left:"50%", top:0, bottom:0, width:1, background:"#2a3d55", zIndex:1 }} />
-                  <div style={{ position:"absolute", left:stat.value>=50?"50%":`${stat.value}%`, width:stat.value>=50?`${stat.value-50}%`:`${50-stat.value}%`, height:"100%", background:statColor(stat.value), opacity:0.8, borderRadius:4, transition:"width 0.8s cubic-bezier(0.22,1,0.36,1)" }} />
-                </div>
-              </div>
-            ))}
-            {Object.keys(player.percentiles||{}).length > 0 && (
-              <div style={{ marginTop:20 }}>
-                <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:12 }}>Percentile Rankings</div>
-                {Object.entries(player.percentiles).map(([k,v]) => <PercentileBar key={k} label={k} value={v} />)}
-              </div>
-            )}
+            {(() => {
+              const percentiles = player.percentiles || {};
+              const groupedMetrics = {
+                offensive: [
+                  ["EV OFF", percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct],
+                  ["PTS/60", percentiles["Pts/60"]],
+                  ["GOALS/60", percentiles["Goals/60"]],
+                  ["IXG/60", percentiles["ixG/60"]],
+                  ["ICF/60", percentiles["iCF/60"]],
+                  ["RAPM OFF", percentiles["RAPM Off"] ?? player.rapm_off_pct],
+                  ["OFF RATING", percentiles["Off Rating"] ?? player.off_rating],
+                ],
+                defensive: [
+                  ["EV DEF", percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct],
+                  ["RAPM DEF", percentiles["RAPM Def"] ?? player.rapm_def_pct],
+                  ["DEF RATING", percentiles["Def Rating"] ?? player.def_rating],
+                  ["TKA", player.tka != null ? clamp(player.tka, 0, 100) : null],
+                ],
+                specialTeams: [
+                  ["PP", percentiles["PP"]],
+                  ["PK", percentiles["PK"]],
+                ],
+                advanced: [
+                  ["WAR", percentiles["WAR"] ?? percentiles["Overall"] ?? player.overall_rating],
+                  ["XGF%", player.xgf_pct],
+                  ["HDCF%", player.hdcf_pct],
+                  ["CF%", player.cf_pct],
+                  ["COMPETITION", percentiles["Competition"]],
+                  ["TEAMMATES", percentiles["Teammates"]],
+                  ["PENALTIES", percentiles["Penalties"]],
+                ],
+              };
+              return (
+                <>
+                  <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:14 }}>5v5 On-Ice Rates</div>
+                  {[
+                    { label:"CF% (Corsi For)", value:player.cf_pct },
+                    { label:"xGF% (Exp. Goals For)", value:player.xgf_pct },
+                    { label:"HDCF% (High Danger)", value:player.hdcf_pct },
+                    { label:"SCF% (Scoring Chances)", value:player.scf_pct },
+                  ].filter(s => s.value != null).map(stat => (
+                    <div key={stat.label} style={{ marginBottom:14 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                        <span style={{ fontSize:11, color:"#8899aa", fontFamily:"'DM Mono',monospace" }}>{stat.label}</span>
+                        <span style={{ fontSize:13, fontWeight:700, color:statColor(stat.value), fontFamily:"'DM Mono',monospace" }}>{stat.value}%</span>
+                      </div>
+                      <div style={{ height:8, background:"#1a2535", borderRadius:4, position:"relative", overflow:"hidden" }}>
+                        <div style={{ position:"absolute", left:"50%", top:0, bottom:0, width:1, background:"#2a3d55", zIndex:1 }} />
+                        <div style={{ position:"absolute", left:stat.value>=50?"50%":`${stat.value}%`, width:stat.value>=50?`${stat.value-50}%`:`${50-stat.value}%`, height:"100%", background:statColor(stat.value), opacity:0.8, borderRadius:4, transition:"width 0.8s cubic-bezier(0.22,1,0.36,1)" }} />
+                      </div>
+                    </div>
+                  ))}
+
+                  <div style={{ marginTop:20 }}>
+                    <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:2 }}>
+                      Percentile Sections
+                    </div>
+                    <CollapsibleMetricSection
+                      title="Offensive"
+                      isOpen={onIceSections.offensive}
+                      onToggle={() => toggleOnIceSection("offensive")}
+                    >
+                      {groupedMetrics.offensive.filter(([, value]) => value != null).map(([label, value]) => (
+                        <PercentileBar key={label} label={label} value={value} />
+                      ))}
+                    </CollapsibleMetricSection>
+                    <CollapsibleMetricSection
+                      title="Defensive"
+                      isOpen={onIceSections.defensive}
+                      onToggle={() => toggleOnIceSection("defensive")}
+                    >
+                      {groupedMetrics.defensive.filter(([, value]) => value != null).map(([label, value]) => (
+                        <PercentileBar key={label} label={label} value={value} />
+                      ))}
+                    </CollapsibleMetricSection>
+                    <CollapsibleMetricSection
+                      title="Special Teams"
+                      isOpen={onIceSections.specialTeams}
+                      onToggle={() => toggleOnIceSection("specialTeams")}
+                    >
+                      {groupedMetrics.specialTeams.filter(([, value]) => value != null).map(([label, value]) => (
+                        <PercentileBar key={label} label={label} value={value} />
+                      ))}
+                    </CollapsibleMetricSection>
+                    <CollapsibleMetricSection
+                      title="Advanced"
+                      isOpen={onIceSections.advanced}
+                      onToggle={() => toggleOnIceSection("advanced")}
+                    >
+                      {groupedMetrics.advanced.filter(([, value]) => value != null).map(([label, value]) => (
+                        <PercentileBar key={label} label={label} value={value} />
+                      ))}
+                    </CollapsibleMetricSection>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Special Teams */}
             <div style={{ marginTop:20 }}>
