@@ -1459,9 +1459,55 @@ export default function App({ players: propPlayers, seasonStats }) {
           {filtered.map(p => {
             const color = TEAM_COLOR[p.team] || "#4a6a88";
             const isSelected = displayPlayer?.player_id === p.player_id;
+            const position = (p.position || "—").toUpperCase();
+            const teamName = TEAM_FULL[p.team] || p.team || "Unknown team";
+            const tooltip = `${teamName} · #${p.jersey ?? "—"} · ${position}`;
             return (
-              <button key={p.player_id} onClick={() => setSelectedPlayer(p)} style={{ padding:"6px 14px", background:isSelected?color:"#0d1825", border:`1px solid ${isSelected?color:"#1e2d40"}`, borderRadius:8, color:isSelected?"white":"#4a6a88", fontSize:12, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer", letterSpacing:"0.03em", transition:"all 0.2s", boxShadow:isSelected?`0 4px 20px ${color}44`:"none", display:"flex", alignItems:"center", gap:6 }}>
-                {p.full_name || p.name}
+              <button
+                key={p.player_id}
+                title={tooltip}
+                onClick={() => setSelectedPlayer(p)}
+                style={{
+                  padding:"6px 14px 6px 11px",
+                  background:isSelected?`${color}22`:"#0d1825",
+                  border:`1px solid ${isSelected?color:"#1e2d40"}`,
+                  borderLeft:`3px solid ${color}`,
+                  borderRadius:999,
+                  color:isSelected?"#eef8ff":"#c9deef",
+                  fontSize:12,
+                  fontWeight:700,
+                  fontFamily:"'Barlow Condensed',sans-serif",
+                  cursor:"pointer",
+                  letterSpacing:"0.03em",
+                  transition:"all 0.2s",
+                  boxShadow:isSelected?`0 4px 20px ${color}44`:"none",
+                  display:"flex",
+                  alignItems:"center",
+                  gap:8,
+                }}
+              >
+                <span
+                  style={{
+                    minWidth:20,
+                    height:20,
+                    padding:"0 6px",
+                    borderRadius:999,
+                    background:isSelected?`${color}33`:"#122131",
+                    border:`1px solid ${isSelected?`${color}88`:"#21364d"}`,
+                    color:isSelected?"#ffffff":"#8ec5ee",
+                    fontSize:10,
+                    fontFamily:"'DM Mono',monospace",
+                    display:"inline-flex",
+                    alignItems:"center",
+                    justifyContent:"center",
+                    textTransform:"uppercase",
+                    letterSpacing:"0.04em",
+                    lineHeight:1,
+                  }}
+                >
+                  {position}
+                </span>
+                <span>{p.full_name || p.name}</span>
               </button>
             );
           })}
