@@ -41,6 +41,17 @@ function toNumber(value, fallback = null) {
 }
 
 export async function GET() {
+  // Verify env vars are present — missing vars are the most common Vercel deploy issue
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) {
+    console.error("Roster builder API: missing Supabase env vars", {
+      hasUrl: Boolean(supabaseUrl),
+      hasKey: Boolean(supabaseKey),
+    });
+    return jsonError("Server configuration error — missing Supabase credentials", 500);
+  }
+
   try {
     const supabase = createServerClient();
 
@@ -50,21 +61,34 @@ export async function GET() {
       .eq("season", CURRENT_SEASON)
       .order("war_total", { ascending: false, nullsFirst: false });
 
-    if (seasonError) throw seasonError;
+    if (seasonError) {
+      console.error("Roster builder API: player_seasons query failed", JSON.stringify(seasonError));
+      throw seasonError;
+    }
 
     const ids = [...new Set((seasonRows || []).map((row) => row.player_id).filter(Boolean))];
     if (!ids.length) {
       return jsonWithCache([], 300);
     }
 
-    const { data: players, error: playersError } = await supabase
-      .from("players")
-      .select("player_id,full_name,team,position,cap_hit,overall_rating,off_rating,def_rating,contract_info")
-      .in("player_id", ids);
+    // Fetch players in batches of 200 to avoid PostgREST URL-length limits
+    // that trigger when passing 700+ IDs in a single .in() call.
+    const BATCH = 200;
+    const allPlayers = [];
+    for (let i = 0; i < ids.length; i += BATCH) {
+      const batch = ids.slice(i, i + BATCH);
+      const { data: batchData, error: batchError } = await supabase
+        .from("players")
+        .select("player_id,full_name,team,position,cap_hit,overall_rating,off_rating,def_rating,contract_info")
+        .in("player_id", batch);
+      if (batchError) {
+        console.error("Roster builder API: players query failed (batch)", JSON.stringify(batchError));
+        throw batchError;
+      }
+      allPlayers.push(...(batchData || []));
+    }
 
-    if (playersError) throw playersError;
-
-    const playerMap = Object.fromEntries((players || []).map((player) => [String(player.player_id), player]));
+    const playerMap = Object.fromEntries(allPlayers.map((player) => [String(player.player_id), player]));
 
     const payload = (seasonRows || [])
       .map((row) => {
@@ -75,7 +99,7 @@ export async function GET() {
           player_id: String(row.player_id),
           player_name: player.full_name,
           team: row.team || player.team || null,
-          position: row.position || player.position || null,
+          position: player.position || null,
           cap_hit: toNumber(player.contract_info?.cap_hit ?? player.cap_hit, null),
           contract_expiry: toNumber(player.contract_info?.expiry, null),
           war: toNumber(row.war_total, null),
@@ -88,6 +112,8 @@ export async function GET() {
 
     return jsonWithCache(payload, 300);
   } catch (error) {
+    console.error("Roster builder API error:", error);
+    console.error("Error details:", JSON.stringify(error));
     return jsonError(error.message || "Failed to load roster builder players");
   }
 }
