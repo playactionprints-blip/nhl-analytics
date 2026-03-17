@@ -208,10 +208,15 @@ function SeasonTrendCard({ label, data, dataKey, accent, mutedColor, formatter, 
 }
 
 // ── Player row ────────────────────────────────────────────────────────────────
-function PlayerRow({ player, rank, onSelect }) {
+function PlayerRow({ player, rank, onSelect, isGoalie = false, displayWar, warLabel = "WAR" }) {
   const [hovered, setHovered] = useState(false);
   const badge = ratingBadge(player.overall_rating);
-  const war = player.war_total;
+
+  const svPct = player.save_pct != null
+    ? `.${String(Math.round(player.save_pct * 1000)).padStart(3, "0")}`
+    : null;
+  const gaa = player.gaa != null ? player.gaa.toFixed(2) : null;
+  const gsax = player.gsax != null ? player.gsax.toFixed(1) : null;
 
   return (
     <div
@@ -251,27 +256,98 @@ function PlayerRow({ player, rank, onSelect }) {
       {/* Stats */}
       <div style={{ display: "flex", gap: 16, flex: 1, justifyContent: "flex-end",
         alignItems: "center", flexWrap: "wrap" }}>
-        {[
-          { label: "GP",  val: player.gp },
-          { label: "G",   val: player.g },
-          { label: "A",   val: player.a },
-          { label: "PTS", val: player.pts, bold: true },
-        ].map(({ label, val, bold }) => (
-          <div key={label} style={{ textAlign: "center", minWidth: 30 }}>
-            <div style={{ fontSize: bold ? 14 : 13, fontWeight: bold ? 700 : 400,
-              color: bold ? "#e8f4ff" : "#6a8aaa",
-              fontFamily: "'DM Mono',monospace" }}>
-              {val ?? "—"}
-            </div>
-            <div style={{ fontSize: 9, color: "#2a4060",
-              fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>
-              {label}
-            </div>
-          </div>
-        ))}
 
-        {/* Rating badge */}
-        {badge ? (
+        {isGoalie ? (
+          <>
+            {[
+              { label: "GP",  val: player.gp },
+              { label: "W",   val: player.wins },
+              { label: "L",   val: player.losses },
+              { label: "GAA", val: gaa },
+              { label: "SV%", val: svPct, bold: true },
+              { label: "SO",  val: player.shutouts },
+            ].map(({ label, val, bold }) => (
+              <div key={label} style={{ textAlign: "center", minWidth: 30 }}>
+                <div style={{ fontSize: bold ? 14 : 13, fontWeight: bold ? 700 : 400,
+                  color: bold ? "#00e5a0" : "#6a8aaa",
+                  fontFamily: "'DM Mono',monospace" }}>
+                  {val ?? "—"}
+                </div>
+                <div style={{ fontSize: 9, color: "#2a4060",
+                  fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>
+                  {label}
+                </div>
+              </div>
+            ))}
+
+            {/* GSAx */}
+            <div style={{ textAlign: "center", minWidth: 36 }}>
+              <div style={{ fontSize: 13, fontWeight: 700,
+                color: gsax == null ? "#2a4060" : player.gsax > 0 ? "#00e5a0" : "#e05050",
+                fontFamily: "'DM Mono',monospace" }}>
+                {gsax ?? "—"}
+              </div>
+              <div style={{ fontSize: 9, color: "#2a4060",
+                fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>
+                GSAx
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {[
+              { label: "GP",  val: player.gp },
+              { label: "G",   val: player.g },
+              { label: "A",   val: player.a },
+              { label: "PTS", val: player.pts, bold: true },
+            ].map(({ label, val, bold }) => (
+              <div key={label} style={{ textAlign: "center", minWidth: 30 }}>
+                <div style={{ fontSize: bold ? 14 : 13, fontWeight: bold ? 700 : 400,
+                  color: bold ? "#e8f4ff" : "#6a8aaa",
+                  fontFamily: "'DM Mono',monospace" }}>
+                  {val ?? "—"}
+                </div>
+                <div style={{ fontSize: 9, color: "#2a4060",
+                  fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>
+                  {label}
+                </div>
+              </div>
+            ))}
+
+            {/* Rating badge (OVR) — before WAR for skaters */}
+            {badge ? (
+              <div style={{ background: badge.bg, border: `1px solid ${badge.border}`,
+                borderRadius: 6, padding: "3px 8px", minWidth: 38, textAlign: "center" }}>
+                <div style={{ fontSize: 15, fontWeight: 900, color: badge.color,
+                  fontFamily: "'Barlow Condensed',sans-serif", lineHeight: 1 }}>
+                  {badge.r}
+                </div>
+                <div style={{ fontSize: 8, color: badge.color, opacity: 0.7,
+                  fontFamily: "'DM Mono',monospace", letterSpacing: "0.05em" }}>
+                  OVR
+                </div>
+              </div>
+            ) : (
+              <div style={{ minWidth: 38 }} />
+            )}
+
+            {/* WAR */}
+            <div style={{ textAlign: "center", minWidth: 36 }}>
+              <div style={{ fontSize: 13, fontWeight: 700,
+                color: displayWar == null ? "#2a4060" : displayWar > 2 ? "#00e5a0" : displayWar >= 0.5 ? "#f0c040" : "#e05050",
+                fontFamily: "'DM Mono',monospace" }}>
+                {displayWar != null ? displayWar.toFixed(1) : "—"}
+              </div>
+              <div style={{ fontSize: 9, color: "#2a4060",
+                fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>
+                {warLabel}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Rating badge for goalies (after GSAx) */}
+        {isGoalie && (badge ? (
           <div style={{ background: badge.bg, border: `1px solid ${badge.border}`,
             borderRadius: 6, padding: "3px 8px", minWidth: 38, textAlign: "center" }}>
             <div style={{ fontSize: 15, fontWeight: 900, color: badge.color,
@@ -285,20 +361,7 @@ function PlayerRow({ player, rank, onSelect }) {
           </div>
         ) : (
           <div style={{ minWidth: 38 }} />
-        )}
-
-        {/* WAR */}
-        <div style={{ textAlign: "center", minWidth: 36 }}>
-          <div style={{ fontSize: 13, fontWeight: 700,
-            color: war == null ? "#2a4060" : war > 2 ? "#00e5a0" : war >= 0.5 ? "#f0c040" : "#e05050",
-            fontFamily: "'DM Mono',monospace" }}>
-            {war != null ? war.toFixed(1) : "—"}
-          </div>
-          <div style={{ fontSize: 9, color: "#2a4060",
-            fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>
-            WAR
-          </div>
-        </div>
+        ))}
 
         {/* Arrow */}
         <div style={{ fontSize: 12, color: "#1e3348", paddingLeft: 4 }}>›</div>
@@ -331,9 +394,10 @@ function PlayerModal({ player, onClose }) {
 }
 
 // ── Main TeamPage component ───────────────────────────────────────────────────
-export default function TeamPage({ teamCode, players, record, teamStats, seasonCharts = [] }) {
+export default function TeamPage({ teamCode, players, record, teamStats, seasonCharts = [], playerSeasonWAR = {} }) {
   const [tab, setTab] = useState("forwards");
   const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [warMode, setWarMode] = useState("3y");
 
   const color = TEAM_COLOR[teamCode] || "#4a6a88";
   const teamName = TEAM_FULL[teamCode] || teamCode;
@@ -342,7 +406,27 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
   const defense   = players.filter(p => p.position === "D");
   const goalies   = players.filter(p => p.position === "G");
 
-  const activeRoster = tab === "forwards" ? forwards : tab === "defense" ? defense : goalies;
+  function getDisplayWar(player) {
+    if (warMode === "3y") return player.war_total;
+    return playerSeasonWAR?.[player.player_id]?.[warMode] ?? null;
+  }
+
+  const warLabel = warMode === "3y" ? "WAR" : warMode;
+
+  function sortByWar(roster) {
+    return [...roster].sort((a, b) => {
+      const wa = getDisplayWar(a);
+      const wb = getDisplayWar(b);
+      if (wa == null && wb == null) return 0;
+      if (wa == null) return 1;
+      if (wb == null) return -1;
+      return wb - wa;
+    });
+  }
+
+  const isGoalieTab = tab === "goalies";
+  const rawRoster = tab === "forwards" ? forwards : tab === "defense" ? defense : goalies;
+  const activeRoster = isGoalieTab ? rawRoster : sortByWar(rawRoster);
 
   const { avgCF, avgXGF, totalWAR, warRank, ppPct, leagueAvgCF, leagueAvgXGF } = teamStats;
 
@@ -495,10 +579,10 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
           )}
 
           {/* ── Roster tabs ── */}
-          <div style={{ marginBottom: 4 }}>
+          <div style={{ marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
             <div style={{ display: "flex", gap: 0, background: "#0d1825",
               border: "1px solid #1e2d40", borderRadius: 10, overflow: "hidden",
-              width: "fit-content", marginBottom: 0 }}>
+              width: "fit-content" }}>
               {[
                 ["forwards", `Forwards (${forwards.length})`],
                 ["defense",  `Defense (${defense.length})`],
@@ -518,6 +602,30 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
                 </button>
               ))}
             </div>
+
+            {/* WAR season filter pills — hidden on goalies tab */}
+            {!isGoalieTab && (
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <span style={{ fontSize: 9, color: "#2a4060", fontFamily: "'DM Mono',monospace",
+                  textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 4 }}>
+                  WAR:
+                </span>
+                {["3y", "25-26", "24-25", "23-24"].map(mode => (
+                  <button key={mode} onClick={() => setWarMode(mode)} style={{
+                    padding: "4px 10px",
+                    background: warMode === mode ? `${color}33` : "transparent",
+                    border: `1px solid ${warMode === mode ? color : "#1e2d40"}`,
+                    borderRadius: 20,
+                    color: warMode === mode ? color : "#4a6a88",
+                    fontSize: 10, fontWeight: warMode === mode ? 700 : 400,
+                    fontFamily: "'DM Mono',monospace",
+                    cursor: "pointer", transition: "all 0.15s",
+                  }}>
+                    {mode === "3y" ? "3Y" : mode}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* ── Roster table ── */}
@@ -535,7 +643,10 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
                 letterSpacing: "0.08em" }}>Player</div>
               <div style={{ flex: 1, display: "flex", gap: 16, justifyContent: "flex-end",
                 alignItems: "center" }}>
-                {["GP","G","A","PTS","OVR","WAR",""].map(h => (
+                {(isGoalieTab
+                  ? ["GP","W","L","GAA","SV%","SO","GSAx","OVR",""]
+                  : ["GP","G","A","PTS","OVR",warLabel,""]
+                ).map(h => (
                   <div key={h} style={{ minWidth: h === "" ? 36 : h === "OVR" ? 38 : 30,
                     fontSize: 9, color: "#2a4060", fontFamily: "'DM Mono',monospace",
                     textTransform: "uppercase", letterSpacing: "0.08em",
@@ -558,6 +669,9 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
                   player={p}
                   rank={i + 1}
                   onSelect={setSelectedPlayer}
+                  isGoalie={isGoalieTab}
+                  displayWar={getDisplayWar(p)}
+                  warLabel={warLabel}
                 />
               ))
             )}

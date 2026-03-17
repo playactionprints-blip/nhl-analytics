@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip,
+         AreaChart, Area, CartesianGrid, Line, XAxis, YAxis } from "recharts";
 
 const TEAM_COLOR = {
   ANA:"#F47A38",BOS:"#FFB81C",BUF:"#003087",CAR:"#CC0000",
@@ -114,6 +115,70 @@ function RadarViz({ percentiles, color }) {
   );
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function GoalieTrendPanel({ data, lines, accent }) {
+  const valid = (data || []).filter((row) => lines.some((line) => row[line.key] != null));
+  if (valid.length < 2) return null;
+  return (
+    <div style={{ background: "#0f141b", border: "1px solid #1b232d", borderRadius: 18, padding: "18px 18px 14px" }}>
+      <div style={{ fontSize: 11, color: "#717780", fontFamily: "'DM Mono',monospace", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>
+        Performance Trend
+      </div>
+      <div style={{ fontSize: 15, color: "#f1efe9", fontWeight: 700, marginBottom: 10 }}>GSAx Percentile · By Season</div>
+      <ResponsiveContainer width="100%" height={160}>
+        <AreaChart data={valid} margin={{ top: 8, right: 10, left: -22, bottom: 2 }}>
+          <CartesianGrid stroke="#1f2833" strokeDasharray="0" vertical={true} />
+          <XAxis dataKey="season" tick={{ fontSize: 11, fill: "#7f8388", fontFamily: "DM Mono,monospace" }} axisLine={false} tickLine={false} />
+          <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#7f8388", fontFamily: "DM Mono,monospace" }} axisLine={false} tickLine={false} />
+          <Tooltip
+            contentStyle={{ background: "#0a1016", border: "1px solid #283240", borderRadius: 10, fontSize: 12, fontFamily: "DM Mono,monospace" }}
+            labelStyle={{ color: "#9da4ad" }}
+            formatter={(v, _name, item) => [v != null ? Number(v).toFixed(1) : "—", item?.payload?.label || item?.name || "Value"]}
+          />
+          {lines.map((line) => (
+            <Area key={`${line.key}-area`} type="monotone" dataKey={line.key} stroke="none"
+              fill={line.color || accent} fillOpacity={0.15} connectNulls />
+          ))}
+          {lines.map((line) => (
+            <Line key={line.key} type="monotone" dataKey={line.key} stroke={line.color || accent}
+              strokeWidth={3} dot={{ r: 5, fill: line.color || accent, strokeWidth: 0 }}
+              activeDot={{ r: 6, fill: line.color || accent }} name={line.label} connectNulls />
+          ))}
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function GoalieRankedBar({ label, value, color }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "148px 1fr 42px", gap: 10, alignItems: "center" }}>
+      <div style={{ fontSize: 17, color: "#8d9197", fontWeight: 600 }}>{label}</div>
+      <div style={{ height: 8, background: "#1a2028", borderRadius: 999, overflow: "hidden" }}>
+        <div style={{ width: `${clamp(value || 0, 0, 100)}%`, height: "100%", background: color, borderRadius: 999 }} />
+      </div>
+      <div style={{ fontSize: 16, color: "#f1efe9", fontWeight: 800, textAlign: "right" }}>
+        {value != null ? Math.round(value) : "—"}
+      </div>
+    </div>
+  );
+}
+
+function GoalieMetricTile({ label, value, subtitle, color }) {
+  return (
+    <div style={{ background: "#151b22", border: "1px solid #232c36", borderRadius: 16, padding: "16px 18px 14px", minHeight: 108 }}>
+      <div style={{ fontSize: 14, color: "#7e838a", fontWeight: 600, marginBottom: 10 }}>{label}</div>
+      <div style={{ fontSize: 26, color: color || "#f1efe9", fontWeight: 900, lineHeight: 1, marginBottom: 8 }}>
+        {value ?? "—"}
+      </div>
+      <div style={{ fontSize: 13, color: "#7d838b", fontFamily: "'DM Mono',monospace" }}>{subtitle}</div>
+    </div>
+  );
+}
+
 export function GoalieCard({ player }) {
   const [tab, setTab] = useState("overview");
   const teamAbbr  = player.team || "";
@@ -150,10 +215,11 @@ export function GoalieCard({ player }) {
   const gsaxPct = player.gsax_pct ?? player.percentiles?.GSAx ?? null;
   const svAboveExpectedPct = player.sv_ae_pct ?? null;
 
-  const tabs = ["overview", "stats", "ratings"];
+  const tabs = ["overview", "stats", "ratings", "percentile card"];
+  const cardWidth = tab === "percentile card" ? 700 : 420;
 
   return (
-    <div className="pc-card" style={{ width:420, background:"linear-gradient(160deg,#0c1a28 0%,#081016 100%)", borderRadius:16, border:"1px solid #1e2d40", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
+    <div className="pc-card" style={{ width:cardWidth, maxWidth:"95vw", background:"linear-gradient(160deg,#0c1a28 0%,#081016 100%)", borderRadius:16, border:"1px solid #1e2d40", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative", transition:"width 0.2s ease" }}>
 
       {/* Top accent bar */}
       <div style={{ height:3, background:`linear-gradient(90deg,${accent},${accent}88,transparent)` }} />
@@ -313,6 +379,135 @@ export function GoalieCard({ player }) {
             </div>
           </div>
         )}
+
+        {/* ── PERCENTILE CARD ── */}
+        {tab === "percentile card" && (() => {
+          const gsaxTrend = player.gsaxTrend || [];
+          const svAboveExpFmt = player.save_pct_above_expected != null
+            ? `${player.save_pct_above_expected >= 0 ? "+" : ""}${(player.save_pct_above_expected).toFixed(3).slice(1)}`
+            : "—";
+          const gsaxPerXgaFmt = player.gsax_per_xga != null
+            ? `${player.gsax_per_xga >= 0 ? "+" : ""}${player.gsax_per_xga.toFixed(3)}`
+            : "—";
+          const wlRecord = (player.wins != null && player.losses != null)
+            ? `${player.wins}-${player.losses}` : null;
+
+          return (
+            <div>
+              {/* Section 1 — Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+                <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                  {/* Team badge circle */}
+                  <div style={{ width: 66, height: 66, borderRadius: "50%", background: `${accent}22`, border: `2px solid ${accent}55`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <img src={`https://assets.nhle.com/logos/nhl/svg/${player.team || ""}_light.svg`}
+                      alt={player.team} width={48} height={48} style={{ objectFit: "contain" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 28, fontWeight: 900, color: "#e8f4ff", lineHeight: 1.1, letterSpacing: "-0.5px" }}>
+                      {firstName} {lastName}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#4a6a88", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
+                      G{age ? ` · ${age} yrs` : ""}{player.toi ? ` · ${player.toi} avg TOI` : ""}
+                    </div>
+                  </div>
+                </div>
+
+                {/* GSAx %ile badge */}
+                <div style={{ background: "#00e5a015", border: "1px solid #00e5a044", borderRadius: 10, padding: "10px 16px", textAlign: "center", flexShrink: 0 }}>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: "#00e5a0", lineHeight: 1 }}>
+                    {gsaxPct != null ? Math.round(gsaxPct) : "—"}
+                  </div>
+                  <div style={{ fontSize: 9, color: "#00e5a088", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 3 }}>
+                    GSAx %ile
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2 — Trend + Raw stats sidebar */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 0.98fr", gap: 14, marginBottom: 20 }}>
+                {/* Trend */}
+                <div>
+                  {gsaxTrend.length >= 2 ? (
+                    <GoalieTrendPanel
+                      data={gsaxTrend}
+                      lines={[{ key: "gsax", label: "GSAx", color: "#00e5a0" }]}
+                      accent={accent}
+                    />
+                  ) : (
+                    <div style={{ background: "#0f141b", border: "1px solid #1b232d", borderRadius: 18, padding: "18px 18px 14px", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontSize: 11, color: "#2a4060", fontFamily: "'DM Mono',monospace", textAlign: "center" }}>
+                        Trend data available after multiple seasons
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Raw stat sidebar */}
+                <div style={{ background: "#0a1520", border: "1px solid #1e2d40", borderRadius: 16, padding: "14px 16px" }}>
+                  <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+                    Raw Stats
+                  </div>
+                  {[
+                    { label: "SV%",     val: svPct },
+                    { label: "GAA",     val: gaa },
+                    { label: "GSAx",    val: gsax, signed: true },
+                    { label: "W-L",     val: wlRecord },
+                    { label: "Exp SV%", val: expectedSvPct },
+                    { label: "xGA",     val: xga },
+                  ].map(({ label, val, signed }) => (
+                    <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #111d2a" }}>
+                      <span style={{ fontSize: 11, color: "#4a6a88", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: signed && val != null ? (player.gsax > 0 ? "#00e5a0" : "#e05050") : "#c8dff0", fontFamily: "'DM Mono',monospace" }}>
+                        {val ?? "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Section 3 — Percentile bars */}
+              <div style={{ background: "#0a1520", border: "1px solid #1e2d40", borderRadius: 14, padding: "16px 18px", marginBottom: 20 }}>
+                <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14 }}>
+                  Percentile Rankings
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <GoalieRankedBar label="Save %" value={player.sv_pct_pct} color="#00e5a0" />
+                  <GoalieRankedBar label="Goals Against" value={player.gaa_pct} color="#19c2ff" />
+                  <GoalieRankedBar label="GSAx" value={gsaxPct} color="#32e39a" />
+                  <GoalieRankedBar label="Win %" value={player.win_pct_pct} color="#f0c040" />
+                </div>
+              </div>
+
+              {/* Section 4 — Metric tiles */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+                <GoalieMetricTile
+                  label="GSAx"
+                  value={gsax}
+                  subtitle={`${gsaxPct != null ? Math.round(gsaxPct) : "—"}th %ile`}
+                  color="#00e5a0"
+                />
+                <GoalieMetricTile
+                  label="SV% Above Exp"
+                  value={svAboveExpFmt}
+                  subtitle="vs expected"
+                  color={player.save_pct_above_expected != null && player.save_pct_above_expected > 0 ? "#00e5a0" : "#e05050"}
+                />
+                <GoalieMetricTile
+                  label="Exp SV%"
+                  value={expectedSvPct}
+                  subtitle="model baseline"
+                  color="#8899aa"
+                />
+                <GoalieMetricTile
+                  label="GSAx/xGA"
+                  value={gsaxPerXgaFmt}
+                  subtitle="efficiency"
+                  color="#8899aa"
+                />
+              </div>
+            </div>
+          );
+        })()}
 
       </div>
     </div>

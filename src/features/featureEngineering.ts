@@ -86,18 +86,30 @@ function lineupAndInjuryAdjustment(side: "home" | "away", context: GameContext):
   };
 }
 
+// Goalie accounts for ~15% of game outcome variance.
+// A goalie at the 90th GSAx percentile gets +0.12 boost; 10th gets -0.12.
+const GOALIE_WEIGHT = 0.15;
+
 function goalieAdjustment(side: "home" | "away", context: GameContext): number {
   const starter = side === "home" ? context.homeStartingGoalie : context.awayStartingGoalie;
   if (!starter) return 1;
 
-  const savePctDelta =
-    typeof starter.savePct === "number"
-      ? (starter.savePct - DEFAULT_MODEL_CONFIG.leagueAverages.savePct) / DEFAULT_MODEL_CONFIG.leagueAverages.savePct
-      : 0;
-  const gsaxBoost = typeof starter.gsaxPer60 === "number" ? starter.gsaxPer60 * 0.04 : 0;
-  const qualityAdjustment = starter.qualityAdjustment ?? 0;
+  let qualityBoost: number;
+  if (typeof starter.gsaxPct === "number") {
+    // gsaxPct is a percentile rank (0–100); normalize to [-0.15, +0.15]
+    qualityBoost = (starter.gsaxPct - 50) / 50 * GOALIE_WEIGHT;
+  } else {
+    // Fallback to raw save% delta + gsaxPer60 approach
+    const savePctDelta =
+      typeof starter.savePct === "number"
+        ? (starter.savePct - DEFAULT_MODEL_CONFIG.leagueAverages.savePct) / DEFAULT_MODEL_CONFIG.leagueAverages.savePct
+        : 0;
+    const gsaxBoost = typeof starter.gsaxPer60 === "number" ? starter.gsaxPer60 * 0.04 : 0;
+    qualityBoost = savePctDelta + gsaxBoost;
+  }
 
-  return clamp(1 + savePctDelta + gsaxBoost + qualityAdjustment, 0.9, 1.12);
+  const qualityAdjustment = starter.qualityAdjustment ?? 0;
+  return clamp(1 + qualityBoost + qualityAdjustment, 0.88, 1.14);
 }
 
 function possessionContextPct(team: TeamSeasonStats, side: "home" | "away"): number {

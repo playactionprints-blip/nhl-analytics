@@ -128,7 +128,7 @@ export default async function TeamPageRoute({ params }) {
       .select('player_id,team,war_total,cf_pct,xgf_pct,toi'),
     supabase
       .from('player_seasons')
-      .select('season,cf_pct,war_total')
+      .select('player_id,season,cf_pct,war_total')
       .eq('team', teamCode),
     fetchStandings(),
   ]);
@@ -174,6 +174,14 @@ export default async function TeamPageRoute({ params }) {
     leagueAvgCF,
     leagueAvgXGF,
   };
+
+  // ── Per-player per-season WAR map ──────────────────────────────────────────
+  const playerSeasonWAR = {};
+  for (const row of (teamSeasonRows || [])) {
+    if (!row?.player_id || !row?.season || row.war_total == null) continue;
+    if (!playerSeasonWAR[row.player_id]) playerSeasonWAR[row.player_id] = {};
+    playerSeasonWAR[row.player_id][row.season] = row.war_total;
+  }
 
   const seasonSummaryMap = {};
   for (const row of (teamSeasonRows || [])) {
@@ -225,6 +233,7 @@ export default async function TeamPageRoute({ params }) {
       record={record}
       teamStats={teamStats}
       seasonCharts={seasonCharts}
+      playerSeasonWAR={playerSeasonWAR}
     />
   );
 }

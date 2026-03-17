@@ -4,6 +4,7 @@ import { TEAM_COLOR, logoUrl } from "@/app/lib/nhlTeams";
 import {
   buildPredictionsForDate,
   confidenceMeta,
+  fetchPredictionAccuracy,
   formatHeadlineDate,
   formatStartTime,
   formatRecord,
@@ -25,8 +26,82 @@ export const metadata = {
   description: "Tonight's NHL game predictions with win odds, expected goals, and score distributions.",
 };
 
-const CONFIDENCE_TOOLTIP =
+const DEFAULT_CONFIDENCE_TOOLTIP =
   "Confidence is based on available team data quality, recency of goaltender info, and home/away sample size. LOW = less reliable inputs.";
+
+function ModelAccuracySection({ accuracy }) {
+  if (!accuracy) return null;
+  const { overall, byConfidence, rolling7, last10 } = accuracy;
+  const pctLabel = (v) => (v != null ? `${Math.round(v * 100)}%` : "—");
+  const bandColors = { high: "#35e3a0", medium: "#f0c040", low: "#ff8d9b" };
+  return (
+    <section
+      style={{
+        border: "1px solid #17283b",
+        borderRadius: 24,
+        background: "#091017",
+        padding: 20,
+        display: "grid",
+        gap: 14,
+      }}
+    >
+      <div>
+        <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          Model accuracy
+        </div>
+        <div style={{ fontSize: 22, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+          Historical performance
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+        {[
+          ["Overall", pctLabel(overall?.pct), `${overall?.correct ?? 0}/${overall?.total ?? 0} games`],
+          ["Last 7 days", pctLabel(rolling7?.pct), `${rolling7?.correct ?? 0}/${rolling7?.total ?? 0} games`],
+        ].map(([label, value, sub]) => (
+          <div key={label} style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "12px 14px" }}>
+            <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+            <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{value}</div>
+            <div style={{ color: "#567894", fontSize: 11, marginTop: 2 }}>{sub}</div>
+          </div>
+        ))}
+        {["high", "medium", "low"].map((band) => {
+          const s = byConfidence?.[band] || { correct: 0, total: 0, pct: null };
+          return (
+            <div key={band} style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "12px 14px" }}>
+              <div style={{ color: bandColors[band], fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>{band} conf.</div>
+              <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{pctLabel(s.pct)}</div>
+              <div style={{ color: "#567894", fontSize: 11, marginTop: 2 }}>{s.correct}/{s.total} games</div>
+            </div>
+          );
+        })}
+      </div>
+      {last10?.length > 0 && (
+        <div style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "12px 14px" }}>
+          <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Last 10 tracked games</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {last10.map((row) => (
+              <div
+                key={`${row.game_date}-${row.game_id}`}
+                style={{
+                  borderRadius: 999,
+                  padding: "5px 10px",
+                  background: row.correct ? "rgba(53,227,160,0.12)" : "rgba(255,111,123,0.12)",
+                  border: `1px solid ${row.correct ? "rgba(53,227,160,0.3)" : "rgba(255,111,123,0.3)"}`,
+                  color: row.correct ? "#35e3a0" : "#ff8d9b",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  fontFamily: "'DM Mono',monospace",
+                }}
+              >
+                {row.away_team} @ {row.home_team}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function formatQuickDateLabel(dateString, todayString) {
   if (dateString === todayString) return "Today";
@@ -50,11 +125,12 @@ function formatQuickDateLabel(dateString, todayString) {
   }
 }
 
-function ConfidenceHelpIcon() {
+function ConfidenceHelpIcon({ tooltip }) {
+  const tip = tooltip || DEFAULT_CONFIDENCE_TOOLTIP;
   return (
     <span
-      title={CONFIDENCE_TOOLTIP}
-      aria-label={CONFIDENCE_TOOLTIP}
+      title={tip}
+      aria-label={tip}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -95,7 +171,10 @@ export default async function PredictionsPage({ searchParams }) {
       active: dateString === selectedDateString,
     };
   });
-  const { predictions } = await buildPredictionsForDate(selectedDateString);
+  const [{ predictions }, accuracy] = await Promise.all([
+    buildPredictionsForDate(selectedDateString),
+    fetchPredictionAccuracy(),
+  ]);
 
   return (
     <div
@@ -440,7 +519,7 @@ export default async function PredictionsPage({ searchParams }) {
             </section>
 
             <div className="predictions-grid">
-            {predictions.map(({ game, prediction, homeTeam, awayTeam }) => {
+            {predictions.map(({ game, prediction, homeTeam, awayTeam, projectedHomeGoalie, projectedAwayGoalie, homeKeyPlayers, awayKeyPlayers }) => {
               const homeMeta = confidenceMeta(
                 prediction.homeWinPct >= prediction.awayWinPct
                   ? prediction.modelDiagnostics.confidenceBand
@@ -511,7 +590,7 @@ export default async function PredictionsPage({ searchParams }) {
                           }}
                         >
                           {prediction.modelDiagnostics.confidenceBand}
-                          <ConfidenceHelpIcon />
+                          <ConfidenceHelpIcon tooltip={prediction.modelDiagnostics.confidenceReason} />
                         </div>
                       </div>
                     </div>
@@ -536,6 +615,7 @@ export default async function PredictionsPage({ searchParams }) {
                           fairOdds: prediction.fairOdds.awayMoneyline,
                           meta: awayMeta,
                           align: "left",
+                          goalieInfo: projectedAwayGoalie,
                         },
                         {
                           side: "home",
@@ -548,6 +628,7 @@ export default async function PredictionsPage({ searchParams }) {
                           fairOdds: prediction.fairOdds.homeMoneyline,
                           meta: homeMeta,
                           align: "right",
+                          goalieInfo: projectedHomeGoalie,
                         },
                       ].map((teamRow, index) => (
                         <div
@@ -582,6 +663,23 @@ export default async function PredictionsPage({ searchParams }) {
                             <div style={{ color: "#7f9ab5", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {teamRow.align === "right" ? "home" : "away"} split {teamRow.record}
                             </div>
+                            {teamRow.goalieInfo?.starterName && (
+                              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+                                <div style={{ color: "#b0d4ef", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>
+                                  {teamRow.goalieInfo.starterName}
+                                </div>
+                                {teamRow.goalieInfo.overallRating != null && (
+                                  <div style={{ borderRadius: 6, background: "rgba(47,180,255,0.12)", border: "1px solid rgba(47,180,255,0.25)", color: "#7bcfff", fontSize: 10, fontWeight: 800, fontFamily: "'DM Mono',monospace", padding: "2px 5px" }}>
+                                    {Math.round(teamRow.goalieInfo.overallRating)} OVR
+                                  </div>
+                                )}
+                                {teamRow.goalieInfo.gsaxPct != null && (
+                                  <div style={{ borderRadius: 6, background: "rgba(0,229,160,0.1)", border: "1px solid rgba(0,229,160,0.25)", color: "#00e5a0", fontSize: 10, fontWeight: 800, fontFamily: "'DM Mono',monospace", padding: "2px 5px" }}>
+                                    {Math.round(teamRow.goalieInfo.gsaxPct)}th GSAx
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <div style={{ width: "100%", maxWidth: 240, height: 10, borderRadius: 999, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
                             <div
@@ -741,6 +839,41 @@ export default async function PredictionsPage({ searchParams }) {
                         ))}
                       </div>
                     </div>
+
+                    {((awayKeyPlayers?.length > 0) || (homeKeyPlayers?.length > 0)) && (
+                      <div
+                        style={{
+                          borderRadius: 18,
+                          background: "#0d1620",
+                          border: "1px solid #182736",
+                          padding: "14px 16px",
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: 12,
+                        }}
+                      >
+                        {[
+                          { abbr: game.awayTeam.abbr, color: awayColor, players: awayKeyPlayers },
+                          { abbr: game.homeTeam.abbr, color: homeColor, players: homeKeyPlayers },
+                        ].map((side) => (
+                          <div key={`kp-${side.abbr}`}>
+                            <div style={{ color: side.color, fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+                              {side.abbr} key players
+                            </div>
+                            <div style={{ display: "grid", gap: 4 }}>
+                              {(side.players || []).map((p) => (
+                                <div key={p.name} style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "center" }}>
+                                  <div style={{ color: "#cde6f8", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                                  <div style={{ color: "#56a0cf", fontSize: 10, fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>
+                                    {p.war != null ? `${p.war > 0 ? "+" : ""}${p.war} WAR` : "—"}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </Link>
               );
@@ -748,6 +881,8 @@ export default async function PredictionsPage({ searchParams }) {
             </div>
           </>
         )}
+
+        <ModelAccuracySection accuracy={accuracy} />
       </div>
     </div>
   );

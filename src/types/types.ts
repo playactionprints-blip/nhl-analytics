@@ -20,6 +20,7 @@ export interface StartingGoalieContext {
   goalieName?: string;
   savePct?: number;
   gsaxPer60?: number;
+  gsaxPct?: number;
   qualityAdjustment?: number;
   confidence?: "confirmed" | "projected" | "unknown";
 }
@@ -61,6 +62,8 @@ export interface GameContext {
   awayInjuryAdjustment?: number;
   homeLineupStrengthAdjustment?: number;
   awayLineupStrengthAdjustment?: number;
+  homeWarTotal?: number;
+  awayWarTotal?: number;
 }
 
 export interface MarketInputs {
@@ -223,6 +226,7 @@ export interface ModelDiagnostics {
   simulationCount: number;
   modelVersion: string;
   confidenceBand: "low" | "medium" | "high";
+  confidenceReason?: string;
   regulationHomeWinPct: number;
   regulationAwayWinPct: number;
   overtimeHomeWinPct: number;

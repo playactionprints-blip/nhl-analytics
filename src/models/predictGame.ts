@@ -2,7 +2,7 @@ import { B2B_BOTH_TEAMS, B2B_PENALTY, DEFAULT_MARKET_CALIBRATION_WEIGHT, DEFAULT
 import { estimateExpectedScoring } from "./expectedGoalsModel";
 import { buildTeamRatings } from "./teamRatings";
 import { simulateGameOutcomes } from "../sim/monteCarloSimulator";
-import type { GameContext, GamePrediction, MarketInputs, ModelConfig } from "../types/types";
+import type { GameContext, GamePrediction, MarketInputs, ModelConfig, ModelDiagnostics } from "../types/types";
 import { clampProbability, impliedProbabilityToAmericanOdds, removeOverroundFromMoneylines } from "../utils/odds";
 
 function blendMarketProbability(
@@ -25,6 +25,71 @@ function blendMarketProbability(
     probability: clampProbability(probability),
     marketBlendApplied: blendWeight > 0,
   };
+}
+
+function computeEnrichedConfidence(
+  homeWinPct: number,
+  context: GameContext,
+): { band: ModelDiagnostics["confidenceBand"]; reason: string } {
+  const winProbDiff = Math.abs(homeWinPct - 0.5) * 2;
+  const homeGoalieKnown =
+    context.homeStartingGoalie?.confidence !== "unknown" &&
+    Boolean(context.homeStartingGoalie?.goalieName);
+  const awayGoalieKnown =
+    context.awayStartingGoalie?.confidence !== "unknown" &&
+    Boolean(context.awayStartingGoalie?.goalieName);
+  const isBackToBack = context.homeBackToBack || context.awayBackToBack;
+
+  const homeWar = context.homeWarTotal ?? 0;
+  const awayWar = context.awayWarTotal ?? 0;
+  const warDataAvailable = homeWar > 0 || awayWar > 0;
+  // WAR agrees if both point the same direction (higher WAR team is predicted to win)
+  const warAgreesWithModel = warDataAvailable
+    ? (homeWar >= awayWar) === (homeWinPct >= 0.5)
+    : true;
+
+  let score = 0;
+  const reasons: string[] = [];
+
+  if (winProbDiff > 0.20) {
+    score += 3;
+    reasons.push(`Large win gap (${Math.round(winProbDiff * 100)}%)`);
+  } else if (winProbDiff > 0.12) {
+    score += 2;
+    reasons.push(`Moderate win gap (${Math.round(winProbDiff * 100)}%)`);
+  } else if (winProbDiff > 0.06) {
+    score += 1;
+    reasons.push(`Small win gap (${Math.round(winProbDiff * 100)}%)`);
+  } else {
+    reasons.push(`Tight matchup (${Math.round(winProbDiff * 100)}% gap)`);
+  }
+
+  if (homeGoalieKnown && awayGoalieKnown) {
+    score += 2;
+    reasons.push("Both starting goalies confirmed");
+  } else if (homeGoalieKnown || awayGoalieKnown) {
+    score += 1;
+    reasons.push("One starting goalie confirmed");
+  } else {
+    reasons.push("Goalie starters projected only");
+  }
+
+  if (warDataAvailable) {
+    if (warAgreesWithModel) {
+      score += 2;
+      reasons.push("WAR model agrees with prediction");
+    } else {
+      reasons.push("WAR model diverges from prediction");
+    }
+  }
+
+  if (isBackToBack) {
+    score -= 2;
+    reasons.push("Back-to-back reduces confidence");
+  }
+
+  const band: ModelDiagnostics["confidenceBand"] = score >= 6 ? "high" : score >= 3 ? "medium" : "low";
+  return { band, reason: reasons.join(" • ") };
 }
 
 function goalieConfidenceFromContext(context: GameContext): GamePrediction["goalieConfidence"] {
@@ -119,6 +184,12 @@ export function predictGame(
   );
   const penaltyAdjustedPrediction = applyBackToBackPenalty(basePrediction, context);
 
+  // Compute enriched confidence with full context (WAR agreement, goalie knowledge, B2B)
+  const { band: enrichedBand, reason: enrichedReason } = computeEnrichedConfidence(
+    penaltyAdjustedPrediction.homeWinPct,
+    context,
+  );
+
   const { probability: blendedHomeWinPct, marketBlendApplied } = blendMarketProbability(
     penaltyAdjustedPrediction.homeWinPct,
     marketInputs
@@ -128,6 +199,11 @@ export function predictGame(
     return {
       ...penaltyAdjustedPrediction,
       goalieConfidence: goalieConfidenceFromContext(context),
+      modelDiagnostics: {
+        ...penaltyAdjustedPrediction.modelDiagnostics,
+        confidenceBand: enrichedBand,
+        confidenceReason: enrichedReason,
+      },
     };
   }
 
@@ -144,6 +220,8 @@ export function predictGame(
     },
     modelDiagnostics: {
       ...basePrediction.modelDiagnostics,
+      confidenceBand: enrichedBand,
+      confidenceReason: enrichedReason,
       marketBlendApplied: true,
     },
   };

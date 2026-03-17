@@ -549,6 +549,8 @@ function buildProjectedGoalie(teamLeaders, teamStats, sideLabel, isBackToBack) {
     alternateName: backup?.full_name || null,
     savePct: typeof projected.save_pct === "number" ? projected.save_pct : null,
     gsax: typeof projected.gsax === "number" ? projected.gsax : null,
+    gsaxPct: typeof projected?.gsax_pct === "number" ? projected.gsax_pct : null,
+    overallRating: typeof projected?.overall_rating === "number" ? projected.overall_rating : null,
     notes,
   };
 }
@@ -558,6 +560,117 @@ function goalieConfidenceFromProjection(projectedGoalie) {
   if (label === "confirmed") return "confirmed";
   if (projectedGoalie?.starterName) return "projected";
   return "unknown";
+}
+
+function getTeamKeyPlayers(players, teamId) {
+  return (players || [])
+    .filter((p) => p.team === teamId && p.position !== "G" && p.war_total != null && p.war_total > 0)
+    .sort((a, b) => (b.war_total || 0) - (a.war_total || 0))
+    .slice(0, 3)
+    .map((p) => ({ name: p.full_name, war: p.war_total != null ? +Number(p.war_total).toFixed(1) : null }));
+}
+
+async function upsertPredictionsLog(dateString, predictions, supabase) {
+  if (!predictions?.length) return;
+  const rows = predictions.map(({ game, prediction }) => ({
+    game_date: dateString,
+    game_id: String(game.id),
+    home_team: game.homeTeam.abbr,
+    away_team: game.awayTeam.abbr,
+    home_win_prob: prediction.homeWinPct,
+    away_win_prob: prediction.awayWinPct,
+    predicted_winner: prediction.homeWinPct >= prediction.awayWinPct
+      ? game.homeTeam.abbr
+      : game.awayTeam.abbr,
+    model_confidence: prediction.modelDiagnostics.confidenceBand,
+  }));
+  await supabase.from("predictions_log").upsert(rows, {
+    onConflict: "game_id",
+    ignoreDuplicates: false,
+  });
+}
+
+async function updatePredictionResultsForDate(dateString, supabase) {
+  try {
+    const res = await fetch(`https://api-web.nhle.com/v1/score/${dateString}`, {
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    for (const game of (data.games || [])) {
+      if (!["OFF", "FINAL"].includes(game.gameState || "")) continue;
+      const homeAbbr = game.homeTeam?.abbrev || game.homeTeam?.abbr;
+      const awayAbbr = game.awayTeam?.abbrev || game.awayTeam?.abbr;
+      const homeScore = game.homeTeam?.score;
+      const awayScore = game.awayTeam?.score;
+      if (homeScore == null || awayScore == null || !homeAbbr || !awayAbbr) continue;
+      const actualWinner = homeScore > awayScore ? homeAbbr : awayAbbr;
+      const gameId = String(game.id ?? game.gameId ?? `${awayAbbr}-${homeAbbr}-${game.startTimeUTC || ""}`);
+      const { data: logRow } = await supabase
+        .from("predictions_log")
+        .select("predicted_winner")
+        .eq("game_id", gameId)
+        .single();
+      if (!logRow) continue;
+      await supabase.from("predictions_log").update({
+        actual_winner: actualWinner,
+        home_score: homeScore,
+        away_score: awayScore,
+        correct: logRow.predicted_winner === actualWinner,
+      }).eq("game_id", gameId);
+    }
+  } catch {
+    // Silently fail — accuracy tracking is non-critical
+  }
+}
+
+export async function fetchPredictionAccuracy() {
+  const supabase = createServerClient();
+  try {
+    const { data } = await supabase
+      .from("predictions_log")
+      .select("correct,model_confidence,game_date,home_team,away_team,predicted_winner,actual_winner,home_win_prob,away_win_prob,home_score,away_score")
+      .not("actual_winner", "is", null)
+      .order("game_date", { ascending: false })
+      .limit(100);
+    if (!data?.length) return null;
+
+    const withResult = data.filter((r) => r.correct !== null);
+    const total = withResult.length;
+    const correct = withResult.filter((r) => r.correct === true).length;
+
+    const byConfidence = { low: { correct: 0, total: 0 }, medium: { correct: 0, total: 0 }, high: { correct: 0, total: 0 } };
+    for (const row of withResult) {
+      const band = row.model_confidence || "low";
+      if (byConfidence[band]) {
+        byConfidence[band].total += 1;
+        if (row.correct) byConfidence[band].correct += 1;
+      }
+    }
+
+    const sevenDaysAgo = formatDateString(shiftDateParts(getTorontoDateParts(), -7));
+    const recent = withResult.filter((r) => r.game_date >= sevenDaysAgo);
+    const recentTotal = recent.length;
+    const recentCorrect = recent.filter((r) => r.correct === true).length;
+
+    return {
+      overall: { correct, total, pct: total > 0 ? correct / total : null },
+      byConfidence: Object.fromEntries(
+        Object.entries(byConfidence).map(([band, { correct: c, total: t }]) => [
+          band,
+          { correct: c, total: t, pct: t > 0 ? c / t : null },
+        ])
+      ),
+      last10: data.slice(0, 10),
+      rolling7: {
+        correct: recentCorrect,
+        total: recentTotal,
+        pct: recentTotal > 0 ? recentCorrect / recentTotal : null,
+      },
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function buildPredictionsForDate(dateString) {
@@ -583,7 +696,7 @@ export async function buildPredictionsForDate(dateString) {
     fetchDailyFaceoffGoalies(dateString),
     supabase
       .from("players")
-      .select("team,position,off_rating,def_rating,overall_rating,xgf_pct,cf_pct,war_shooting,gp,save_pct,gsax,full_name"),
+      .select("team,position,off_rating,def_rating,overall_rating,xgf_pct,cf_pct,war_shooting,war_total,gp,save_pct,gsax,gsax_pct,full_name"),
     supabase
       .from("player_seasons")
       .select("team,gp,cf_pct,home_cf_pct,away_cf_pct")
@@ -649,6 +762,7 @@ export async function buildPredictionsForDate(dateString) {
             alternateName: homeLeaders.goalies?.[1]?.full_name || null,
             savePct: dailyFaceoffGame.home.savePct,
             gsax: homeLeaders.goalies?.find((goalie) => goalie.full_name === dailyFaceoffGame.home.starterName)?.gsax ?? null,
+            gsaxPct: homeLeaders.goalies?.find((goalie) => goalie.full_name === dailyFaceoffGame.home.starterName)?.gsax_pct ?? null,
             source: dailyFaceoffGame.home.source,
             updatedAt: dailyFaceoffGame.home.updatedAt,
             notes: [
@@ -666,6 +780,7 @@ export async function buildPredictionsForDate(dateString) {
             alternateName: awayLeaders.goalies?.[1]?.full_name || null,
             savePct: dailyFaceoffGame.away.savePct,
             gsax: awayLeaders.goalies?.find((goalie) => goalie.full_name === dailyFaceoffGame.away.starterName)?.gsax ?? null,
+            gsaxPct: awayLeaders.goalies?.find((goalie) => goalie.full_name === dailyFaceoffGame.away.starterName)?.gsax_pct ?? null,
             source: dailyFaceoffGame.away.source,
             updatedAt: dailyFaceoffGame.away.updatedAt,
             notes: [
@@ -682,6 +797,10 @@ export async function buildPredictionsForDate(dateString) {
           typeof projectedHomeGoalie.savePct === "number"
             ? projectedHomeGoalie.savePct
             : context.homeStartingGoalie?.savePct,
+        gsaxPct:
+          typeof projectedHomeGoalie.gsaxPct === "number"
+            ? projectedHomeGoalie.gsaxPct
+            : context.homeStartingGoalie?.gsaxPct,
         confidence: goalieConfidenceFromProjection(projectedHomeGoalie),
       };
       context.awayStartingGoalie = {
@@ -691,6 +810,10 @@ export async function buildPredictionsForDate(dateString) {
           typeof projectedAwayGoalie.savePct === "number"
             ? projectedAwayGoalie.savePct
             : context.awayStartingGoalie?.savePct,
+        gsaxPct:
+          typeof projectedAwayGoalie.gsaxPct === "number"
+            ? projectedAwayGoalie.gsaxPct
+            : context.awayStartingGoalie?.gsaxPct,
         confidence: goalieConfidenceFromProjection(projectedAwayGoalie),
       };
 
@@ -712,6 +835,8 @@ export async function buildPredictionsForDate(dateString) {
         awayLeaders,
         projectedHomeGoalie,
         projectedAwayGoalie,
+        homeKeyPlayers: getTeamKeyPlayers(safePlayers, homeTeam.teamId),
+        awayKeyPlayers: getTeamKeyPlayers(safePlayers, awayTeam.teamId),
         goalie_confidence: prediction.goalieConfidence,
         market: market
           ? {
@@ -726,6 +851,12 @@ export async function buildPredictionsForDate(dateString) {
     })
     .filter(Boolean)
     .sort((a, b) => new Date(a.game.startTimeUTC).getTime() - new Date(b.game.startTimeUTC).getTime());
+
+  const todayString = formatDateString(getTorontoDateParts());
+  await upsertPredictionsLog(dateString, predictions, supabase);
+  if (dateString < todayString) {
+    await updatePredictionResultsForDate(dateString, supabase);
+  }
 
   return {
     dateString,

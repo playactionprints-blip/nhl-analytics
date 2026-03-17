@@ -51,8 +51,10 @@ export interface TeamPlayerAggregate {
   avgHomeCfPct?: number | null;
   avgAwayCfPct?: number | null;
   avgWarShooting: number;
+  totalWAR: number;
   topGoalieSavePct: number;
   topGoalieGsaxPerGame: number;
+  topGoalieGsaxPct: number;
 }
 
 export interface TeamSplitAggregate {
@@ -148,9 +150,11 @@ export function buildPlayerAggregates(
     xgf_pct?: number | null;
     cf_pct?: number | null;
     war_shooting?: number | null;
+    war_total?: number | null;
     gp?: number | null;
     save_pct?: number | null;
     gsax?: number | null;
+    gsax_pct?: number | null;
     full_name?: string | null;
   }>,
   teamNameLookup: Record<string, string>
@@ -178,6 +182,10 @@ export function buildPlayerAggregates(
       values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : fallback;
 
     const starter = goalies[0];
+    const totalWAR = teamPlayers
+      .filter((player) => player.position !== "G")
+      .reduce((sum, player) => sum + (player.war_total || 0), 0);
+
     result[teamId] = {
       teamId,
       teamName: teamNameLookup[teamId] || teamId,
@@ -187,11 +195,13 @@ export function buildPlayerAggregates(
       avgXgfPct: avg(skaters.map((player) => player.xgf_pct || 50), 50),
       avgCfPct: avg(skaters.map((player) => player.cf_pct || 50), 50),
       avgWarShooting: avg(skaters.map((player) => player.war_shooting || 0), 0),
+      totalWAR,
       topGoalieSavePct: typeof starter?.save_pct === "number" ? starter.save_pct : DEFAULT_MODEL_CONFIG.leagueAverages.savePct,
       topGoalieGsaxPerGame:
         typeof starter?.gsax === "number" && typeof starter?.gp === "number" && starter.gp > 0
           ? starter.gsax / starter.gp
           : 0,
+      topGoalieGsaxPct: typeof starter?.gsax_pct === "number" ? starter.gsax_pct : 50,
     };
   }
 
@@ -375,6 +385,29 @@ export function buildTeamSeasonStatsFromLiveData(
   };
 }
 
+function computeBlendedLineupAdj(
+  team: TeamSeasonStats,
+  aggregate: TeamPlayerAggregate | undefined,
+  leagueAvgWAR: number
+): number {
+  // Compute overall point pct from combined home+away record
+  const totalGames =
+    team.homeRecord.wins + team.homeRecord.losses + team.homeRecord.overtimeLosses +
+    team.awayRecord.wins + team.awayRecord.losses + team.awayRecord.overtimeLosses;
+  const totalWins = team.homeRecord.wins + team.awayRecord.wins;
+  const totalOtl = team.homeRecord.overtimeLosses + team.awayRecord.overtimeLosses;
+  const overallPtPct = totalGames > 0 ? (totalWins * 2 + totalOtl) / (totalGames * 2) : 0.5;
+
+  // Three-component team strength blend:
+  // 50% standings (current results), 30% WAR (underlying quality), 20% ratings (3yr model)
+  const standingsStrength = overallPtPct / 0.5;                                    // 1.0 = avg
+  const warStrength = (aggregate?.totalWAR || leagueAvgWAR) / leagueAvgWAR;       // 1.0 = avg
+  const ratingsStrength = (aggregate?.avgOverallRating || 75) / 75;                // 1.0 = avg
+
+  const blended = standingsStrength * 0.50 + warStrength * 0.30 + ratingsStrength * 0.20;
+  return clamp((blended - 1) * 0.12, -0.07, 0.08);
+}
+
 export function buildGameContextFromTeams(
   homeTeam: TeamSeasonStats,
   awayTeam: TeamSeasonStats,
@@ -382,6 +415,14 @@ export function buildGameContextFromTeams(
 ): GameContext {
   const homeAggregate = aggregatesByTeam[homeTeam.teamId];
   const awayAggregate = aggregatesByTeam[awayTeam.teamId];
+
+  // Compute league-average WAR from all teams with data
+  const allWARValues = Object.values(aggregatesByTeam)
+    .map((a) => a.totalWAR || 0)
+    .filter((w) => w > 0);
+  const leagueAvgWAR = allWARValues.length > 0
+    ? allWARValues.reduce((a, b) => a + b, 0) / allWARValues.length
+    : 24;
 
   return {
     homeTeam,
@@ -396,23 +437,27 @@ export function buildGameContextFromTeams(
       ? {
           goalieName: `${homeTeam.teamName} starter`,
           savePct: homeAggregate.topGoalieSavePct,
-        gsaxPer60: homeAggregate.topGoalieGsaxPerGame / 60,
-        qualityAdjustment: clamp(homeAggregate.topGoalieGsaxPerGame / 30, -0.04, 0.06),
-        confidence: "projected",
-      }
+          gsaxPct: homeAggregate.topGoalieGsaxPct,
+          gsaxPer60: homeAggregate.topGoalieGsaxPerGame / 60,
+          qualityAdjustment: clamp(homeAggregate.topGoalieGsaxPerGame / 30, -0.04, 0.06),
+          confidence: "projected",
+        }
       : undefined,
     awayStartingGoalie: awayAggregate
       ? {
           goalieName: `${awayTeam.teamName} starter`,
           savePct: awayAggregate.topGoalieSavePct,
-        gsaxPer60: awayAggregate.topGoalieGsaxPerGame / 60,
-        qualityAdjustment: clamp(awayAggregate.topGoalieGsaxPerGame / 30, -0.04, 0.06),
-        confidence: "projected",
-      }
+          gsaxPct: awayAggregate.topGoalieGsaxPct,
+          gsaxPer60: awayAggregate.topGoalieGsaxPerGame / 60,
+          qualityAdjustment: clamp(awayAggregate.topGoalieGsaxPerGame / 30, -0.04, 0.06),
+          confidence: "projected",
+        }
       : undefined,
     homeInjuryAdjustment: 0,
     awayInjuryAdjustment: 0,
-    homeLineupStrengthAdjustment: clamp((homeAggregate?.avgOverallRating || 75) / 100 - 0.75, -0.05, 0.06),
-    awayLineupStrengthAdjustment: clamp((awayAggregate?.avgOverallRating || 75) / 100 - 0.75, -0.05, 0.06),
+    homeLineupStrengthAdjustment: computeBlendedLineupAdj(homeTeam, homeAggregate, leagueAvgWAR),
+    awayLineupStrengthAdjustment: computeBlendedLineupAdj(awayTeam, awayAggregate, leagueAvgWAR),
+    homeWarTotal: homeAggregate?.totalWAR ?? 0,
+    awayWarTotal: awayAggregate?.totalWAR ?? 0,
   };
 }
