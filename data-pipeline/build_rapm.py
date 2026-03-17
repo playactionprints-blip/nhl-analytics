@@ -37,8 +37,10 @@ from datetime import date, timedelta
 from scipy import sparse
 from sklearn.linear_model import RidgeCV
 from supabase import create_client
+from sync_log import install_sync_logger
 
 warnings.filterwarnings('ignore')
+install_sync_logger("rapm")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 TEST_MODE  = False  # Set True to limit to TEST_GAMES per season for validation
@@ -775,6 +777,16 @@ def build_rapm(stints_df):
     toi_away = _explode_toi('away_players')
     player_toi_sec = toi_home.add(toi_away, fill_value=0)
 
+    # Pre-regression TOI filter: exclude players with <300 min 5v5 TOI from the regression
+    # matrix to suppress small-sample noise. Excluded players receive RAPM=0 (league mean).
+    MIN_REGRESSION_TOI_SEC = 300 * 60
+    excluded_pids = {p for p in all_pids if player_toi_sec.get(p, 0) < MIN_REGRESSION_TOI_SEC}
+    all_pids  = sorted(p for p in all_pids if player_toi_sec.get(p, 0) >= MIN_REGRESSION_TOI_SEC)
+    pid_idx   = {p: i for i, p in enumerate(all_pids)}
+    n_players = len(all_pids)
+    print(f"  Pre-regression TOI filter (≥300 min): {n_players} in matrix, "
+          f"{len(excluded_pids)} excluded (will receive RAPM=0)")
+
     has_season_weight = 'season_weight' in stints_df.columns
     print(f"Building RAPM matrix: {n_stints*2:,} rows × {n_players * 2 + n_context} features"
           + (" (season-weighted)" if has_season_weight else ""))
@@ -840,7 +852,7 @@ def build_rapm(stints_df):
 
     X = sparse.csr_matrix((vals, (r_idx, c_idx)), shape=(n_stints * 2, n_players * 2 + n_context))
 
-    alphas = [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
+    alphas = [10.0, 50.0, 100.0, 500.0, 1000.0, 2000.0]
 
     print("Fitting joint offense/defense RAPM (RidgeCV)...")
     model = RidgeCV(alphas=alphas, fit_intercept=True)
@@ -859,6 +871,20 @@ def build_rapm(stints_df):
     })
     results['rapm_off_pct'] = results['rapm_off'].rank(pct=True) * 100
     results['rapm_def_pct'] = results['rapm_def'].rank(pct=True) * 100
+
+    # Add excluded players (< 300 min) back with RAPM = 0 so their stale Supabase
+    # values are overwritten with a neutral (league-mean) estimate on upload.
+    if excluded_pids:
+        excl_df = pd.DataFrame({
+            'player_id':     sorted(excluded_pids),
+            'rapm_off':      0.0,
+            'rapm_def':      0.0,
+            'toi_5v5_total': [round(float(player_toi_sec.get(p, 0)) / 60.0, 1)
+                              for p in sorted(excluded_pids)],
+        })
+        results = pd.concat([results, excl_df], ignore_index=True)
+        results['rapm_off_pct'] = results['rapm_off'].rank(pct=True) * 100
+        results['rapm_def_pct'] = results['rapm_def'].rank(pct=True) * 100
 
     return results
 

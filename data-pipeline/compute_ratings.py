@@ -5,10 +5,14 @@ Season weights: 25-26 → 50%,  24-25 → 30%,  23-24 → 20%
 Qualify: ≥20 GP in current season  OR  ≥40 GP combined across seasons.
 """
 import pandas as pd
+import numpy as np
 import os
 import math
 from collections import defaultdict
 from supabase import create_client
+from sync_log import install_sync_logger
+
+install_sync_logger('ratings')
 
 SUPABASE_URL = os.getenv('SUPABASE_URL') or os.getenv('NEXT_PUBLIC_SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY') or os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
@@ -365,13 +369,12 @@ print(f"Ratings computed for {len(final)} players")
 # ── WAR Computation ────────────────────────────────────────────────────────────
 print("\nComputing WAR...")
 
-GOALS_PER_WIN     = 6.0
-EV_OFF_REPLACEMENT = -0.10
-RAPM_OFF_PLAYER_SHARE = 1 / 5.0
-DEF_RAPM_SHARE_FWD = 1 / 14.0
-DEF_RAPM_SHARE_D   = 1 / 10.0
-EV_DEF_REPLACEMENT_FWD = 0.07
-EV_DEF_REPLACEMENT_D   = 0.04
+GOALS_PER_WIN      = 6.0
+# EV_OFF_REPLACEMENT and EV_DEF_REPLACEMENT_FWD/D are computed empirically after ratings
+# (see below) so they stay calibrated to whatever alpha build_rapm.py last used.
+# RAPM_OFF_PLAYER_SHARE (1/5) and DEF_RAPM_SHARE (1/14 fwd, 1/10 D) are removed — the
+# Ridge regression already produces individual-level coefficients; the old division by
+# 5 or 14 was double-shrinkage that compressed elite players to ~20% of their real value.
 SHOOTING_XG_SHRINK = 20.0  # Shrink low-volume finishers toward league average
 NET_XG_PER_PENALTY_MIN = 0.11  # Minor-only first-pass estimate of net xG gained per penalty minute
 PP_WAR_SHRINK_TOI = 120.0  # Shrink PP on-ice results toward league average
@@ -402,8 +405,24 @@ for season_key in SEASONS:
     print(f"  {season_key} PP baseline: {pp_baseline_by_season[season_key]:.2f} xGF/60")
     print(f"  {season_key} PK baseline: {pk_baseline_by_season[season_key]:.2f} xGA/60")
 
+# Empirical RAPM replacement levels — computed from the qualified skater distribution
+# so WAR scales correctly regardless of which alpha build_rapm.py last selected.
+# EV Off replacement  = mean RAPM Off across all qualified skaters (avg player ≈ 0 WAR).
+# EV Def replacement  = 20th percentile RAPM Def per position group so that roughly
+# 80 % of players have positive EV Def WAR and the distribution is meaningful.
+_all_rapm_off   = df['rapm_off'].dropna()
+_fwd_rapm_def   = df[df['position'] != 'D']['rapm_def'].dropna()
+_def_rapm_def   = df[df['position'] == 'D']['rapm_def'].dropna()
+ev_off_replacement     = float(_all_rapm_off.mean())              if len(_all_rapm_off) > 0 else 0.0
+ev_def_replacement_fwd = float(np.percentile(_fwd_rapm_def, 20))  if len(_fwd_rapm_def) > 0 else 0.0
+ev_def_replacement_d   = float(np.percentile(_def_rapm_def, 20))  if len(_def_rapm_def) > 0 else 0.0
+print(f"Empirical RAPM replacement levels:")
+print(f"  EV Off:       {ev_off_replacement:.4f} xG/60  (mean, all qualified skaters)")
+print(f"  EV Def (Fwd): {ev_def_replacement_fwd:.4f} xG/60  (20th pctile, forwards)")
+print(f"  EV Def (D):   {ev_def_replacement_d:.4f} xG/60  (20th pctile, defensemen)")
 
-def compute_season_war_component(row, position):
+
+def compute_season_war_component(row, position, ev_off_replacement, ev_def_replacement_fwd, ev_def_replacement_d):
     season_key = row.get('season')
     rapm_off_v = safe(row.get('rapm_off'))
     rapm_def_v = safe(row.get('rapm_def'))
@@ -418,16 +437,13 @@ def compute_season_war_component(row, position):
     pmt = safe(row.get('penalty_minutes_taken')) or 0.0
 
     is_defense = position == 'D'
-    def_share = DEF_RAPM_SHARE_D if is_defense else DEF_RAPM_SHARE_FWD
-    def_replacement = EV_DEF_REPLACEMENT_D if is_defense else EV_DEF_REPLACEMENT_FWD
+    def_replacement = ev_def_replacement_d if is_defense else ev_def_replacement_fwd
 
     ev_off = ev_def = pp_war = pk_war = shooting_war = penalties_war = None
     if rapm_off_v is not None and toi_5v5 and toi_5v5 > 0:
-        rapm_off_xg60 = rapm_off_v * RAPM_OFF_PLAYER_SHARE
-        ev_off = (rapm_off_xg60 - EV_OFF_REPLACEMENT) * (toi_5v5 / 60.0) / GOALS_PER_WIN
+        ev_off = (rapm_off_v - ev_off_replacement) * (toi_5v5 / 60.0) / GOALS_PER_WIN
     if rapm_def_v is not None and toi_5v5 and toi_5v5 > 0:
-        rapm_def_xg60 = rapm_def_v * def_share
-        ev_def = (rapm_def_xg60 - def_replacement) * (toi_5v5 / 60.0) / GOALS_PER_WIN
+        ev_def = (rapm_def_v - def_replacement) * (toi_5v5 / 60.0) / GOALS_PER_WIN
 
     if toi_pp_sp and toi_pp_sp > 0 and xgf_pp_v is not None:
         pp_rate = xgf_pp_v / toi_pp_sp * 60.0
@@ -470,7 +486,10 @@ for pid, season_data in seasons_by_player.items():
     weight_sums = {k: 0.0 for k in SEASON_WAR_KEYS}
 
     for season_key, row in season_data.items():
-        season_war = compute_season_war_component(row, position)
+        season_war = compute_season_war_component(
+            row, position,
+            ev_off_replacement, ev_def_replacement_fwd, ev_def_replacement_d,
+        )
         season_war_updates.append({
             'player_id': pid,
             'season': season_key,
