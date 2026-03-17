@@ -29,22 +29,31 @@ export const metadata = {
 const DEFAULT_CONFIDENCE_TOOLTIP =
   "Confidence is based on available team data quality, recency of goaltender info, and home/away sample size. LOW = less reliable inputs.";
 
+const SECTION_STYLE = { border: "1px solid #17283b", borderRadius: 24, background: "#091017", padding: 20, display: "grid", gap: 14 };
+
 function ModelAccuracySection({ accuracy }) {
-  if (!accuracy) return null;
+  if (!accuracy) {
+    return (
+      <section style={SECTION_STYLE}>
+        <div>
+          <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            Model accuracy
+          </div>
+          <div style={{ fontSize: 22, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+            Historical performance
+          </div>
+        </div>
+        <div style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "16px 18px", color: "#7f9ab5", fontSize: 14, lineHeight: 1.5 }}>
+          Accuracy tracking started today — check back after tonight&apos;s games complete.
+        </div>
+      </section>
+    );
+  }
   const { overall, byConfidence, rolling7, last10 } = accuracy;
   const pctLabel = (v) => (v != null ? `${Math.round(v * 100)}%` : "—");
   const bandColors = { high: "#35e3a0", medium: "#f0c040", low: "#ff8d9b" };
   return (
-    <section
-      style={{
-        border: "1px solid #17283b",
-        borderRadius: 24,
-        background: "#091017",
-        padding: 20,
-        display: "grid",
-        gap: 14,
-      }}
-    >
+    <section style={SECTION_STYLE}>
       <div>
         <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
           Model accuracy
@@ -175,6 +184,7 @@ export default async function PredictionsPage({ searchParams }) {
     buildPredictionsForDate(selectedDateString),
     fetchPredictionAccuracy(),
   ]);
+  console.log("[PredictionsPage] accuracy data:", accuracy ? `${accuracy.overall?.total} games tracked` : "null — table may not exist or no completed games yet");
 
   return (
     <div
@@ -659,7 +669,7 @@ export default async function PredictionsPage({ searchParams }) {
                             </div>
                           </div>
                           <div style={{ minWidth: 0, overflow: "hidden" }}>
-                            <div style={{ color: "#ecf7ff", fontSize: 20, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{teamRow.name}</div>
+                            <div title={teamRow.name} style={{ color: "#ecf7ff", fontSize: teamRow.name.length > 14 ? 16 : 20, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{teamRow.name}</div>
                             <div style={{ color: "#7f9ab5", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {teamRow.align === "right" ? "home" : "away"} split {teamRow.record}
                             </div>
@@ -669,12 +679,12 @@ export default async function PredictionsPage({ searchParams }) {
                                   {teamRow.goalieInfo.starterName}
                                 </div>
                                 {teamRow.goalieInfo.overallRating != null && (
-                                  <div style={{ borderRadius: 6, background: "rgba(47,180,255,0.12)", border: "1px solid rgba(47,180,255,0.25)", color: "#7bcfff", fontSize: 10, fontWeight: 800, fontFamily: "'DM Mono',monospace", padding: "2px 5px" }}>
+                                  <div style={{ borderRadius: 7, background: "rgba(47,180,255,0.12)", border: "1px solid rgba(47,180,255,0.25)", color: "#7bcfff", fontSize: 11, fontWeight: 800, fontFamily: "'DM Mono',monospace", padding: "3px 7px", flexShrink: 0 }}>
                                     {Math.round(teamRow.goalieInfo.overallRating)} OVR
                                   </div>
                                 )}
                                 {teamRow.goalieInfo.gsaxPct != null && (
-                                  <div style={{ borderRadius: 6, background: "rgba(0,229,160,0.1)", border: "1px solid rgba(0,229,160,0.25)", color: "#00e5a0", fontSize: 10, fontWeight: 800, fontFamily: "'DM Mono',monospace", padding: "2px 5px" }}>
+                                  <div style={{ borderRadius: 7, background: "rgba(0,229,160,0.1)", border: "1px solid rgba(0,229,160,0.25)", color: "#00e5a0", fontSize: 11, fontWeight: 800, fontFamily: "'DM Mono',monospace", padding: "3px 7px", flexShrink: 0 }}>
                                     {Math.round(teamRow.goalieInfo.gsaxPct)}th GSAx
                                   </div>
                                 )}
