@@ -79,7 +79,7 @@ export async function GET() {
       const batch = ids.slice(i, i + BATCH);
       const { data: batchData, error: batchError } = await supabase
         .from("players")
-        .select("player_id,full_name,team,position,cap_hit,overall_rating,off_rating,def_rating,contract_info")
+        .select("player_id,full_name,team,position,contract_info,overall_rating,off_rating,def_rating")
         .in("player_id", batch);
       if (batchError) {
         console.error("Roster builder API: players query failed (batch)", JSON.stringify(batchError));
@@ -100,7 +100,8 @@ export async function GET() {
           player_name: player.full_name,
           team: row.team || player.team || null,
           position: player.position || null,
-          cap_hit: toNumber(player.contract_info?.cap_hit ?? player.cap_hit, null),
+          cap_hit: toNumber(player.contract_info?.cap_hit, null),
+          years_remaining: toNumber(player.contract_info?.years_remaining, null),
           contract_expiry: toNumber(player.contract_info?.expiry, null),
           war: toNumber(row.war_total, null),
           overall_rating: toNumber(player.overall_rating, null),
