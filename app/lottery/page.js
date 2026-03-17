@@ -1,8 +1,11 @@
 import LotterySimulator from "@/LotterySimulator";
 import { NHL_LOTTERY_RULES } from "@/app/lib/lotteryConfig";
 import { buildLotteryEntriesFromStandings, sortStandingsForLotteryOrder } from "@/app/lib/lotteryEngine";
+import { createServerClient } from "@/app/lib/supabase";
 import { TEAM_FULL } from "@/app/lib/nhlTeams";
+import { applyRuntimePickOverrides } from "@/app/lib/lotteryRuntime";
 import {
+  getOriginalFirstRoundPick,
   getStaticSpecialSlots,
   nhl2026FirstRoundPicks,
 } from "@/app/lib/nhl2026PickLedger";
@@ -54,14 +57,46 @@ async function fetchStandingsRows() {
 }
 
 export default async function LotteryPage() {
-  const standingsRows = await fetchStandingsRows();
-  const staticTeams = new Set(getStaticSpecialSlots().map((pick) => pick.originalTeam));
+  const supabase = createServerClient();
+  const [
+    standingsRows,
+    { data: pickTrades },
+    { data: pickProtections },
+  ] = await Promise.all([
+    fetchStandingsRows(),
+    supabase
+      .from("pick_trades")
+      .select("original_team,current_owner,round,year,conditions")
+      .eq("round", 1)
+      .eq("year", 2026),
+    supabase
+      .from("pick_protections")
+      .select("team,round,year,protection_type,protected_threshold")
+      .eq("round", 1)
+      .eq("year", 2026),
+  ]);
+  const resolvedPickLedger = applyRuntimePickOverrides(
+    nhl2026FirstRoundPicks,
+    pickTrades || [],
+    pickProtections || []
+  );
+  const staticTeams = new Set(getStaticSpecialSlots(resolvedPickLedger).map((pick) => pick.originalTeam));
   const orderableRows = sortStandingsForLotteryOrder(
     standingsRows.filter((row) => !staticTeams.has(row.abbr))
   );
   const lotteryRows = orderableRows.slice(0, NHL_LOTTERY_RULES.lotteryTeamCount);
   const nonLotteryRows = orderableRows.slice(NHL_LOTTERY_RULES.lotteryTeamCount);
-  const entries = buildLotteryEntriesFromStandings(lotteryRows);
+  const entries = buildLotteryEntriesFromStandings(lotteryRows).map((entry) => {
+    const asset = getOriginalFirstRoundPick(entry.originalTeam, resolvedPickLedger);
+    return asset
+      ? {
+          ...entry,
+          currentOwner: asset.currentOwner,
+          notes: asset.notes || null,
+          protectionRule: asset.conditions || null,
+        }
+      : entry;
+  });
   const generatedAt = new Intl.DateTimeFormat("en-CA", {
     month: "short",
     day: "numeric",
@@ -73,7 +108,7 @@ export default async function LotteryPage() {
     <LotterySimulator
       initialEntries={entries}
       nonLotteryOrder={nonLotteryRows.map((row) => row.abbr)}
-      pickLedger={nhl2026FirstRoundPicks}
+      pickLedger={resolvedPickLedger}
       generatedAt={generatedAt}
     />
   );

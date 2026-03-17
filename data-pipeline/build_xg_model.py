@@ -29,8 +29,10 @@ import json, math, os, sys, time, warnings
 import pandas as pd
 import numpy as np
 import requests
+from sync_log import install_sync_logger
 
 warnings.filterwarnings('ignore')
+install_sync_logger("models")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 CKPT_EVERY      = 100    # save checkpoint every N games

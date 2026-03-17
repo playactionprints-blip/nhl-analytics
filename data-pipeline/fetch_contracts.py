@@ -9,6 +9,9 @@ import os, re, time, unicodedata
 from datetime import date
 import requests
 from supabase import create_client
+from sync_log import install_sync_logger
+
+install_sync_logger("contracts")
 
 sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'}

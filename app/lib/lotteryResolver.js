@@ -37,6 +37,7 @@ function evaluatePickConditions(asset, slot) {
   let isTradedPick = asset.currentOwner !== asset.originalTeam;
   let protectionTriggered = false;
   let requiresManualReview = false;
+  let deferred = false;
   let resolvedSlot = slot;
   const conditionResults = [];
 
@@ -56,6 +57,7 @@ function evaluatePickConditions(asset, slot) {
         );
         if (triggered) {
           protectionTriggered = true;
+          deferred = true;
           const action = condition.ifTriggered?.action;
           if (action === "retain_by_original_team") {
             selectionOwner = asset.originalTeam;
@@ -88,6 +90,7 @@ function evaluatePickConditions(asset, slot) {
         } else {
           selectionOwner = asset.originalTeam;
           protectionTriggered = true;
+          deferred = true;
         }
         break;
       }
@@ -127,6 +130,7 @@ function evaluatePickConditions(asset, slot) {
     isTradedPick,
     protectionTriggered,
     requiresManualReview,
+    deferred,
   };
 }
 
@@ -144,6 +148,7 @@ function resolveStaticSlot(asset) {
     isTradedPick: false,
     protectionTriggered: false,
     requiresManualReview: evaluated.requiresManualReview,
+    deferred: false,
     verificationStatus: asset.verificationStatus,
   };
 }
@@ -186,6 +191,7 @@ export function resolve2026FirstRoundOrder({
       isTradedPick: evaluated.isTradedPick,
       protectionTriggered: evaluated.protectionTriggered,
       requiresManualReview: evaluated.requiresManualReview,
+      deferred: evaluated.deferred,
       verificationStatus: asset.verificationStatus,
     };
   });

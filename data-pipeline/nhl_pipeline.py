@@ -30,6 +30,9 @@ import os
 import argparse
 from pathlib import Path
 from datetime import datetime, timezone
+from sync_log import install_sync_logger
+
+install_sync_logger("players")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 NHL_API_BASE = "https://api-web.nhle.com/v1"

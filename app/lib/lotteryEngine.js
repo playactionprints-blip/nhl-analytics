@@ -127,20 +127,20 @@ export function simulateManyLotteries(entries, count, options = {}) {
   const teamIndex = {};
 
   for (const entry of entries) {
-    distribution[entry.currentOwner] = Array.from({ length: config.lotteryTeamCount }, () => 0);
-    teamIndex[entry.currentOwner] = entry;
+    distribution[entry.pickId] = Array.from({ length: config.lotteryTeamCount }, () => 0);
+    teamIndex[entry.pickId] = entry;
   }
 
   for (let i = 0; i < count; i += 1) {
     const result = simulateLottery(entries, { config, seed: seedBase + i });
     for (const row of result.finalOrder) {
-      distribution[row.currentOwner][row.finalPick - 1] += 1;
+      distribution[row.pickId][row.finalPick - 1] += 1;
     }
   }
 
   return Object.values(teamIndex)
     .map((entry) => {
-      const finishes = distribution[entry.currentOwner];
+      const finishes = distribution[entry.pickId];
       const topPickRate = (finishes[0] / count) * 100;
       const topThreeRate = (finishes.slice(0, 3).reduce((sum, value) => sum + value, 0) / count) * 100;
       const averagePick = finishes.reduce((sum, value, index) => sum + value * (index + 1), 0) / count;

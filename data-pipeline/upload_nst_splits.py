@@ -15,6 +15,9 @@ import os, re, math, unicodedata
 import pandas as pd
 from supabase import create_client
 from rapidfuzz import process, fuzz
+from sync_log import install_sync_logger
+
+install_sync_logger("splits")
 
 sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')

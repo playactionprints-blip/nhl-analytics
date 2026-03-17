@@ -4,6 +4,9 @@ import os
 
 import pandas as pd
 from supabase import create_client
+from sync_log import install_sync_logger
+
+install_sync_logger("percentiles")
 
 sb = create_client(
     os.getenv('SUPABASE_URL') or os.getenv('NEXT_PUBLIC_SUPABASE_URL'),

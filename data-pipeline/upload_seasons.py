@@ -10,6 +10,9 @@ import re
 import html
 import unicodedata
 from supabase import create_client
+from sync_log import install_sync_logger
+
+install_sync_logger("players")
 
 sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
 

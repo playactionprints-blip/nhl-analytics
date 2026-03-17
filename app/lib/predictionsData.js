@@ -1,7 +1,7 @@
 import { createServerClient } from "@/app/lib/supabase";
 import { TEAM_FULL } from "@/app/lib/nhlTeams";
 import { unstable_cache } from "next/cache";
-import { buildGameContextFromTeams, buildPlayerAggregates, buildTeamSeasonStatsFromLiveData, normalizeScheduleGame, normalizeStandingsSnapshot } from "@/src/data/livePredictionData";
+import { buildGameContextFromTeams, buildPlayerAggregates, buildTeamSeasonStatsFromLiveData, buildTeamSplitAggregates, normalizeScheduleGame, normalizeStandingsSnapshot } from "@/src/data/livePredictionData";
 import { estimateExpectedScoring } from "@/src/models/expectedGoalsModel";
 import { predictGame } from "@/src/models/predictGame";
 import { buildTeamRatings } from "@/src/models/teamRatings";
@@ -553,6 +553,13 @@ function buildProjectedGoalie(teamLeaders, teamStats, sideLabel, isBackToBack) {
   };
 }
 
+function goalieConfidenceFromProjection(projectedGoalie) {
+  const label = String(projectedGoalie?.projectionLabel || "").toLowerCase();
+  if (label === "confirmed") return "confirmed";
+  if (projectedGoalie?.starterName) return "projected";
+  return "unknown";
+}
+
 export async function buildPredictionsForDate(dateString) {
   const dateParts = parseDateString(dateString);
   const yesterdayString = formatDateString(shiftDateParts(dateParts, -1));
@@ -566,6 +573,7 @@ export async function buildPredictionsForDate(dateString) {
     marketOddsByGame,
     dailyFaceoffGoalies,
     { data: players },
+    { data: playerSeasonSplits, error: playerSeasonSplitsError },
   ] = await Promise.all([
     fetchScheduleForDate(dateString),
     fetchScheduleForDate(yesterdayString),
@@ -575,11 +583,16 @@ export async function buildPredictionsForDate(dateString) {
     fetchDailyFaceoffGoalies(dateString),
     supabase
       .from("players")
-      .select("team,position,off_rating,def_rating,overall_rating,xgf_pct,war_shooting,gp,save_pct,gsax,full_name"),
+      .select("team,position,off_rating,def_rating,overall_rating,xgf_pct,cf_pct,war_shooting,gp,save_pct,gsax,full_name"),
+    supabase
+      .from("player_seasons")
+      .select("team,gp,cf_pct,home_cf_pct,away_cf_pct")
+      .eq("season", "25-26"),
   ]);
 
   const safePlayers = players || [];
   const playerAggregates = buildPlayerAggregates(safePlayers, TEAM_FULL);
+  const playerSplitAggregates = buildTeamSplitAggregates(playerSeasonSplitsError ? [] : (playerSeasonSplits || []));
   const yesterdayTeams = new Set(
     (yesterdayGamesRaw || [])
       .flatMap((game) => {
@@ -600,13 +613,15 @@ export async function buildPredictionsForDate(dateString) {
         game.homeTeam.abbr,
         standingsByTeam,
         specialTeamsByTeam,
-        playerAggregates
+        playerAggregates,
+        playerSplitAggregates
       );
       const awayTeam = buildTeamSeasonStatsFromLiveData(
         game.awayTeam.abbr,
         standingsByTeam,
         specialTeamsByTeam,
-        playerAggregates
+        playerAggregates,
+        playerSplitAggregates
       );
 
       if (!homeTeam || !awayTeam) return null;
@@ -619,10 +634,6 @@ export async function buildPredictionsForDate(dateString) {
       context.homeTravelDisadvantage = false;
       context.awayTravelDisadvantage = context.awayBackToBack;
 
-      const homeRatings = buildTeamRatings(homeTeam, "home", context);
-      const awayRatings = buildTeamRatings(awayTeam, "away", context);
-      const scoring = estimateExpectedScoring(homeRatings, awayRatings, context);
-      const prediction = predictGame(context);
       const homeLeaders = buildTeamLeaders(safePlayers, homeTeam.teamId, homeTeam.teamName);
       const awayLeaders = buildTeamLeaders(safePlayers, awayTeam.teamId, awayTeam.teamName);
       const oddsKey = `${normalizeTeamNameForOdds(game.awayTeam.name)}__${normalizeTeamNameForOdds(game.homeTeam.name)}`;
@@ -664,6 +675,30 @@ export async function buildPredictionsForDate(dateString) {
           }
         : buildProjectedGoalie(awayLeaders, awayTeam, "away", context.awayBackToBack);
 
+      context.homeStartingGoalie = {
+        ...(context.homeStartingGoalie || {}),
+        goalieName: projectedHomeGoalie.starterName,
+        savePct:
+          typeof projectedHomeGoalie.savePct === "number"
+            ? projectedHomeGoalie.savePct
+            : context.homeStartingGoalie?.savePct,
+        confidence: goalieConfidenceFromProjection(projectedHomeGoalie),
+      };
+      context.awayStartingGoalie = {
+        ...(context.awayStartingGoalie || {}),
+        goalieName: projectedAwayGoalie.starterName,
+        savePct:
+          typeof projectedAwayGoalie.savePct === "number"
+            ? projectedAwayGoalie.savePct
+            : context.awayStartingGoalie?.savePct,
+        confidence: goalieConfidenceFromProjection(projectedAwayGoalie),
+      };
+
+      const homeRatings = buildTeamRatings(homeTeam, "home", context);
+      const awayRatings = buildTeamRatings(awayTeam, "away", context);
+      const scoring = estimateExpectedScoring(homeRatings, awayRatings, context);
+      const prediction = predictGame(context);
+
       return {
         game,
         context,
@@ -677,6 +712,7 @@ export async function buildPredictionsForDate(dateString) {
         awayLeaders,
         projectedHomeGoalie,
         projectedAwayGoalie,
+        goalie_confidence: prediction.goalieConfidence,
         market: market
           ? {
               ...market,

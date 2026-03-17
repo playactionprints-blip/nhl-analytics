@@ -1,5 +1,8 @@
 import pandas as pd, os, math, re
 from supabase import create_client
+from sync_log import install_sync_logger
+
+install_sync_logger("players")
 
 sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
 df = pd.read_csv('/Users/cspeedie/Desktop/nhl-analytics/data-pipeline/data/evolving_hockey_stats.csv')

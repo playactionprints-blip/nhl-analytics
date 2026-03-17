@@ -100,6 +100,14 @@ function goalieAdjustment(side: "home" | "away", context: GameContext): number {
   return clamp(1 + savePctDelta + gsaxBoost + qualityAdjustment, 0.9, 1.12);
 }
 
+function possessionContextPct(team: TeamSeasonStats, side: "home" | "away"): number {
+  const splitValue = side === "home" ? team.homeCfPct : team.awayCfPct;
+  if (typeof splitValue === "number" && Number.isFinite(splitValue)) {
+    return splitValue;
+  }
+  return team.fiveOnFiveXgfPct;
+}
+
 export function buildEngineeredTeamFeatures(
   team: TeamSeasonStats,
   side: "home" | "away",
@@ -136,11 +144,12 @@ export function buildEngineeredTeamFeatures(
   // later goalie models can improve this component without changing the rest.
   const goalieMultiplier = goalieAdjustment(side, context);
   const regressedSavePct = clamp(baseSavePct * goalieMultiplier, 0.875, 0.93);
+  const possessionPct = possessionContextPct(team, side);
 
   const offenseStrengthScore = weightedAverage([
     { value: team.goalsForPerGame / league.goalsPerTeamGame, weight: config.weights.offense.goalsFor },
     { value: team.xgfPer60 / league.xgfPer60, weight: config.weights.offense.xgfPer60 },
-    { value: team.fiveOnFiveXgfPct / league.fiveOnFiveXgfPct, weight: config.weights.offense.fiveOnFiveXgfPct },
+    { value: possessionPct / league.fiveOnFiveXgfPct, weight: config.weights.offense.fiveOnFiveXgfPct },
     { value: team.shotsForPerGame / league.shotsPerTeamGame, weight: config.weights.offense.shotsFor },
     { value: splitRecordAdjustment, weight: config.weights.offense.splitRecord },
   ]);
@@ -149,7 +158,7 @@ export function buildEngineeredTeamFeatures(
     { value: league.goalsPerTeamGame / Math.max(1.8, team.goalsAgainstPerGame), weight: config.weights.defense.goalsAgainst },
     { value: league.xgaPer60 / Math.max(1.8, team.xgaPer60), weight: config.weights.defense.xgaPer60 },
     { value: league.shotsPerTeamGame / Math.max(20, team.shotsAgainstPerGame), weight: config.weights.defense.shotsAgainst },
-    { value: team.fiveOnFiveXgfPct / league.fiveOnFiveXgfPct, weight: config.weights.defense.fiveOnFiveXgfPct },
+    { value: possessionPct / league.fiveOnFiveXgfPct, weight: config.weights.defense.fiveOnFiveXgfPct },
     { value: splitRecordAdjustment, weight: config.weights.defense.splitRecord },
   ]);
 

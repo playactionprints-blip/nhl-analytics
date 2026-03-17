@@ -10,6 +10,9 @@ import os
 import math
 from collections import defaultdict
 from supabase import create_client
+from sync_log import install_sync_logger
+
+install_sync_logger("trends")
 
 sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
 

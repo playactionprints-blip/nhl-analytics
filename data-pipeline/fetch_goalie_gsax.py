@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 import requests
 from supabase import create_client
+from sync_log import install_sync_logger
 
 from build_xg_model import (
     FEATURE_COLS,
@@ -32,6 +33,8 @@ from build_xg_model import (
     _strength_category,
     engineer_features,
 )
+
+install_sync_logger("goalies")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")

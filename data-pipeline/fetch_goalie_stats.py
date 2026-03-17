@@ -11,6 +11,9 @@ Fields updated: gp, toi, wins, losses, shutouts, gaa, save_pct, goals_against, s
 """
 import os, time, requests
 from supabase import create_client
+from sync_log import install_sync_logger
+
+install_sync_logger("goalies")
 
 CURRENT_SEASON  = 20252026
 SUPABASE_URL    = os.environ["SUPABASE_URL"]
