@@ -392,6 +392,185 @@ def project_season_results(season_results):
     return projected
 
 
+# ── Bayesian prior-informed RAPM ──────────────────────────────────────────────
+def fetch_player_seasons_for_priors():
+    """
+    Fetch player_seasons from Supabase with the stats needed for box-score priors.
+    Returns a DataFrame with columns: player_id, season, toi, g, a1, ixg, cf_pct.
+    """
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("  Warning: SUPABASE_URL/KEY not set — skipping box-score priors")
+        return pd.DataFrame()
+    try:
+        sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+        rows = (sb.table('player_seasons')
+                .select('player_id,season,toi,g,a1,ixg,cf_pct')
+                .execute().data)
+        df = pd.DataFrame(rows)
+        for col in ('toi', 'g', 'a1', 'ixg', 'cf_pct'):
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+        df['player_id'] = df['player_id'].astype(int)
+        print(f"  Fetched player_seasons for priors: {len(df)} rows "
+              f"({df['season'].nunique()} seasons, {df['player_id'].nunique()} players)")
+        return df
+    except Exception as e:
+        print(f"  Warning: could not fetch player_seasons for priors: {e}")
+        return pd.DataFrame()
+
+
+def compute_box_score_prior(player_seasons_df, season):
+    """
+    Compute a simple box-score prior for each player in a given season.
+    Returns dict: {player_id: {'off_prior': float, 'def_prior': float}}
+    """
+    if player_seasons_df.empty:
+        return {}
+    season_df = player_seasons_df[player_seasons_df['season'] == season].copy()
+    if season_df.empty:
+        return {}
+
+    # toi column is total minutes; filter at 200 min
+    season_df = season_df[season_df['toi'] >= 200.0].copy()
+    if season_df.empty:
+        return {}
+
+    season_df['toi_hours'] = season_df['toi'] / 60.0
+    season_df['ixg_60'] = season_df['ixg'] / season_df['toi_hours']
+    season_df['pts_60'] = (season_df['g'] + season_df['a1']) / season_df['toi_hours']
+
+    avg_ixg_60 = season_df['ixg_60'].mean()
+    avg_pts_60 = season_df['pts_60'].mean()
+    avg_cf = season_df['cf_pct'].mean() if 'cf_pct' in season_df.columns else 50.0
+
+    season_df['off_prior'] = (
+        (season_df['ixg_60'] - avg_ixg_60) * 0.5 +
+        (season_df['pts_60'] - avg_pts_60) * 0.3
+    ) * 0.4  # shrink toward zero — prior is a hint not a certainty
+
+    season_df['def_prior'] = (
+        (season_df['cf_pct'].fillna(avg_cf) - avg_cf) / 100.0
+    ) * 0.2  # very small defensive prior
+
+    priors = {}
+    for _, row in season_df.iterrows():
+        priors[int(row['player_id'])] = {
+            'off_prior': float(row['off_prior']),
+            'def_prior': float(row['def_prior']),
+        }
+    return priors
+
+
+def get_player_prior(player_id, previous_rapm, box_score_prior, current_season_toi):
+    """
+    Return prior {'off': float, 'def': float} for a player, handling all 4 cases:
+      1. Returning player with previous RAPM → apply TopDownHockey linear trend shrinkage
+      2. New player with ≥200 min current season → use box-score prior
+      3. New player with <200 min current season → shrink box-score prior by sample size
+      4. True rookie with no data at all → neutral (0.0, 0.0)
+    Never returns None or raises KeyError — always falls through to 0.0.
+    """
+    # Case 1 — Returning player with previous RAPM
+    if player_id in previous_rapm:
+        prev = previous_rapm[player_id]
+        off_prior = 0.008 + prev.get('off', 0.0) * 0.446
+        def_prior = -0.003 + prev.get('def', 0.0) * 0.280
+        return {'off': off_prior, 'def': def_prior}
+
+    # Case 2 — New player with ≥200 min current season data
+    if player_id in box_score_prior and current_season_toi.get(player_id, 0) >= 200:
+        bp = box_score_prior[player_id]
+        return {'off': bp.get('off_prior', 0.0), 'def': bp.get('def_prior', 0.0)}
+
+    # Case 3 — New player with <200 min current season (callup/rookie)
+    if player_id in box_score_prior:
+        toi = current_season_toi.get(player_id, 0)
+        shrinkage = min(toi / 200.0, 1.0)
+        bp = box_score_prior[player_id]
+        return {
+            'off': bp.get('off_prior', 0.0) * shrinkage,
+            'def': bp.get('def_prior', 0.0) * shrinkage,
+        }
+
+    # Case 4 — True rookie with no data at all
+    return {'off': 0.0, 'def': 0.0}
+
+
+def _compute_toi_from_stints(stints_df):
+    """
+    Compute per-player TOI in minutes from a stints DataFrame.
+    Returns dict: {player_id: toi_minutes}
+    """
+    toi_sec = defaultdict(float)
+    for _, row in stints_df.iterrows():
+        dur = float(row.get('duration_seconds', 0) or 0)
+        for col in ('home_players', 'away_players'):
+            cell = row.get(col, '')
+            if pd.isna(cell):
+                continue
+            for p in str(cell).split('|'):
+                p = p.strip()
+                if p:
+                    toi_sec[int(p)] += dur
+    return {pid: t / 60.0 for pid, t in toi_sec.items()}
+
+
+def run_prior_informed_rapm(stints_by_season, player_seasons_df):
+    """
+    Daisy chain RAPM: 23-24 → 24-25 → 25-26.
+    Each season's output becomes the prior for the next.
+    Returns dict: {season: raw_results_df} with rapm_off/rapm_def columns.
+    """
+    seasons_in_order = ['23-24', '24-25', '25-26']
+    previous_rapm = {}   # {player_id: {'off': float, 'def': float}}
+    all_season_results = {}
+
+    for season in seasons_in_order:
+        if season not in stints_by_season:
+            print(f"  Warning: no stints for {season} — skipping")
+            continue
+
+        stints = stints_by_season[season]
+        print(f"\n  Building box-score prior for {season}...")
+        box_prior = compute_box_score_prior(player_seasons_df, season)
+        print(f"    Box-score prior computed for {len(box_prior)} players")
+
+        # Compute per-player TOI (minutes) from this season's stints
+        current_season_toi = _compute_toi_from_stints(stints)
+
+        # Collect all player IDs that might need a prior
+        all_player_ids = set()
+        for col in ('home_players', 'away_players'):
+            for cell in stints[col].dropna():
+                for p in str(cell).split('|'):
+                    if p.strip():
+                        all_player_ids.add(int(p))
+        all_player_ids.update(box_prior.keys())
+        all_player_ids.update(previous_rapm.keys())
+
+        season_priors = {
+            pid: get_player_prior(pid, previous_rapm, box_prior, current_season_toi)
+            for pid in all_player_ids
+        }
+        n_nonzero = sum(
+            1 for p in season_priors.values()
+            if abs(p['off']) > 0.001 or abs(p['def']) > 0.001
+        )
+        print(f"    Season priors: {len(season_priors)} players, {n_nonzero} non-zero")
+
+        print(f"  Fitting prior-informed RAPM for {season}...")
+        raw_results = build_rapm(stints, priors=season_priors)
+        all_season_results[season] = raw_results
+
+        # Feed this season's results forward as the next season's prior
+        previous_rapm = {
+            int(row.player_id): {'off': float(row.rapm_off), 'def': float(row.rapm_def)}
+            for row in raw_results.itertuples()
+        }
+        print(f"  {season} done: {len(raw_results)} players in results")
+
+    return all_season_results
+
+
 # ── Step 1: Fetch regular-season game IDs for one season ─────────────────────
 def fetch_game_ids(season_cfg):
     """
@@ -737,7 +916,7 @@ def fetch_all_stints(game_ids, season_cfg):
 
 
 # ── Step 3: Build RAPM regression ─────────────────────────────────────────────
-def build_rapm(stints_df):
+def build_rapm(stints_df, priors=None):
     """
     Fit offense/defense RAPM on combined stints with separate coefficient blocks.
     Each observation models one team's xG rate in a stint:
@@ -745,6 +924,11 @@ def build_rapm(stints_df):
       - defensive columns for the defending skaters
     This avoids the earlier leakage where elite offensive players could inherit
     artificially strong defensive coefficients from one blended player term.
+
+    priors: optional dict {player_id: {'off': float, 'def': float}}
+      When provided, the prior is subtracted from the target before regression
+      and added back to the coefficients after, anchoring players to reasonable
+      box-score estimates so collinearity can't push them to absurd values.
     """
     stints_df = stints_df[stints_df['duration_seconds'] >= 10].copy()
     n_stints  = len(stints_df)
@@ -845,8 +1029,18 @@ def build_rapm(stints_df):
                 c_idx.append(ctx_offset + ctx_col)
                 vals.append(ctx_val)
 
-        y[home_row] = hxg
-        y[away_row] = axg
+        # Subtract per-team prior sums from target so ridge explains the residual
+        if priors:
+            h_off = sum(priors.get(pid, {}).get('off', 0.0) for pid in h_pids)
+            a_off = sum(priors.get(pid, {}).get('off', 0.0) for pid in a_pids)
+            h_def = sum(priors.get(pid, {}).get('def', 0.0) for pid in h_pids)
+            a_def = sum(priors.get(pid, {}).get('def', 0.0) for pid in a_pids)
+        else:
+            h_off = a_off = h_def = a_def = 0.0
+        # home xG: home offense drives it up; away defense suppresses it
+        # away xG: away offense drives it up; home defense suppresses it
+        y[home_row] = hxg - h_off - a_def
+        y[away_row] = axg - a_off - h_def
         weights[home_row] = w
         weights[away_row] = w
 
@@ -860,8 +1054,15 @@ def build_rapm(stints_df):
     print(f"  Best alpha: {model.alpha_}")
 
     coef = model.coef_
-    rapm_off = coef[:n_players]
-    rapm_def = -coef[n_players:n_players * 2]  # lower xGA allowed = better defense
+    rapm_off = coef[:n_players].copy()
+    rapm_def = -coef[n_players:n_players * 2].copy()  # lower xGA allowed = better defense
+
+    # Add priors back to recover final RAPM estimates
+    if priors:
+        for i, pid in enumerate(all_pids):
+            p = priors.get(pid, {})
+            rapm_off[i] += p.get('off', 0.0)
+            rapm_def[i] += p.get('def', 0.0)
 
     results = pd.DataFrame({
         'player_id':     all_pids,
@@ -872,16 +1073,26 @@ def build_rapm(stints_df):
     results['rapm_off_pct'] = results['rapm_off'].rank(pct=True) * 100
     results['rapm_def_pct'] = results['rapm_def'].rank(pct=True) * 100
 
-    # Add excluded players (< 300 min) back with RAPM = 0 so their stale Supabase
-    # values are overwritten with a neutral (league-mean) estimate on upload.
+    # Add excluded players (< 300 min) back.  When priors are available, use a
+    # sample-size-shrunk prior instead of hard zero so mid-season callups and
+    # low-minute players get a reasonable estimate instead of league-average.
     if excluded_pids:
-        excl_df = pd.DataFrame({
-            'player_id':     sorted(excluded_pids),
-            'rapm_off':      0.0,
-            'rapm_def':      0.0,
-            'toi_5v5_total': [round(float(player_toi_sec.get(p, 0)) / 60.0, 1)
-                              for p in sorted(excluded_pids)],
-        })
+        excl_rows = []
+        for p in sorted(excluded_pids):
+            toi_min = float(player_toi_sec.get(p, 0)) / 60.0
+            shrink = min(toi_min / 300.0, 1.0)
+            if priors and p in priors:
+                off_val = priors[p].get('off', 0.0) * shrink
+                def_val = priors[p].get('def', 0.0) * shrink
+            else:
+                off_val = def_val = 0.0
+            excl_rows.append({
+                'player_id':     p,
+                'rapm_off':      off_val,
+                'rapm_def':      def_val,
+                'toi_5v5_total': round(toi_min, 1),
+            })
+        excl_df = pd.DataFrame(excl_rows)
         results = pd.concat([results, excl_df], ignore_index=True)
         results['rapm_off_pct'] = results['rapm_off'].rank(pct=True) * 100
         results['rapm_def_pct'] = results['rapm_def'].rank(pct=True) * 100
@@ -1109,11 +1320,17 @@ def print_leaderboards(results_df):
     # Use name lookup instead of hardcoded IDs for non-McDavid players
     name_to_pid = {v.get('full_name'): k for k, v in info.items()}
     spotlight = {
-        'Connor McDavid':   name_to_pid.get('Connor McDavid',   MCDAVID_ID),
-        'Leon Draisaitl':   name_to_pid.get('Leon Draisaitl',   DRAISAITL_ID),
-        'Nathan MacKinnon': name_to_pid.get('Nathan MacKinnon', 0),
-        'Nikita Kucherov':  name_to_pid.get('Nikita Kucherov',  0),
-        'Darren Raddysh':   name_to_pid.get('Darren Raddysh',   0),
+        'Connor McDavid':    name_to_pid.get('Connor McDavid',    MCDAVID_ID),
+        'Leon Draisaitl':    name_to_pid.get('Leon Draisaitl',    DRAISAITL_ID),
+        'Nathan MacKinnon':  name_to_pid.get('Nathan MacKinnon',  0),
+        'Nikita Kucherov':   name_to_pid.get('Nikita Kucherov',   0),
+        'Matthew Knies':     name_to_pid.get('Matthew Knies',     0),
+        'William Nylander':  name_to_pid.get('William Nylander',  0),
+        'Brandon Hagel':     name_to_pid.get('Brandon Hagel',     0),
+        'Macklin Celebrini': name_to_pid.get('Macklin Celebrini', 0),
+        'Matthew Schaefer':  name_to_pid.get('Matthew Schaefer',  0),
+        'John Hayden':       name_to_pid.get('John Hayden',       0),
+        'Darren Raddysh':    name_to_pid.get('Darren Raddysh',    0),
     }
     print("\n--- SPOTLIGHT PLAYERS ---")
     print(f"  {'Player':<20}  {'rapm_off':>8}  {'off_pct':>7}  {'rapm_def':>8}  {'def_pct':>7}")
@@ -1132,7 +1349,11 @@ def print_leaderboards(results_df):
 def check_and_maybe_upload(results_df):
     """
     Apply min-TOI filter, null impossible values, then upload projected RAPM if quality gate passes.
-    Quality gate: McDavid rapm_off_pct > 70th AND Draisaitl rapm_off_pct >= 59.5th.
+    Quality gate (prior-informed RAPM):
+      - McDavid rapm_off_pct > 90th
+      - Draisaitl rapm_off_pct >= 59.5th
+      - Knies rapm_off_pct > 30th (collinearity fix check)
+      - No high-TOI player (≥500 min) below 2nd percentile
     """
     # ── Min-TOI filter: remove small-sample noise ─────────────────────────────
     MIN_TOI_MINUTES = 200
@@ -1168,12 +1389,50 @@ def check_and_maybe_upload(results_df):
     mc_pct = float(mc_row['rapm_off_pct'].values[0]) if len(mc_row) else 0.0
     dr_pct = float(dr_row['rapm_off_pct'].values[0]) if len(dr_row) else 0.0
 
-    print(f"\nQuality gate (McDavid >70th pct AND Draisaitl >=59.5th pct):")
-    print(f"  McDavid   rapm_off_pct: {mc_pct:.1f}  {'✓' if mc_pct > 70 else '✗'}")
-    print(f"  Draisaitl rapm_off_pct: {dr_pct:.1f}  {'✓' if dr_pct >= 59.5 else '✗'}")
+    # ── Extended Bayesian quality checks ──────────────────────────────────────
+    rapm_std = results_df['rapm_off'].std()
+    high_toi = results_df[results_df['toi_5v5_total'] >= 500]
+    outlier_count = (high_toi['rapm_off_pct'] < 2.0).sum() if not high_toi.empty else 0
 
-    if mc_pct > 70 and dr_pct >= 59.5:
-        print("\n✓ Conditions met — uploading projected 3-year RAPM card to Supabase")
+    # Name-based lookups (Knies, Nylander, Celebrini, Schaefer)
+    knies_pct = nylander_pct = celebrini_pct = schaefer_pct = None
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            sb_lookup = create_client(SUPABASE_URL, SUPABASE_KEY)
+            pinfo = {r['full_name']: r['player_id'] for r in
+                     sb_lookup.table('players').select('player_id,full_name').execute().data}
+            def _pct(name):
+                pid = pinfo.get(name)
+                if not pid:
+                    return None
+                row = results_df[results_df['player_id'] == pid]
+                return float(row['rapm_off_pct'].values[0]) if len(row) else None
+            knies_pct    = _pct('Matthew Knies')
+            nylander_pct = _pct('William Nylander')
+            celebrini_pct = _pct('Macklin Celebrini')
+            schaefer_pct = _pct('Matthew Schaefer')
+        except Exception as e:
+            print(f"  Warning: name lookup failed: {e}")
+
+    print(f"\nQuality gate (prior-informed RAPM):")
+    print(f"  McDavid     rapm_off_pct: {mc_pct:.1f}  {'✓' if mc_pct > 90 else '✗'}  (need >90)")
+    print(f"  Draisaitl   rapm_off_pct: {dr_pct:.1f}  {'✓' if dr_pct >= 59.5 else '✗'}  (need >=59.5)")
+    if knies_pct is not None:
+        print(f"  Knies       rapm_off_pct: {knies_pct:.1f}  {'✓' if knies_pct > 30 else '✗'}  (need >30, fixing collinearity)")
+    if nylander_pct is not None:
+        print(f"  Nylander    rapm_off_pct: {nylander_pct:.1f}  (informational — should be top-6 range)")
+    if celebrini_pct is not None:
+        print(f"  Celebrini   rapm_off_pct: {celebrini_pct:.1f}  (informational — rookie)")
+    if schaefer_pct is not None:
+        print(f"  Schaefer    rapm_off_pct: {schaefer_pct:.1f}  (informational — rookie D)")
+    print(f"  rapm_off std dev: {rapm_std:.4f}  (lower = less collinearity noise)")
+    print(f"  High-TOI (≥500 min) players below 2nd pct: {outlier_count}  {'✓' if outlier_count == 0 else '⚠'}")
+
+    knies_ok = (knies_pct is None) or (knies_pct > 30)
+    gate_passed = mc_pct > 90 and dr_pct >= 59.5 and knies_ok and outlier_count == 0
+
+    if gate_passed:
+        print("\n✓ All conditions met — uploading projected 3-year RAPM card to Supabase")
         if SUPABASE_URL and SUPABASE_KEY:
             sb = create_client(SUPABASE_URL, SUPABASE_KEY)
             null_impossible_rapm(sb)
@@ -1185,7 +1444,12 @@ def check_and_maybe_upload(results_df):
         return True
     else:
         print("\n✗ Conditions not met — not uploading projected RAPM card")
-        print("  The projected RAPM still doesn't clearly separate elite players.")
+        if mc_pct <= 90:
+            print(f"  McDavid at {mc_pct:.1f}th pct — prior-informed RAPM should have him >90th")
+        if knies_pct is not None and knies_pct <= 30:
+            print(f"  Knies at {knies_pct:.1f}th pct — collinearity still inflating Toronto linemates")
+        if outlier_count > 0:
+            print(f"  {outlier_count} high-TOI players below 2nd pct — investigate outliers")
         if SUPABASE_URL and SUPABASE_KEY:
             sb = create_client(SUPABASE_URL, SUPABASE_KEY)
             null_impossible_rapm(sb)
@@ -1223,15 +1487,29 @@ if __name__ == '__main__':
         print("\n→ Review diagnostics above, then set TEST_MODE = False and re-run.")
         sys.exit(0)
 
-    # Step 3: build per-season RAPM + first-pass context
+    # Step 2b: fetch player_seasons for Bayesian priors
     print(f"\n{'='*60}")
-    print("Step 3 — Per-season RAPM + context")
+    print("Step 2b — Fetch player_seasons for Bayesian priors")
+    print(f"{'='*60}")
+    player_seasons_df = fetch_player_seasons_for_priors()
+
+    # Step 3: prior-informed RAPM with daisy chain 23-24 → 24-25 → 25-26
+    print(f"\n{'='*60}")
+    print("Step 3 — Prior-informed RAPM (daisy chain 23-24 → 24-25 → 25-26)")
+    print(f"{'='*60}")
+    raw_season_results = run_prior_informed_rapm(season_dfs, player_seasons_df)
+
+    # Step 3b: filter, compute context metrics, upload per-season RAPM
+    print(f"\n{'='*60}")
+    print("Step 3b — Context metrics + per-season upload")
     print(f"{'='*60}")
 
     season_results = {}
-    for season_key, stints in season_dfs.items():
-        print(f"\n{season_key}: fitting season RAPM")
-        raw_results = build_rapm(stints)
+    for season_key in ['23-24', '24-25', '25-26']:
+        if season_key not in raw_season_results:
+            continue
+        stints = season_dfs[season_key]
+        raw_results = raw_season_results[season_key]
         qualified = filter_qualified_results(raw_results)
         print(
             f"  Qualified skaters for {season_key}: "
