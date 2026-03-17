@@ -266,6 +266,23 @@ export function GoalieCard({ player }) {
             <div style={{ marginTop:10, fontSize:10, color:"#2a4060", fontFamily:"'DM Mono',monospace", textAlign:"center" }}>
               Historical season data coming soon
             </div>
+
+            {/* GSAx Advanced Stats */}
+            <div style={{ marginTop:16 }}>
+              <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:10 }}>Expected Goals Model</div>
+              {(gsax != null || xga != null) ? (
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
+                  <StatBox label="GSAx" value={gsax} highlight={player.gsax > 0} />
+                  <StatBox label="xGA" value={xga} />
+                  <StatBox label="Exp SV%" value={expectedSvPct} />
+                  <StatBox label="SV% Above Exp" value={svAboveExpected} highlight={player.save_pct_above_expected > 0} />
+                </div>
+              ) : (
+                <div style={{ padding:"10px 12px", background:"#0a1520", border:"1px solid #1e2d40", borderRadius:6, textAlign:"center" }}>
+                  <span style={{ fontSize:10, color:"#2a4060", fontFamily:"'DM Mono',monospace" }}>GSAx: Insufficient data</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

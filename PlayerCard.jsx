@@ -1340,7 +1340,13 @@ function PlayerCard({ player }) {
       {/* Footer */}
       <div style={{ borderTop:"1px solid #1a2535", padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <span style={{ fontSize:9, color:"#2a4060", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>2024–25 Regular Season</span>
-        <span style={{ fontSize:9, color:"#2a4060", fontFamily:"'DM Mono',monospace" }}>hockeystats.dev</span>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <Link href={`/compare?p1=${player.player_id}`}
+            style={{ fontSize:9, color:"#3a6a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", textDecoration:"none", padding:"3px 8px", border:"1px solid #1e3a55", borderRadius:4 }}>
+            Compare ↗
+          </Link>
+          <span style={{ fontSize:9, color:"#2a4060", fontFamily:"'DM Mono',monospace" }}>hockeystats.dev</span>
+        </div>
       </div>
     </div>
   );
@@ -1369,12 +1375,16 @@ function TeamGrid({ onSelectTeam, selectedTeam }) {
 }
 
 // ── Stats Table ───────────────────────────────────────────────────────────────
+const DEFAULT_TABLE_COLS = new Set(['full_name','team','position','gp','g','a','pts','overall_rating','war_total']);
+
 function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
   const [sortKey, setSortKey] = useState('pts');
   const [sortDir, setSortDir] = useState('desc');
   const [posFilter, setPosFilter] = useState('S');
   const [tableSearch, setTableSearch] = useState('');
   const [selectedSeason, setSelectedSeason] = useState('players'); // 'players' | '25-26' | '24-25' | '23-24'
+  const [visibleCols, setVisibleCols] = useState(DEFAULT_TABLE_COLS);
+  const [showColPicker, setShowColPicker] = useState(false);
 
   // Use season-specific data when a historical season is selected
   const activePlayers = useMemo(
@@ -1382,32 +1392,30 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
     [players, seasonStats, selectedSeason]
   );
 
-  const COLS = [
-    { key:'full_name',      sortKey:'full_name',      label:'Player',  align:'left'   },
-    { key:'team',           sortKey:'team',            label:'Team',    align:'left',   mobileHide:true },
-    { key:'position',       sortKey:'position',        label:'Pos',     align:'center', mobileHide:true },
-    { key:'gp',             sortKey:'gp',              label:'GP',      align:'right',  mobileHide:true },
-    { key:'g',              sortKey:'g',               label:'G',       align:'right',  mobileHide:true },
-    { key:'a',              sortKey:'a',               label:'A',       align:'right',  mobileHide:true },
-    { key:'pts',            sortKey:'pts',             label:'PTS',     align:'right',  bold:true },
-    { key:'plus_minus',     sortKey:'plus_minus',      label:'+/-',     align:'right',  mobileHide:true },
-    { key:'ppp',            sortKey:'ppp',             label:'PPP',     align:'right',  mobileHide:true },
-    { key:'toi',            sortKey:'toi_min',         label:'TOI',     align:'right',  mobileHide:true },
-    { key:'cf_pct',         sortKey:'cf_pct',          label:'CF%',     align:'right',  pctStat:true, mobileHide:true },
-    { key:'xgf_pct',        sortKey:'xgf_pct',         label:'xGF%',   align:'right',  pctStat:true, mobileHide:true },
-    { key:'hdcf_pct',       sortKey:'hdcf_pct',        label:'HDCF%',  align:'right',  pctStat:true, mobileHide:true },
-    { key:'scf_pct',        sortKey:'scf_pct',         label:'SCF%',   align:'right',  pctStat:true, mobileHide:true },
-    { key:'ixg',            sortKey:'ixg',             label:'ixG',     align:'right',  mobileHide:true },
-    { key:'icf',            sortKey:'icf',             label:'iCF',     align:'right',  mobileHide:true },
-    { key:'tka',            sortKey:'tka',             label:'TKA',     align:'right',  mobileHide:true },
-    { key:'gva',            sortKey:'gva',             label:'GVA',     align:'right',  mobileHide:true },
-    { key:'blk',            sortKey:'blk',             label:'BLK',     align:'right',  mobileHide:true },
-    { key:'hits',           sortKey:'hits',            label:'HITS',    align:'right',  mobileHide:true },
-    { key:'off_rating',     sortKey:'off_rating',      label:'OFF',     align:'right',  bold:true, rating:true, mobileHide:true },
-    { key:'def_rating',     sortKey:'def_rating',      label:'DEF',     align:'right',  bold:true, rating:true, mobileHide:true },
-    { key:'overall_rating', sortKey:'overall_rating',  label:'OVR',     align:'right',  bold:true, rating:true },
-    { key:'war_total',      sortKey:'war_total',       label:'WAR3',    align:'right'  },
+  const ALL_COLS = [
+    { key:'full_name',      sortKey:'full_name',      label:'Player',      align:'left',   alwaysVisible:true },
+    { key:'team',           sortKey:'team',            label:'Team',        align:'left',   mobileHide:true },
+    { key:'position',       sortKey:'position',        label:'Pos',         align:'center', mobileHide:true },
+    { key:'gp',             sortKey:'gp',              label:'GP',          align:'right',  mobileHide:true },
+    { key:'g',              sortKey:'g',               label:'G',           align:'right',  mobileHide:true },
+    { key:'a',              sortKey:'a',               label:'A',           align:'right',  mobileHide:true },
+    { key:'pts',            sortKey:'pts',             label:'PTS',         align:'right',  bold:true },
+    { key:'plus_minus',     sortKey:'plus_minus',      label:'+/-',         align:'right',  mobileHide:true, optional:true },
+    { key:'ppp',            sortKey:'ppp',             label:'PPP',         align:'right',  mobileHide:true, optional:true },
+    { key:'toi',            sortKey:'toi_min',         label:'TOI',         align:'right',  mobileHide:true, optional:true },
+    { key:'cf_pct',         sortKey:'cf_pct',          label:'CF%',         align:'right',  pctStat:true, mobileHide:true, optional:true },
+    { key:'xgf_pct',        sortKey:'xgf_pct',         label:'xGF%',        align:'right',  pctStat:true, mobileHide:true, optional:true },
+    { key:'hdcf_pct',       sortKey:'hdcf_pct',        label:'HDCF%',       align:'right',  pctStat:true, mobileHide:true, optional:true },
+    { key:'ixg',            sortKey:'ixg',             label:'ixG',         align:'right',  mobileHide:true, optional:true },
+    { key:'icf',            sortKey:'icf',             label:'iCF',         align:'right',  mobileHide:true, optional:true },
+    { key:'rapm_off',       sortKey:'rapm_off',        label:'RAPM Off',    align:'right',  mobileHide:true, optional:true, bold:true },
+    { key:'rapm_def',       sortKey:'rapm_def',        label:'RAPM Def',    align:'right',  mobileHide:true, optional:true },
+    { key:'off_rating',     sortKey:'off_rating',      label:'Off Rtg',     align:'right',  bold:true, rating:true, mobileHide:true, optional:true },
+    { key:'def_rating',     sortKey:'def_rating',      label:'Def Rtg',     align:'right',  bold:true, rating:true, mobileHide:true, optional:true },
+    { key:'overall_rating', sortKey:'overall_rating',  label:'OVR',         align:'right',  bold:true, rating:true },
+    { key:'war_total',      sortKey:'war_total',       label:'WAR3',        align:'right'  },
   ];
+  const COLS = ALL_COLS.filter(col => visibleCols.has(col.key) || col.alwaysVisible);
 
   function parseToi(toi) {
     if (!toi) return null;
@@ -1449,6 +1457,10 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
     if (col.pctStat) return typeof v === 'number' ? v.toFixed(1) : v;
     if (col.rating) return typeof v === 'number' ? Math.round(v) : v;
     if (col.key === 'ixg' || col.key === 'war_total') return typeof v === 'number' ? v.toFixed(1) : v;
+    if (col.key === 'rapm_off' || col.key === 'rapm_def') {
+      if (typeof v !== 'number') return v;
+      return `${v >= 0 ? '+' : ''}${v.toFixed(4)}`;
+    }
     return v;
   }
 
@@ -1459,6 +1471,7 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
     if (col.rating) return pctColor(v);
     if (col.key === 'full_name') return '#c8dff0';
     if (col.key === 'team') return TEAM_COLOR[v] || '#4a6a88';
+    if (col.key === 'rapm_off' || col.key === 'rapm_def') return typeof v === 'number' ? (v >= 0 ? '#00e5a0' : '#e05050') : '#6a8aaa';
     return '#6a8aaa';
   }
 
@@ -1485,18 +1498,48 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
             </button>
           ))}
         </div>
+        {/* Column picker */}
+        <div style={{ position:'relative' }}>
+          <button onClick={() => setShowColPicker(v => !v)}
+            style={{ padding:'6px 12px', background:showColPicker?'#334466':'#0d1825', border:`1px solid ${showColPicker?'#5577aa':'#1e2d40'}`, borderRadius:6, color:showColPicker?'#c8dff0':'#4a6a88', fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer' }}>
+            Columns ⚙
+          </button>
+          {showColPicker && (
+            <div style={{ position:'absolute', top:'calc(100% + 6px)', left:0, zIndex:50, background:'#0d1825', border:'1px solid #1e2d40', borderRadius:10, padding:'10px 14px', minWidth:200, boxShadow:'0 14px 34px rgba(0,0,0,0.4)' }}>
+              <div style={{ fontSize:10, color:'#3a5a78', fontFamily:"'DM Mono',monospace", textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:8 }}>Toggle Columns</div>
+              {ALL_COLS.filter(c => !c.alwaysVisible).map(col => (
+                <label key={col.key} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, cursor:'pointer' }}>
+                  <input type="checkbox" checked={visibleCols.has(col.key)}
+                    onChange={e => {
+                      const next = new Set(visibleCols);
+                      if (e.target.checked) next.add(col.key); else next.delete(col.key);
+                      setVisibleCols(next);
+                    }}
+                    style={{ accentColor:'#0080FF' }} />
+                  <span style={{ fontSize:11, color:'#8899aa', fontFamily:"'DM Mono',monospace" }}>{col.label}</span>
+                </label>
+              ))}
+              <div style={{ marginTop:8, display:'flex', gap:6 }}>
+                <button onClick={() => setVisibleCols(DEFAULT_TABLE_COLS)}
+                  style={{ flex:1, padding:'4px 8px', background:'#0a1218', border:'1px solid #1e2d40', borderRadius:5, color:'#4a6a88', fontSize:10, fontFamily:"'DM Mono',monospace", cursor:'pointer' }}>Reset</button>
+                <button onClick={() => setVisibleCols(new Set(ALL_COLS.map(c => c.key)))}
+                  style={{ flex:1, padding:'4px 8px', background:'#0a1218', border:'1px solid #1e2d40', borderRadius:5, color:'#4a6a88', fontSize:10, fontFamily:"'DM Mono',monospace", cursor:'pointer' }}>All</button>
+              </div>
+            </div>
+          )}
+        </div>
         <span style={{ fontSize:11, color:'#2a4060', fontFamily:"'DM Mono',monospace" }}>{filtered.length} players</span>
       </div>
 
-      <div style={{ overflowX:'auto', border:'1px solid #1e2d40', borderRadius:10 }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:"'DM Mono',monospace", fontSize:12, minWidth:1400 }}>
-          <thead>
+      <div style={{ overflowX:'auto', border:'1px solid #1e2d40', borderRadius:10, maxHeight:720, overflowY:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:"'DM Mono',monospace", fontSize:12, minWidth:900 }}>
+          <thead style={{ position:'sticky', top:0, zIndex:10 }}>
             <tr style={{ background:'#0a1520' }}>
-              <th style={{ padding:'9px 8px', color:'#2a4060', fontSize:10, fontWeight:400, width:36, borderBottom:'1px solid #1e2d40', textAlign:'center' }}>#</th>
+              <th style={{ padding:'9px 8px', color:'#2a4060', fontSize:10, fontWeight:400, width:36, borderBottom:'1px solid #1e2d40', textAlign:'center', background:'#0a1520' }}>#</th>
               {COLS.map(col => (
                 <th key={col.key} onClick={() => handleSort(col.sortKey)}
                   className={col.mobileHide ? "tbl-col-hide" : ""}
-                  style={{ padding:'9px 10px', textAlign:col.align, borderBottom:'1px solid #1e2d40', color:sortKey===col.sortKey?'#c8dff0':'#3a5a78', fontSize:10, fontWeight:700, letterSpacing:'0.07em', textTransform:'uppercase', cursor:'pointer', whiteSpace:'nowrap', userSelect:'none', background:sortKey===col.sortKey?'#0d1825':'transparent' }}>
+                  style={{ padding:'9px 10px', textAlign:col.align, borderBottom:'1px solid #1e2d40', color:sortKey===col.sortKey?'#c8dff0':'#3a5a78', fontSize:10, fontWeight:700, letterSpacing:'0.07em', textTransform:'uppercase', cursor:'pointer', whiteSpace:'nowrap', userSelect:'none', background:sortKey===col.sortKey?'#0d1825':'#0a1520' }}>
                   {col.label}{sortKey===col.sortKey ? (sortDir==='desc'?' ↓':' ↑') : ''}
                 </th>
               ))}
@@ -1505,12 +1548,14 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
           <tbody>
             {filtered.map((p, i) => {
               const isSelected = selectedId === p.player_id;
+              const isTop10 = i < 10;
+              const teamAccent = TEAM_COLOR[p.team] || '#4a6a88';
               return (
                 <tr key={p.player_id} onClick={() => onSelectPlayer(p)}
-                  style={{ borderBottom:'1px solid #0a1218', cursor:'pointer', background: isSelected ? '#0d2a1a' : i%2===0 ? '#080e17' : '#060b12' }}
+                  style={{ borderBottom:'1px solid #0a1218', cursor:'pointer', background: isSelected ? '#0d2a1a' : i%2===0 ? '#080e17' : '#060b12', borderLeft: isTop10 ? `3px solid ${teamAccent}` : '3px solid transparent' }}
                   onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#0d1825'; }}
                   onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? '#0d2a1a' : i%2===0 ? '#080e17' : '#060b12'; }}>
-                  <td style={{ padding:'6px 8px', textAlign:'center', color:'#2a4060', fontSize:10 }}>{i+1}</td>
+                  <td style={{ padding:'6px 8px', textAlign:'center', color: isTop10 ? teamAccent : '#2a4060', fontSize:10, fontWeight: isTop10 ? 700 : 400 }}>{i+1}</td>
                   {COLS.map(col => (
                     <td key={col.key} className={col.mobileHide ? "tbl-col-hide" : ""} style={{ padding:'6px 10px', textAlign:col.align, color:cellColor(p,col), fontWeight:col.bold && p[col.key] != null ? 700 : 400, whiteSpace:col.key==='full_name'?'nowrap':'normal', fontSize:col.key==='full_name'?13:12, fontFamily:col.key==='full_name'?"'Barlow Condensed',sans-serif":"'DM Mono',monospace" }}>
                       {fmtCell(p, col)}
@@ -1610,6 +1655,11 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
   const [searchResults, setSearchResults] = useState(defaultSearchPlayers);
   const [searchLoading, setSearchLoading] = useState(false);
   const { pushRecentPlayer } = useRecentPlayers();
+  // Search filter state
+  const [filterPos, setFilterPos] = useState("All");
+  const [filterTeam, setFilterTeam] = useState("");
+  const [filterRatingMin, setFilterRatingMin] = useState(0);
+  const [filterWarMin, setFilterWarMin] = useState(null);
 
   const playerLookup = useMemo(
     () => Object.fromEntries(allPlayers.map((player) => [player.player_id, player])),
@@ -1696,7 +1746,27 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
     return list.slice(0, 50);
   }, [allPlayers, selectedTeam]);
 
-  const visiblePlayers = browseMode === "search" ? searchResults : teamFilteredPlayers;
+  const filteredSearchResults = useMemo(() => {
+    let list = searchResults;
+    if (filterPos !== "All") {
+      list = list.filter(p => {
+        const pos = (p.position || "").toUpperCase();
+        if (filterPos === "G") return pos === "G";
+        if (filterPos === "D") return pos === "D";
+        if (filterPos === "LW") return pos === "L" || pos === "LW";
+        if (filterPos === "RW") return pos === "R" || pos === "RW";
+        if (filterPos === "C") return pos === "C";
+        if (filterPos === "F") return pos === "C" || pos === "L" || pos === "R" || pos === "LW" || pos === "RW";
+        return true;
+      });
+    }
+    if (filterTeam) list = list.filter(p => (p.team || "").toUpperCase() === filterTeam);
+    if (filterRatingMin > 0) list = list.filter(p => (p.overall_rating ?? 0) >= filterRatingMin);
+    if (filterWarMin != null) list = list.filter(p => (p.war_total ?? -99) >= filterWarMin);
+    return list;
+  }, [searchResults, filterPos, filterTeam, filterRatingMin, filterWarMin]);
+
+  const visiblePlayers = browseMode === "search" ? filteredSearchResults : teamFilteredPlayers;
 
   return (
     <>
@@ -1753,7 +1823,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
 
         {/* Search mode */}
         {browseMode === "search" && (
-          <div style={{ width:"100%", maxWidth:500, marginBottom:20 }}>
+          <div style={{ width:"100%", maxWidth:540, marginBottom:20 }}>
             <input
               type="text"
               placeholder="Search any player..."
@@ -1761,6 +1831,51 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
               onChange={e => { setSearch(e.target.value); setSelectedPlayer(null); }}
               style={{ width:"100%", padding:"14px 20px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:12, color:"#e8f4ff", fontSize:16, fontFamily:"'Barlow Condensed',sans-serif", outline:"none", letterSpacing:"0.03em" }}
             />
+            {/* Search filters */}
+            <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:8, padding:"12px 14px", background:"#080e17", border:"1px solid #1e2d40", borderRadius:10 }}>
+              {/* Position row */}
+              <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
+                <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginRight:4 }}>Pos</span>
+                {["All","C","LW","RW","D","G"].map(v => (
+                  <button key={v} onClick={() => setFilterPos(v)}
+                    style={{ padding:"4px 10px", background:filterPos===v?"#0080FF":"#0d1825", border:`1px solid ${filterPos===v?"#0080FF":"#1e2d40"}`, borderRadius:5, color:filterPos===v?"white":"#4a6a88", fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer" }}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+              {/* Team + Rating + WAR row */}
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+                <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)}
+                  style={{ padding:"4px 8px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:5, color:filterTeam?"#c8dff0":"#3a5a78", fontSize:11, fontFamily:"'DM Mono',monospace", cursor:"pointer", outline:"none" }}>
+                  <option value="">All Teams</option>
+                  {ALL_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                  <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>OVR≥</span>
+                  <input type="number" min={0} max={100} value={filterRatingMin}
+                    onChange={e => setFilterRatingMin(Number(e.target.value))}
+                    style={{ width:48, padding:"4px 6px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:5, color:"#c8dff0", fontSize:11, fontFamily:"'DM Mono',monospace", outline:"none" }} />
+                </div>
+                <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+                  <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>WAR</span>
+                  {[null, 0, 1, 2, 3].map(v => (
+                    <button key={v ?? "any"} onClick={() => setFilterWarMin(v)}
+                      style={{ padding:"4px 8px", background:filterWarMin===v?"#334466":"#0d1825", border:`1px solid ${filterWarMin===v?"#5577aa":"#1e2d40"}`, borderRadius:5, color:filterWarMin===v?"#c8dff0":"#4a6a88", fontSize:10, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer" }}>
+                      {v == null ? "Any" : `>${v}`}
+                    </button>
+                  ))}
+                </div>
+                {(filterPos !== "All" || filterTeam || filterRatingMin > 0 || filterWarMin != null) && (
+                  <button onClick={() => { setFilterPos("All"); setFilterTeam(""); setFilterRatingMin(0); setFilterWarMin(null); }}
+                    style={{ padding:"4px 10px", background:"#1a0a0a", border:"1px solid #e0505044", borderRadius:5, color:"#e05050", fontSize:10, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer" }}>
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div style={{ fontSize:10, color:"#2a4060", fontFamily:"'DM Mono',monospace" }}>
+                Showing {filteredSearchResults.length} of {searchResults.length} players
+              </div>
+            </div>
             <div style={{ marginTop: 10, background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 14, overflow: "hidden", boxShadow: "0 14px 34px rgba(0,0,0,0.26)" }}>
               {!searchLoading && (
                 <div style={{
