@@ -60,7 +60,7 @@ function PlayerPicker({ label, player, onSelect, accent = "#0080FF" }) {
       setLoading(true);
       const { data } = await supabase
         .from("players")
-        .select("player_id,full_name,team,position,jersey,headshot_url,overall_rating,war_total")
+        .select("player_id,full_name,team,position,jersey,headshot_url,overall_rating,off_rating,def_rating,rapm_off,rapm_def,war_total,war_ev_off,war_ev_def,war_pp,gp,g,a,pts,percentiles")
         .ilike("full_name", `%${query.trim()}%`)
         .neq("position", "G")
         .order("overall_rating", { ascending: false, nullsFirst: false })
@@ -336,11 +336,28 @@ export default function CompareClient() {
     if (!id || p1) return;
     supabase
       .from("players")
-      .select("*")
+      .select("player_id,full_name,team,position,jersey,headshot_url,overall_rating,off_rating,def_rating,rapm_off,rapm_def,war_total,war_ev_off,war_ev_def,war_pp,gp,g,a,pts,percentiles")
       .eq("player_id", id)
       .single()
       .then(({ data }) => { if (data) setP1(data); });
   }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch current-season stats (cf_pct, xgf_pct, hdcf_pct, ixg, icf) from player_seasons
+  // and merge into the player object — these columns live on player_seasons, not players.
+  useEffect(() => {
+    [[p1, setP1], [p2, setP2]].forEach(([player, setter]) => {
+      if (!player || player.cf_pct != null) return;
+      supabase
+        .from("player_seasons")
+        .select("cf_pct,xgf_pct,hdcf_pct,ixg,icf")
+        .eq("player_id", player.player_id)
+        .eq("season", "25-26")
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) setter(prev => prev ? { ...prev, ...data } : prev);
+        });
+    });
+  }, [p1?.player_id, p2?.player_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ready = p1 && p2;
 

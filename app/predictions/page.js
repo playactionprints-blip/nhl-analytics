@@ -557,27 +557,29 @@ export default async function PredictionsPage({ searchParams }) {
                             gap: 12,
                             justifyItems: teamRow.align === "right" ? "end" : "start",
                             textAlign: teamRow.align,
+                            minWidth: 0,
+                            overflow: "hidden",
                           }}
                         >
-                          <div style={{ display: "flex", alignItems: "center", gap: 12, flexDirection: teamRow.align === "right" ? "row-reverse" : "row" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, flexDirection: teamRow.align === "right" ? "row-reverse" : "row", minWidth: 0, overflow: "hidden" }}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={logoUrl(teamRow.abbr)}
                               alt={teamRow.abbr}
                               width={56}
                               height={56}
-                              style={{ width: 56, height: 56, objectFit: "contain" }}
+                              style={{ width: 56, height: 56, objectFit: "contain", flexShrink: 0 }}
                             />
-                            <div>
+                            <div style={{ minWidth: 0 }}>
                               <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900, lineHeight: 0.95 }}>{Math.round(teamRow.winPct * 100)}%</div>
-                              <div style={{ color: teamRow.meta.color, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4 }}>
+                              <div style={{ color: teamRow.meta.color, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {teamRow.side} win probability
                               </div>
                             </div>
                           </div>
-                          <div>
-                            <div style={{ color: "#ecf7ff", fontSize: 20, fontWeight: 900 }}>{teamRow.name}</div>
-                            <div style={{ color: "#7f9ab5", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
+                          <div style={{ minWidth: 0, overflow: "hidden" }}>
+                            <div style={{ color: "#ecf7ff", fontSize: 20, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{teamRow.name}</div>
+                            <div style={{ color: "#7f9ab5", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {teamRow.align === "right" ? "home" : "away"} split {teamRow.record}
                             </div>
                           </div>

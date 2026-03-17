@@ -46,7 +46,7 @@ export async function GET() {
 
     const { data: seasonRows, error: seasonError } = await supabase
       .from("player_seasons")
-      .select("player_id,team,position,war_total")
+      .select("player_id,team,war_total")
       .eq("season", CURRENT_SEASON)
       .order("war_total", { ascending: false, nullsFirst: false });
 
