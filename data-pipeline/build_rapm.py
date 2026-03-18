@@ -2,8 +2,9 @@
 """
 Build RAPM (Regularized Adjusted Plus-Minus) from NHL play-by-play.
 Uses hockey-scraper for 100% game coverage (old NHL shift API had ~37% coverage).
-Fetches 3 seasons and combines with season weights:
-  25-26 stints: ×1.0  |  24-25 stints: ×0.7  |  23-24 stints: ×0.5
+Fetches 8 seasons (18-19 → 25-26) and chains them as Bayesian priors.
+Card projection uses only the 3 most recent seasons (23-24/24-25/25-26).
+Older seasons strengthen the prior chain without inflating recent card stats.
 
 BEFORE RUNNING: add columns to the Supabase players table:
     alter table players add column if not exists rapm_off     float8;
@@ -57,34 +58,81 @@ os.makedirs(DATA_DIR, exist_ok=True)
 MCDAVID_ID   = 8478402
 DRAISAITL_ID = 8477934
 
-# Season configuration — newest first (25-26 resume priority preserved)
+# Season configuration — ordered oldest-first for the daisy chain.
+# 'weight' = stints weight in the regression matrix (older → lower weight).
+# CARD_SEASON_WEIGHTS below controls the 3-year card projection separately.
 SEASON_CONFIGS = {
-    '25-26': {
-        'start_date': date(2025, 10, 1),
-        'end_date':   date(2026, 4, 18),
-        'id_base':    2025000000,
-        'ids_file':   os.path.join(DATA_DIR, 'game_ids_2526.json'),
-        'stints_file':os.path.join(DATA_DIR, 'stints_2526.csv'),
-        'ckpt_file':  os.path.join(DATA_DIR, 'stints_checkpoint.csv'),
-        'weight':     1.0,
+    '18-19': {
+        'start_date': date(2018, 10, 1),
+        'end_date':   date(2019, 4, 11),
+        'id_base':    2018000000,
+        'ids_file':   os.path.join(DATA_DIR, 'game_ids_1819.json'),
+        'stints_file':os.path.join(DATA_DIR, 'stints_1819.csv'),
+        'ckpt_file':  os.path.join(DATA_DIR, 'stints_checkpoint_1819.csv'),
+        'weight':     0.30,
     },
-    '24-25': {
-        'start_date': date(2024, 10, 1),
-        'end_date':   date(2025, 4, 18),
-        'id_base':    2024000000,
-        'ids_file':   os.path.join(DATA_DIR, 'game_ids_2425.json'),
-        'stints_file':os.path.join(DATA_DIR, 'stints_2425.csv'),
-        'ckpt_file':  os.path.join(DATA_DIR, 'stints_checkpoint_2425.csv'),
-        'weight':     0.7,
+    '19-20': {
+        'start_date': date(2019, 10, 1),
+        'end_date':   date(2020, 3, 11),   # COVID cutoff — regular season only
+        'id_base':    2019000000,
+        'ids_file':   os.path.join(DATA_DIR, 'game_ids_1920.json'),
+        'stints_file':os.path.join(DATA_DIR, 'stints_1920.csv'),
+        'ckpt_file':  os.path.join(DATA_DIR, 'stints_checkpoint_1920.csv'),
+        'weight':     0.35,
+    },
+    '20-21': {
+        'start_date': date(2021, 1, 13),   # COVID shortened — 56 games
+        'end_date':   date(2021, 5, 19),
+        'id_base':    2020000000,
+        'ids_file':   os.path.join(DATA_DIR, 'game_ids_2021.json'),
+        'stints_file':os.path.join(DATA_DIR, 'stints_2021.csv'),
+        'ckpt_file':  os.path.join(DATA_DIR, 'stints_checkpoint_2021.csv'),
+        'weight':     0.35,
+    },
+    '21-22': {
+        'start_date': date(2021, 10, 12),
+        'end_date':   date(2022, 4, 29),
+        'id_base':    2021000000,
+        'ids_file':   os.path.join(DATA_DIR, 'game_ids_2122.json'),
+        'stints_file':os.path.join(DATA_DIR, 'stints_2122.csv'),
+        'ckpt_file':  os.path.join(DATA_DIR, 'stints_checkpoint_2122.csv'),
+        'weight':     0.45,
+    },
+    '22-23': {
+        'start_date': date(2022, 10, 7),
+        'end_date':   date(2023, 4, 13),
+        'id_base':    2022000000,
+        'ids_file':   os.path.join(DATA_DIR, 'game_ids_2223.json'),
+        'stints_file':os.path.join(DATA_DIR, 'stints_2223.csv'),
+        'ckpt_file':  os.path.join(DATA_DIR, 'stints_checkpoint_2223.csv'),
+        'weight':     0.55,
     },
     '23-24': {
-        'start_date': date(2023, 10, 1),
+        'start_date': date(2023, 10, 10),
         'end_date':   date(2024, 4, 18),
         'id_base':    2023000000,
         'ids_file':   os.path.join(DATA_DIR, 'game_ids_2324.json'),
         'stints_file':os.path.join(DATA_DIR, 'stints_2324.csv'),
         'ckpt_file':  os.path.join(DATA_DIR, 'stints_checkpoint_2324.csv'),
-        'weight':     0.5,
+        'weight':     0.70,
+    },
+    '24-25': {
+        'start_date': date(2024, 10, 8),
+        'end_date':   date(2025, 4, 17),
+        'id_base':    2024000000,
+        'ids_file':   os.path.join(DATA_DIR, 'game_ids_2425.json'),
+        'stints_file':os.path.join(DATA_DIR, 'stints_2425.csv'),
+        'ckpt_file':  os.path.join(DATA_DIR, 'stints_checkpoint_2425.csv'),
+        'weight':     0.85,
+    },
+    '25-26': {
+        'start_date': date(2025, 10, 7),
+        'end_date':   date(2026, 4, 17),
+        'id_base':    2025000000,
+        'ids_file':   os.path.join(DATA_DIR, 'game_ids_2526.json'),
+        'stints_file':os.path.join(DATA_DIR, 'stints_2526.csv'),
+        'ckpt_file':  os.path.join(DATA_DIR, 'stints_checkpoint.csv'),
+        'weight':     1.00,
     },
 }
 
@@ -558,11 +606,17 @@ def _compute_toi_from_stints(stints_df):
 
 def run_prior_informed_rapm(stints_by_season, player_seasons_df):
     """
-    Daisy chain RAPM: 23-24 → 24-25 → 25-26.
-    Each season's output becomes the prior for the next.
+    Daisy chain RAPM across all available seasons (oldest first).
+    Each season's output becomes the prior for the next, propagating
+    player identity information forward through time.
     Returns dict: {season: raw_results_df} with rapm_off/rapm_def columns.
+    Card projection uses only the 3 most recent seasons via CARD_SEASON_WEIGHTS.
     """
-    seasons_in_order = ['23-24', '24-25', '25-26']
+    # Sort chronologically by season start year
+    seasons_in_order = sorted(
+        stints_by_season.keys(),
+        key=lambda s: int(s.split('-')[0])
+    )
     previous_rapm = {}   # {player_id: {'off': float, 'def': float}}
     all_season_results = {}
 
@@ -1418,6 +1472,8 @@ def print_leaderboards(results_df):
         'Leon Draisaitl':    name_to_pid.get('Leon Draisaitl',    DRAISAITL_ID),
         'Nathan MacKinnon':  name_to_pid.get('Nathan MacKinnon',  0),
         'Nikita Kucherov':   name_to_pid.get('Nikita Kucherov',   0),
+        'Sidney Crosby':     name_to_pid.get('Sidney Crosby',     0),
+        'Alex Ovechkin':     name_to_pid.get('Alex Ovechkin',     0),
         'Matthew Knies':     name_to_pid.get('Matthew Knies',     0),
         'William Nylander':  name_to_pid.get('William Nylander',  0),
         'Brandon Hagel':     name_to_pid.get('Brandon Hagel',     0),
@@ -1565,14 +1621,107 @@ def check_and_maybe_upload(results_df):
         return False
 
 
+# ── Comparison helpers ────────────────────────────────────────────────────────
+def fetch_old_rapm():
+    """
+    Fetch current rapm_off_pct / rapm_def_pct from Supabase before running
+    the new 8-season pipeline.  Returns dict keyed by full_name.
+    """
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return {}
+    try:
+        sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+        rows = sb.table('players').select(
+            'player_id,full_name,rapm_off,rapm_off_pct,rapm_def,rapm_def_pct'
+        ).execute().data
+        return {r['full_name']: r for r in rows if r.get('rapm_off_pct') is not None}
+    except Exception as e:
+        print(f"  Warning: could not fetch old RAPM for comparison: {e}")
+        return {}
+
+
+def print_comparison_table(new_results_df, old_rapm_lookup):
+    """
+    Print old (3-season) vs new (8-season) RAPM percentiles for key players.
+    Runs before the quality gate so the user can review before any upload.
+    """
+    COMPARE_PLAYERS = [
+        'Connor McDavid', 'Nathan MacKinnon', 'Nikita Kucherov',
+        'Leon Draisaitl', 'Sidney Crosby', 'Alex Ovechkin',
+        'Matthew Knies', 'William Nylander',
+        'John Hayden', 'Darren Raddysh',   # one-season wonders to watch
+    ]
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return
+    try:
+        sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+        name_map = {r['full_name']: r['player_id'] for r in
+                    sb.table('players').select('player_id,full_name').execute().data}
+    except Exception as e:
+        print(f"  Comparison table: name lookup failed ({e})")
+        return
+
+    print("\n" + "=" * 75)
+    print("COMPARISON: 3-SEASON RAPM  →  8-SEASON RAPM (daisy chain)")
+    print("=" * 75)
+    hdr = (f"  {'Player':<22} {'Old off%':>8} {'Old def%':>8} "
+           f"{'New off%':>8} {'New def%':>8} {'Δ off':>6} {'Δ def':>6}")
+    sep = "  " + "-" * 73
+    print(hdr)
+    print(sep)
+
+    for name in COMPARE_PLAYERS:
+        pid = name_map.get(name)
+        if not pid:
+            print(f"  {name:<22}  (not in DB)")
+            continue
+
+        old = old_rapm_lookup.get(name, {})
+        new_row = new_results_df[new_results_df['player_id'] == pid]
+
+        old_off = old.get('rapm_off_pct')
+        old_def = old.get('rapm_def_pct')
+        new_off = float(new_row['rapm_off_pct'].values[0]) if len(new_row) else None
+        new_def = float(new_row['rapm_def_pct'].values[0]) if len(new_row) else None
+
+        def _f(v):
+            return f"{v:>8.1f}" if v is not None else f"{'—':>8}"
+
+        def _d(a, b):
+            if a is None or b is None:
+                return f"{'—':>6}"
+            return f"{b - a:>+6.1f}"
+
+        print(f"  {name:<22} {_f(old_off)} {_f(old_def)} "
+              f"{_f(new_off)} {_f(new_def)} {_d(old_off, new_off)} {_d(old_def, new_def)}")
+
+    print(sep)
+    print("  Δ = new − old.  Positive = improved rank in new model.")
+    print()
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     print("=" * 60)
-    print(f"RAPM Pipeline — 3-season build  [TEST_MODE={TEST_MODE}]")
+    print(f"RAPM Pipeline — 8-season daisy chain  [TEST_MODE={TEST_MODE}]")
+    print("  Seasons: 18-19 → 25-26  (card uses 23-24/24-25/25-26 only)")
     print("  Tip: delete a season's game_ids_XXXX.json to refresh its IDs.")
     print("=" * 60)
 
-    # Steps 1+2: fetch game IDs and stints for all 3 seasons
+    # Report which stints files already exist vs need scraping
+    print("\nStints file inventory:")
+    for skey, scfg in SEASON_CONFIGS.items():
+        exists = os.path.exists(scfg['stints_file'])
+        ckpt   = os.path.exists(scfg['ckpt_file'])
+        status = "✓ cached" if exists else ("⚡ checkpoint" if ckpt else "✗ need scrape")
+        print(f"  {skey}: {status}  ({os.path.basename(scfg['stints_file'])})")
+
+    # Fetch current (3-season) RAPM from Supabase before any changes
+    print("\nFetching old (3-season) RAPM from Supabase for comparison...")
+    old_rapm_lookup = fetch_old_rapm()
+    print(f"  Saved {len(old_rapm_lookup)} player RAPM values for comparison")
+
+    # Steps 1+2: fetch game IDs and stints for all seasons
     season_dfs = {}
     for season_key, season_cfg in SEASON_CONFIGS.items():
         print(f"\n{'='*60}")
@@ -1601,9 +1750,9 @@ if __name__ == '__main__':
     print(f"{'='*60}")
     player_seasons_df = fetch_player_seasons_for_priors()
 
-    # Step 3: prior-informed RAPM with daisy chain 23-24 → 24-25 → 25-26
+    # Step 3: prior-informed RAPM with daisy chain 18-19 → … → 25-26
     print(f"\n{'='*60}")
-    print("Step 3 — Prior-informed RAPM (daisy chain 23-24 → 24-25 → 25-26)")
+    print("Step 3 — Prior-informed RAPM (daisy chain 18-19 → 25-26)")
     print(f"{'='*60}")
     raw_season_results = run_prior_informed_rapm(season_dfs, player_seasons_df)
 
@@ -1636,6 +1785,10 @@ if __name__ == '__main__':
     if projected.empty:
         print("✗ No projected RAPM rows were produced")
         sys.exit(1)
+
+    # Print comparison before quality gate so results can be reviewed first
+    print_comparison_table(projected, old_rapm_lookup)
+
     check_and_maybe_upload(projected)
 
     print("\n✓ Done. Run compute_ratings.py, then compute_percentiles.py to refresh cards.")
