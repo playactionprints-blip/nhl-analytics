@@ -6,7 +6,8 @@ import { createClient } from "@supabase/supabase-js";
 import { GoalieCard } from "./GoalieCard";
 import { useRecentPlayers } from "@/useRecentPlayers";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip,
-         AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
+         AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid,
+         BarChart, Bar, Cell } from "recharts";
 
 // ── Team metadata ────────────────────────────────────────────────────────────
 const TEAM_COLOR = {
@@ -861,6 +862,8 @@ function GoalieContent({ player, accent }) {
 // ── Main Player Card ─────────────────────────────────────────────────────────
 function PlayerCard({ player }) {
   const [tab, setTab] = useState("overview");
+  const [careerStats, setCareerStats] = useState(null);
+  const [careerLoading, setCareerLoading] = useState(false);
   const [onIceSections, setOnIceSections] = useState({
     offensive: true,
     defensive: true,
@@ -885,8 +888,22 @@ function PlayerCard({ player }) {
   const pts = player.pts ?? 0;
   const gp = player.gp ?? 0;
   const ptsPer82 = gp > 0 ? Math.round((pts / gp) * 82) : 0;
-  const tabs = isGoalie ? ["goalie stats"] : ["overview", "percentile card", "on-ice", "war / rapm", "ratings"];
+  const tabs = isGoalie ? ["goalie stats"] : ["overview", "percentile card", "on-ice", "war / rapm", "ratings", "career"];
   const cardWidth = !isGoalie && tab === "percentile card" ? 1080 : 420;
+
+  // Fetch career stats on demand when the Career tab is first opened
+  useEffect(() => {
+    if (tab !== "career" || careerStats !== null || careerLoading) return;
+    setCareerLoading(true);
+    clientSupabase
+      .from("career_stats")
+      .select("season,team,gp,g,a,pts,toi_total,ixg,pts_per_82")
+      .eq("player_id", player.player_id)
+      .order("season", { ascending: true })
+      .then(({ data }) => { setCareerStats(data || []); setCareerLoading(false); })
+      .catch(() => { setCareerStats([]); setCareerLoading(false); });
+  }, [tab, player.player_id]);
+
   const toggleOnIceSection = (key) => {
     setOnIceSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -1271,6 +1288,86 @@ function PlayerCard({ player }) {
                 <span key={src} style={{ fontSize:9, padding:"3px 8px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:20, color:"#3a5a78", fontFamily:"'DM Mono',monospace" }}>{src}</span>
               ))}
             </div>
+          </div>
+        )}
+
+        {!isGoalie && tab === "career" && (
+          <div>
+            {careerLoading && (
+              <div style={{ textAlign:"center", color:"#3a5a78", padding:"48px 0", fontFamily:"'DM Mono',monospace", fontSize:12 }}>
+                Loading career stats…
+              </div>
+            )}
+            {!careerLoading && careerStats !== null && careerStats.length === 0 && (
+              <div style={{ textAlign:"center", color:"#3a5a78", padding:"48px 0", fontFamily:"'DM Mono',monospace", fontSize:12 }}>
+                No career data available.
+              </div>
+            )}
+            {!careerLoading && careerStats && careerStats.length > 0 && (() => {
+              const totalGP  = careerStats.reduce((s, r) => s + (r.gp  ?? 0), 0);
+              const totalG   = careerStats.reduce((s, r) => s + (r.g   ?? 0), 0);
+              const totalA   = careerStats.reduce((s, r) => s + (r.a   ?? 0), 0);
+              const totalPts = careerStats.reduce((s, r) => s + (r.pts ?? 0), 0);
+              return (
+                <>
+                  {/* Career totals */}
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:16 }}>
+                    {[["GP",totalGP],["G",totalG],["A",totalA],["Pts",totalPts]].map(([label, val]) => (
+                      <div key={label} style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"10px 0", textAlign:"center" }}>
+                        <div style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
+                        <div style={{ fontSize:22, fontWeight:700, color:"#e8f4ff", fontFamily:"'Barlow Condensed',sans-serif" }}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Pts/82 bar chart */}
+                  <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px", marginBottom:16 }}>
+                    <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:10 }}>Points / 82 Games by Season</div>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <BarChart data={careerStats} margin={{ top:4, right:4, left:-20, bottom:0 }}>
+                        <CartesianGrid stroke="#1a2535" strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="season" tick={{ fontSize:8, fill:"#5a7a99", fontFamily:"DM Mono,monospace" }} interval="preserveStartEnd" />
+                        <YAxis tick={{ fontSize:8, fill:"#5a7a99", fontFamily:"DM Mono,monospace" }} />
+                        <Tooltip
+                          contentStyle={{ background:"#0a1520", border:"1px solid #1e2d40", borderRadius:6, fontSize:11, fontFamily:"DM Mono,monospace" }}
+                          formatter={(value, _name, props) => [`${value} (${props.payload.team})`, "Pts/82"]}
+                          labelStyle={{ color:"#8899aa" }}
+                        />
+                        <Bar dataKey="pts_per_82" radius={[3,3,0,0]}>
+                          {careerStats.map((entry, idx) => (
+                            <Cell key={idx} fill={TEAM_COLOR[entry.team] || accent} fillOpacity={0.85} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Season-by-season table */}
+                  <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, overflow:"hidden" }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"58px 42px 32px 32px 32px 42px" }}>
+                      {["Season","Team","GP","G","A","Pts"].map(h => (
+                        <div key={h} style={{ padding:"6px 8px", fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", borderBottom:"1px solid #1e2d40" }}>{h}</div>
+                      ))}
+                      {careerStats.map((row, i) => {
+                        const tc = TEAM_COLOR[row.team] || "#4a6a88";
+                        const bg = i % 2 === 0 ? "#0a1218" : "transparent";
+                        const cellStyle = { padding:"5px 8px", fontSize:10, fontFamily:"'DM Mono',monospace", borderBottom:"1px solid #0f1a25", background:bg };
+                        return (
+                          <div key={i} style={{ display:"contents" }}>
+                            <div style={{ ...cellStyle, color:"#8899aa" }}>{row.season}</div>
+                            <div style={{ ...cellStyle, color:tc, fontWeight:700 }}>{row.team}</div>
+                            <div style={{ ...cellStyle, color:"#e8f4ff", textAlign:"right" }}>{row.gp ?? "—"}</div>
+                            <div style={{ ...cellStyle, color:"#e8f4ff", textAlign:"right" }}>{row.g ?? "—"}</div>
+                            <div style={{ ...cellStyle, color:"#e8f4ff", textAlign:"right" }}>{row.a ?? "—"}</div>
+                            <div style={{ ...cellStyle, color:accent, fontWeight:700, textAlign:"right" }}>{row.pts ?? "—"}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 
