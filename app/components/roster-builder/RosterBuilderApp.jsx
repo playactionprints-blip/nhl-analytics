@@ -345,6 +345,10 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
   const [slotErrors, setSlotErrors] = useState({});
   const [modalPlayer, setModalPlayer] = useState(null);
   const [rosterState, setRosterState] = useState(() => decodeRosterState(initialRosterParam));
+  const [loadTeamCode, setLoadTeamCode] = useState("ANA");
+  const [loadingRoster, setLoadingRoster] = useState(false);
+  const [rosterToast, setRosterToast] = useState("");
+  const autoLoadFiredRef = useRef(false);
 
   useEffect(() => {
     setPoolExpanded(!isMobile);
@@ -387,6 +391,74 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
       : `/roster-builder?roster=${encodeURIComponent(encoded)}`;
     router.replace(href, { scroll: false });
   }, [rosterState, router]);
+
+  async function loadTeamRoster(teamCode) {
+    setLoadingRoster(true);
+    try {
+      const teamPlayers = players.filter((p) => p.team === teamCode);
+
+      const forwards = teamPlayers
+        .filter((p) => ["C", "L", "LW", "R", "RW", "F"].includes(String(p.position).toUpperCase()))
+        .sort((a, b) => (b.overallRating ?? 0) - (a.overallRating ?? 0));
+
+      const defense = teamPlayers
+        .filter((p) => String(p.position).toUpperCase() === "D")
+        .sort((a, b) => (b.overallRating ?? 0) - (a.overallRating ?? 0));
+
+      const goalies = teamPlayers
+        .filter((p) => String(p.position).toUpperCase() === "G")
+        .sort((a, b) => (b.overallRating ?? 0) - (a.overallRating ?? 0));
+
+      let newRoster = createDefaultRosterState();
+
+      let fIdx = 0;
+      for (const lineKey of FORWARD_LINES) {
+        for (const slotKey of FORWARD_POSITIONS) {
+          if (forwards[fIdx]) {
+            newRoster = setSlotValue(newRoster, lineKey, slotKey, forwards[fIdx].id);
+            fIdx++;
+          }
+        }
+      }
+
+      let dIdx = 0;
+      for (const pairKey of DEFENSE_PAIRS) {
+        for (const slotKey of DEFENSE_POSITIONS) {
+          if (defense[dIdx]) {
+            newRoster = setSlotValue(newRoster, pairKey, slotKey, defense[dIdx].id);
+            dIdx++;
+          }
+        }
+      }
+
+      GOALIE_SLOTS.forEach((lineKey, i) => {
+        if (goalies[i]) {
+          newRoster = setSlotValue(newRoster, lineKey, GOALIE_POSITION, goalies[i].id);
+        }
+      });
+
+      setRosterState(newRoster);
+      setTeamFilter(teamCode);
+      setRosterToast(`Loaded ${TEAM_FULL[teamCode] ?? teamCode} roster`);
+      setTimeout(() => setRosterToast(""), 2000);
+    } catch (err) {
+      console.error("Failed to load team roster:", err);
+    } finally {
+      setLoadingRoster(false);
+    }
+  }
+
+  useEffect(() => {
+    if (
+      !autoLoadFiredRef.current &&
+      !initialRosterParam &&
+      isRosterEmpty(rosterState) &&
+      players.length > 0
+    ) {
+      autoLoadFiredRef.current = true;
+      loadTeamRoster("ANA");
+    }
+  }, [players.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const playerMap = useMemo(
     () => Object.fromEntries(players.map((player) => [String(player.id), player])),
@@ -615,6 +687,56 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
                     marginBottom: 10,
                   }}
                 />
+
+                {/* Load Team Roster */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, color: "#5e7b98", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
+                    Load Team Roster
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <select
+                      value={loadTeamCode}
+                      onChange={(e) => setLoadTeamCode(e.target.value)}
+                      style={{
+                        flex: 1,
+                        background: "#0d1926",
+                        border: "1px solid #1e3048",
+                        color: "#eff8ff",
+                        borderRadius: 10,
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        fontFamily: "'DM Mono',monospace",
+                        minWidth: 0,
+                      }}
+                    >
+                      {Object.entries(TEAM_FULL)
+                        .sort(([, a], [, b]) => a.localeCompare(b))
+                        .map(([code, name]) => (
+                          <option key={code} value={code}>{name}</option>
+                        ))}
+                    </select>
+                    <button
+                      onClick={() => loadTeamRoster(loadTeamCode)}
+                      disabled={loadingRoster}
+                      style={{
+                        background: "#1a2d42",
+                        border: "1px solid #2fb4ff",
+                        color: "#9fd8ff",
+                        borderRadius: 10,
+                        padding: "6px 14px",
+                        fontSize: 12,
+                        fontFamily: "'DM Mono',monospace",
+                        cursor: loadingRoster ? "default" : "pointer",
+                        whiteSpace: "nowrap",
+                        opacity: loadingRoster ? 0.7 : 1,
+                      }}
+                      onMouseEnter={(e) => { if (!loadingRoster) e.currentTarget.style.background = "#213650"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "#1a2d42"; }}
+                    >
+                      {loadingRoster ? "Loading..." : "Load Roster"}
+                    </button>
+                  </div>
+                </div>
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                   {POSITION_FILTERS.map((filter) => (
@@ -924,6 +1046,30 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
         onAssign={handleAssignFromModal}
         onClose={() => setModalPlayer(null)}
       />
+
+      {rosterToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#0f2235",
+            border: "1px solid #2fb4ff",
+            color: "#9fd8ff",
+            padding: "10px 20px",
+            borderRadius: 999,
+            fontSize: 13,
+            fontFamily: "'DM Mono',monospace",
+            zIndex: 9999,
+            pointerEvents: "none",
+            whiteSpace: "nowrap",
+            boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
+          }}
+        >
+          {rosterToast}
+        </div>
+      )}
     </div>
   );
 }
