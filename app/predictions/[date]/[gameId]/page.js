@@ -13,8 +13,10 @@ import {
   predictionHref,
   signedOdds,
 } from "@/app/lib/predictionsData";
+import { createServerClient } from "@/app/lib/supabase";
+import BoxscorePanel from "./BoxscorePanel";
 
-export const revalidate = 1800;
+export const revalidate = 60;
 
 const CONFIDENCE_TOOLTIP =
   "Confidence is based on available team data quality, recency of goaltender info, and home/away sample size. LOW = less reliable inputs.";
@@ -196,9 +198,72 @@ function renderLeaderList(title, players, color, valueKey) {
   );
 }
 
+function ordinalPeriod(n) {
+  if (!n) return "";
+  if (n === 4) return "OT";
+  if (n > 4) return `${n - 3}OT`;
+  return ["1st", "2nd", "3rd"][n - 1] ?? `${n}th`;
+}
+
+function periodLabel(desc) {
+  if (!desc) return "Period";
+  if (desc.periodType === "OT") return "Overtime";
+  if (desc.periodType === "SO") return "Shootout";
+  const n = desc.number;
+  return ["1st Period", "2nd Period", "3rd Period"][n - 1] ?? `Period ${n}`;
+}
+
+function statRow(label, awayValue, homeValue, awayColor, homeColor, format = "int") {
+  const fmt = (v) => format === "pct" ? v.toFixed(1) + "%" : Math.round(v).toString();
+  const awayWins = awayValue > homeValue;
+  const homeWins = homeValue > awayValue;
+  const maxValue = Math.max(awayValue, homeValue, 1);
+  return (
+    <div key={label} style={{ display: "grid", gridTemplateColumns: "60px minmax(0, 1fr) 120px minmax(0, 1fr) 60px", gap: 12, alignItems: "center" }}>
+      <div style={{ color: awayWins ? awayColor : "#9ab2c8", fontWeight: 900, fontSize: 20 }}>{fmt(awayValue)}</div>
+      <div style={{ height: 10, borderRadius: 999, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+        <div style={{ width: `${(awayValue / maxValue) * 100}%`, height: "100%", background: `linear-gradient(90deg, ${hexToRgba(awayColor, 0.42)} 0%, ${awayColor} 100%)` }} />
+      </div>
+      <div style={{ color: "#6d8aa6", fontSize: 11, fontFamily: "'DM Mono',monospace", textAlign: "center", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
+      <div style={{ height: 10, borderRadius: 999, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+        <div style={{ marginLeft: "auto", width: `${(homeValue / maxValue) * 100}%`, height: "100%", background: `linear-gradient(90deg, ${hexToRgba(homeColor, 0.42)} 0%, ${homeColor} 100%)` }} />
+      </div>
+      <div style={{ color: homeWins ? homeColor : "#9ab2c8", fontWeight: 900, fontSize: 20, textAlign: "right" }}>{fmt(homeValue)}</div>
+    </div>
+  );
+}
+
+async function fetchGameLanding(gameId) {
+  try {
+    const res = await fetch(`https://api-web.nhle.com/v1/gamecenter/${gameId}/landing`, {
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function fetchGameBoxscore(gameId) {
+  try {
+    const res = await fetch(`https://api-web.nhle.com/v1/gamecenter/${gameId}/boxscore`, {
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export default async function GamePredictionDetailPage({ params }) {
   const { date, gameId } = await params;
-  const { predictions } = await buildPredictionsForDate(date);
+  const [{ predictions }, landingData, boxscoreData] = await Promise.all([
+    buildPredictionsForDate(date),
+    fetchGameLanding(gameId),
+    fetchGameBoxscore(gameId),
+  ]);
   const matchup = predictions.find((item) => item.game.id === gameId);
 
   if (!matchup) notFound();
@@ -222,6 +287,36 @@ export default async function GamePredictionDetailPage({ params }) {
   const homeColor = TEAM_COLOR[game.homeTeam.abbr] || "#4d82af";
   const favoriteIsHome = prediction.homeWinPct >= prediction.awayWinPct;
   const confidence = confidenceMeta(prediction.modelDiagnostics.confidenceBand);
+
+  const gameState = landingData?.gameState ?? "FUT";
+  const isLiveOrFinal = ["LIVE", "CRIT", "FINAL", "OFF"].includes(gameState);
+  const pbgs = boxscoreData?.playerByGameStats ?? landingData?.playerByGameStats;
+  let warMap = {};
+  if (isLiveOrFinal && pbgs) {
+    const allPlayers = [
+      ...(pbgs.homeTeam?.forwards || []),
+      ...(pbgs.homeTeam?.defense || []),
+      ...(pbgs.homeTeam?.goalies || []),
+      ...(pbgs.awayTeam?.forwards || []),
+      ...(pbgs.awayTeam?.defense || []),
+      ...(pbgs.awayTeam?.goalies || []),
+    ];
+    const ids = [...new Set(allPlayers.map((p) => String(p.playerId)).filter(Boolean))];
+    if (ids.length) {
+      try {
+        const supabase = createServerClient();
+        const { data } = await supabase
+          .from("players")
+          .select("player_id, war_total, overall_rating")
+          .in("player_id", ids);
+        if (data) {
+          for (const row of data) {
+            warMap[String(row.player_id)] = { war_total: row.war_total, overall_rating: row.overall_rating };
+          }
+        }
+      } catch { /* non-fatal */ }
+    }
+  }
 
   const comparisonRows = [
     ["Offense", awayRatings.offenseRating, homeRatings.offenseRating],
@@ -314,6 +409,200 @@ export default async function GamePredictionDetailPage({ params }) {
             {formatHeadlineDate(date)} · {formatStartTime(game.startTimeUTC)}
           </div>
         </div>
+
+        {/* ── Section A: Live / Final score banner ─────────────────────────── */}
+        {isLiveOrFinal && landingData && (
+          <>
+            <SectionDivider label={gameState === "LIVE" || gameState === "CRIT" ? "Live game" : "Final score"} />
+            <section
+              style={{
+                border: "1px solid #18304a",
+                borderRadius: 24,
+                background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.18)} 0%, #060d16 40%, #060d16 60%, ${hexToRgba(homeColor, 0.18)} 100%)`,
+                padding: "24px 28px",
+                display: "grid",
+                gridTemplateColumns: "1fr auto 1fr",
+                gap: 16,
+                alignItems: "center",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={logoUrl(game.awayTeam.abbr)} alt={game.awayTeam.abbr} width={56} height={56} style={{ width: 56, height: 56, objectFit: "contain" }} />
+                <div style={{ color: awayColor, fontSize: 54, fontWeight: 900, lineHeight: 1 }}>
+                  {landingData.awayTeam?.score ?? "—"}
+                </div>
+                <div style={{ color: "#c8e4f8", fontSize: 13, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  {game.awayTeam.abbr} · Away
+                </div>
+              </div>
+              <div style={{ textAlign: "center", display: "grid", gap: 8, justifyItems: "center" }}>
+                <div
+                  style={{
+                    color: gameState === "LIVE" || gameState === "CRIT" ? "#35e3a0" : "#8db9dc",
+                    fontSize: 11,
+                    fontFamily: "'DM Mono',monospace",
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                    background: gameState === "LIVE" || gameState === "CRIT" ? "rgba(53,227,160,0.14)" : "rgba(47,180,255,0.14)",
+                    padding: "4px 12px",
+                    borderRadius: 999,
+                  }}
+                >
+                  {gameState === "LIVE" || gameState === "CRIT"
+                    ? `${ordinalPeriod(landingData.periodDescriptor?.number)} · ${landingData.clock?.timeRemaining ?? ""}`
+                    : "Final"}
+                </div>
+                <div style={{ color: "#3a5a78", fontSize: 18, fontFamily: "'DM Mono',monospace" }}>vs</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={logoUrl(game.homeTeam.abbr)} alt={game.homeTeam.abbr} width={56} height={56} style={{ width: 56, height: 56, objectFit: "contain" }} />
+                <div style={{ color: homeColor, fontSize: 54, fontWeight: 900, lineHeight: 1 }}>
+                  {landingData.homeTeam?.score ?? "—"}
+                </div>
+                <div style={{ color: "#c8e4f8", fontSize: 13, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  {game.homeTeam.abbr} · Home
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* ── Section B: Scoring summary ───────────────────────────────────── */}
+        {isLiveOrFinal && (landingData?.summary?.scoring ?? []).some((p) => (p.goals?.length ?? 0) > 0) && (
+          <>
+            <SectionDivider label="Scoring summary" />
+            <section style={{ display: "grid", gap: 10 }}>
+              {landingData.summary.scoring.map((period) =>
+                (period.goals?.length ?? 0) > 0 ? (
+                  <div
+                    key={period.periodDescriptor?.number ?? period.period}
+                    style={{ borderRadius: 20, border: "1px solid #17283b", background: "#091017", padding: "16px 20px", display: "grid", gap: 12 }}
+                  >
+                    <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
+                      {periodLabel(period.periodDescriptor)}
+                    </div>
+                    {period.goals.map((goal, gi) => {
+                      const teamColor = TEAM_COLOR[goal.teamAbbrev?.default] || "#4d82af";
+                      const assists = goal.assists || [];
+                      return (
+                        <div key={gi} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                          <div style={{ color: "#5a7a96", fontSize: 11, fontFamily: "'DM Mono',monospace", minWidth: 36, paddingTop: 3 }}>
+                            {goal.timeInPeriod}
+                          </div>
+                          <div style={{ width: 3, borderRadius: 2, background: teamColor, alignSelf: "stretch", minHeight: 28 }} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                              <span style={{ color: teamColor, fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>
+                                {goal.teamAbbrev?.default}
+                              </span>
+                              <span style={{ color: "#eff8ff", fontWeight: 800, fontSize: 15 }}>
+                                {goal.name?.default}
+                              </span>
+                              {goal.goalNumber != null && (
+                                <span style={{ color: "#5a7a96", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
+                                  ({goal.goalNumber})
+                                </span>
+                              )}
+                              {goal.strength && goal.strength !== "EV" && (
+                                <span
+                                  style={{
+                                    padding: "2px 7px",
+                                    borderRadius: 999,
+                                    background: goal.strength === "PP" ? "rgba(240,192,64,0.14)" : "rgba(53,227,160,0.14)",
+                                    color: goal.strength === "PP" ? "#f0c040" : "#35e3a0",
+                                    fontSize: 10,
+                                    fontFamily: "'DM Mono',monospace",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {goal.strength}
+                                </span>
+                              )}
+                            </div>
+                            {assists.length > 0 && (
+                              <div style={{ color: "#637d96", fontSize: 12, marginTop: 2 }}>
+                                Assists: {assists.map((a) => a.name?.default).filter(Boolean).join(", ")}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null
+              )}
+            </section>
+          </>
+        )}
+
+        {/* ── Section C: Team game stats ───────────────────────────────────── */}
+        {isLiveOrFinal && (boxscoreData?.teamGameStats?.length ?? 0) > 0 && (
+          <>
+            <SectionDivider label="Game stats" />
+            <section
+              style={{
+                border: "1px solid #17283b",
+                borderRadius: 24,
+                background: "#091017",
+                padding: "20px 24px",
+                display: "grid",
+                gap: 14,
+              }}
+            >
+              {(() => {
+                const tgs = boxscoreData.teamGameStats;
+                const sm = Object.fromEntries(tgs.map((s) => [s.category, { away: s.awayValue, home: s.homeValue }]));
+                const num = (v) => (typeof v === "number" ? v : Number(v) || 0);
+                const rows = [];
+                if (sm.sog) rows.push(["Shots", num(sm.sog.away), num(sm.sog.home), "int"]);
+                if (sm.hits) rows.push(["Hits", num(sm.hits.away), num(sm.hits.home), "int"]);
+                if (sm.blocked) rows.push(["Blocked", num(sm.blocked.away), num(sm.blocked.home), "int"]);
+                if (sm.giveaways) rows.push(["Giveaways", num(sm.giveaways.away), num(sm.giveaways.home), "int"]);
+                if (sm.takeaways) rows.push(["Takeaways", num(sm.takeaways.away), num(sm.takeaways.home), "int"]);
+                if (sm.faceoffWinningPctg) {
+                  const awayFo = num(sm.faceoffWinningPctg.away) * 100;
+                  const homeFo = num(sm.faceoffWinningPctg.home) * 100;
+                  if (awayFo > 0 || homeFo > 0) rows.push(["Faceoff %", awayFo, homeFo, "pct"]);
+                }
+                const pp = tgs.find((s) => s.category === "powerPlayConversions");
+                return (
+                  <>
+                    {rows.map(([label, av, hv, fmt]) => statRow(label, av, hv, awayColor, homeColor, fmt))}
+                    {pp && (
+                      <div style={{ display: "grid", gridTemplateColumns: "60px minmax(0,1fr) 120px minmax(0,1fr) 60px", gap: 12, alignItems: "center" }}>
+                        <div style={{ color: awayColor, fontWeight: 900, fontSize: 18 }}>{pp.awayValue}</div>
+                        <div />
+                        <div style={{ color: "#6d8aa6", fontSize: 11, fontFamily: "'DM Mono',monospace", textAlign: "center", letterSpacing: "0.08em", textTransform: "uppercase" }}>Power play</div>
+                        <div />
+                        <div style={{ color: homeColor, fontWeight: 900, fontSize: 18, textAlign: "right" }}>{pp.homeValue}</div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </section>
+          </>
+        )}
+
+        {/* ── Section D: Player boxscore ───────────────────────────────────── */}
+        {isLiveOrFinal && pbgs && (
+          <>
+            <SectionDivider label="Player boxscore" />
+            <BoxscorePanel
+              homeAbbr={game.homeTeam.abbr}
+              awayAbbr={game.awayTeam.abbr}
+              homeColor={homeColor}
+              awayColor={awayColor}
+              playerByGameStats={pbgs}
+              warMap={warMap}
+            />
+          </>
+        )}
+
+        {isLiveOrFinal && <SectionDivider label="Pre-game prediction" />}
 
         <section
           style={{
