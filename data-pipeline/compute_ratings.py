@@ -76,34 +76,31 @@ except Exception as e:
     print("    alter table players add column if not exists rapm_off float8;")
     print("    alter table players add column if not exists rapm_def float8;")
 
-# Fetch finishing_pct, toi_pp, and penalty totals
+# Fetch toi_pp and penalty totals (finishing_pct now computed from player_seasons below)
 extra_lookup = {}
 try:
     extra_rows = sb.table('players').select(
-        'player_id,finishing_pct,toi_pp,penalties_drawn,penalties_taken,penalty_minutes_drawn,penalty_minutes_taken'
+        'player_id,toi_pp,penalties_drawn,penalties_taken,penalty_minutes_drawn,penalty_minutes_taken'
     ).execute().data
     for r in extra_rows:
-        fp  = r.get('finishing_pct')
         tpp = r.get('toi_pp')
         pens_drawn = r.get('penalties_drawn')
         pens_taken = r.get('penalties_taken')
         pmd = r.get('penalty_minutes_drawn')
         pmt = r.get('penalty_minutes_taken')
-        if fp is not None or tpp is not None or pens_drawn is not None or pens_taken is not None or pmd is not None or pmt is not None:
+        if tpp is not None or pens_drawn is not None or pens_taken is not None or pmd is not None or pmt is not None:
             extra_lookup[r['player_id']] = {
-                'finishing_pct': fp,
                 'toi_pp': tpp,
                 'penalties_drawn': pens_drawn,
                 'penalties_taken': pens_taken,
                 'penalty_minutes_drawn': pmd,
                 'penalty_minutes_taken': pmt,
             }
-    fp_count  = sum(1 for v in extra_lookup.values() if v.get('finishing_pct') is not None)
     tpp_count = sum(1 for v in extra_lookup.values() if v.get('toi_pp') is not None)
     pen_count = sum(1 for v in extra_lookup.values() if v.get('penalty_minutes_drawn') is not None or v.get('penalty_minutes_taken') is not None)
-    print(f"  {fp_count} players with finishing_pct, {tpp_count} with toi_pp, {pen_count} with penalty totals")
+    print(f"  {tpp_count} with toi_pp, {pen_count} with penalty totals")
 except Exception as e:
-    print(f"  Could not fetch finishing_pct/toi_pp/penalties ({e}) — run upload_nst_splits.py and upload_penalties.py first")
+    print(f"  Could not fetch toi_pp/penalties ({e}) — run upload_nst_splits.py and upload_penalties.py first")
 
 
 def safe(v):
@@ -244,7 +241,13 @@ for pid, season_data in seasons_by_player.items():
         'cf_pct':        round(cf_n   / cf_d,   4) if cf_d   > 0 else None,
         'cf_pct_pk':     round(cf_pk_n / cf_pk_d, 4) if cf_pk_d > 0 else None,
         'fo_pct':        fo_pct,
-        'finishing_pct': safe(extra.get('finishing_pct')),
+        # finishing_pct: 3-year weighted goals/ixG ratio.
+        # Uses the same w_g and w_ixg accumulators as everything else.
+        # Threshold = 10.0 on the weighted ixG sum — equivalent to requiring ~10 ixG/season
+        # for a 3-year player, or ~20 ixG in a single current season.
+        # This filters out small-sample outliers (rookies, callups, D-men with lucky streaks)
+        # that would otherwise dominate the finishing leaderboard over established forwards.
+        'finishing_pct': round(w_g / w_ixg, 4) if w_ixg >= 10.0 else None,
         'toi_pp':        safe(extra.get('toi_pp')),
         'war_toi_5v5':   round(w_toi_5v5, 4),
         'war_toi_pp':    round(w_toi_pp, 4),
@@ -355,6 +358,24 @@ def compute_group(subdf, is_defense):
 forwards = compute_group(df[df['position'] != 'D'], is_defense=False)
 defense  = compute_group(df[df['position'] == 'D'], is_defense=True)
 final    = pd.concat([forwards, defense])
+
+# ── Finishing validation ───────────────────────────────────────────────────────
+print("\n--- TOP 10 FINISHERS (3yr weighted goals/ixG) ---")
+_fin = final[final['finishing_pct'].notna()].copy()
+_fin_top = _fin.nlargest(10, 'finishing_pct')
+print(f"  {'Player':<26} {'Pos':>3} {'G/ixG ratio':>12} {'Finishing%':>11}")
+print(f"  {'-'*26} {'-'*3} {'-'*12} {'-'*11}")
+for _, r in _fin_top.iterrows():
+    fp_pct = r.get('op_finishing_pct')
+    fp_pct_s = f"{fp_pct:.1f}" if fp_pct is not None and not pd.isna(fp_pct) else "—"
+    print(f"  {r['full_name']:<26} {r['position']:>3} {r['finishing_pct']:>12.4f} {fp_pct_s:>11}")
+
+_mc = final[final['full_name'] == 'Connor McDavid']
+if not _mc.empty:
+    r = _mc.iloc[0]
+    fp_pct = r.get('op_finishing_pct')
+    print(f"\n  McDavid finishing: ratio={r['finishing_pct']:.4f}  pct={fp_pct:.1f}  "
+          f"(target: 70–85th pct per JFresh)")
 
 # PP deployment bonus — max +3 points to overall_rating based on toi_pp rank
 # across ALL skaters (reflects coach trust in offensive deployment)
