@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/teams", label: "Teams" },
   { href: "/compare", label: "Compare" },
   { href: "/predictions", label: "Predictions" },
+  { href: "/playoff-odds", label: "Playoff Odds" },
   { href: "/roster-builder", label: "Roster Builder" },
   { href: "/lottery", label: "NHL Lottery" },
 ];
