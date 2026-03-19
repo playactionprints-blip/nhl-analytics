@@ -449,6 +449,7 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
   }
 
   useEffect(() => {
+    console.log("Auto-load check:", { fired: autoLoadFiredRef.current, hasParam: Boolean(initialRosterParam), empty: isRosterEmpty(rosterState), playersLen: players.length });
     if (
       !autoLoadFiredRef.current &&
       !initialRosterParam &&
@@ -456,6 +457,7 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
       players.length > 0
     ) {
       autoLoadFiredRef.current = true;
+      console.log("Auto-loading ANA roster", players.length);
       loadTeamRoster("ANA");
     }
   }, [players.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -643,7 +645,7 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
               borderRadius: 22,
               padding: 16,
               position: isMobile ? "static" : "sticky",
-              top: isMobile ? "auto" : 72,
+              top: isMobile ? "auto" : 108,
             }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -669,6 +671,56 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
               )}
             </div>
 
+            {/* Load Team Roster */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10, color: "#5e7b98", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
+                Load Team Roster
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <select
+                  value={loadTeamCode}
+                  onChange={(e) => setLoadTeamCode(e.target.value)}
+                  style={{
+                    flex: 1,
+                    background: "#0d1926",
+                    border: "1px solid #1e3048",
+                    color: "#eff8ff",
+                    borderRadius: 10,
+                    padding: "6px 10px",
+                    fontSize: 12,
+                    fontFamily: "'DM Mono',monospace",
+                    minWidth: 0,
+                  }}
+                >
+                  {Object.entries(TEAM_FULL)
+                    .sort(([, a], [, b]) => a.localeCompare(b))
+                    .map(([code, name]) => (
+                      <option key={code} value={code}>{name}</option>
+                    ))}
+                </select>
+                <button
+                  onClick={() => loadTeamRoster(loadTeamCode)}
+                  disabled={loadingRoster}
+                  style={{
+                    background: "#1a2d42",
+                    border: "1px solid #2fb4ff",
+                    color: "#9fd8ff",
+                    borderRadius: 10,
+                    padding: "6px 14px",
+                    fontSize: 12,
+                    fontFamily: "'DM Mono',monospace",
+                    cursor: loadingRoster ? "default" : "pointer",
+                    whiteSpace: "nowrap",
+                    opacity: loadingRoster ? 0.7 : 1,
+                  }}
+                  onMouseEnter={(e) => { if (!loadingRoster) e.currentTarget.style.background = "#213650"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "#1a2d42"; }}
+                >
+                  {loadingRoster ? "Loading..." : "Load Roster"}
+                </button>
+              </div>
+            </div>
+
             {(!isMobile || poolExpanded) && (
               <>
                 <input
@@ -687,56 +739,6 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
                     marginBottom: 10,
                   }}
                 />
-
-                {/* Load Team Roster */}
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 10, color: "#5e7b98", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
-                    Load Team Roster
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <select
-                      value={loadTeamCode}
-                      onChange={(e) => setLoadTeamCode(e.target.value)}
-                      style={{
-                        flex: 1,
-                        background: "#0d1926",
-                        border: "1px solid #1e3048",
-                        color: "#eff8ff",
-                        borderRadius: 10,
-                        padding: "6px 10px",
-                        fontSize: 12,
-                        fontFamily: "'DM Mono',monospace",
-                        minWidth: 0,
-                      }}
-                    >
-                      {Object.entries(TEAM_FULL)
-                        .sort(([, a], [, b]) => a.localeCompare(b))
-                        .map(([code, name]) => (
-                          <option key={code} value={code}>{name}</option>
-                        ))}
-                    </select>
-                    <button
-                      onClick={() => loadTeamRoster(loadTeamCode)}
-                      disabled={loadingRoster}
-                      style={{
-                        background: "#1a2d42",
-                        border: "1px solid #2fb4ff",
-                        color: "#9fd8ff",
-                        borderRadius: 10,
-                        padding: "6px 14px",
-                        fontSize: 12,
-                        fontFamily: "'DM Mono',monospace",
-                        cursor: loadingRoster ? "default" : "pointer",
-                        whiteSpace: "nowrap",
-                        opacity: loadingRoster ? 0.7 : 1,
-                      }}
-                      onMouseEnter={(e) => { if (!loadingRoster) e.currentTarget.style.background = "#213650"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = "#1a2d42"; }}
-                    >
-                      {loadingRoster ? "Loading..." : "Load Roster"}
-                    </button>
-                  </div>
-                </div>
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                   {POSITION_FILTERS.map((filter) => (
