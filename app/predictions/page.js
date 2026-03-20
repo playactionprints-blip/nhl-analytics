@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_noStore as noStore } from "next/cache";
 import { BreadcrumbSetter } from "@/Breadcrumbs";
 import { TEAM_COLOR, logoUrl } from "@/app/lib/nhlTeams";
 import {
@@ -20,7 +21,7 @@ import {
   updatePredictionResults,
 } from "@/app/lib/predictionsData";
 
-export const revalidate = 1800;
+export const revalidate = 3600; // future dates; past dates opt out below; today gets ~3600
 
 export const metadata = {
   title: "NHL Predictions — NHL Analytics",
@@ -170,6 +171,12 @@ export default async function PredictionsPage({ searchParams }) {
   const selectedDateString = isValidDateString(resolvedSearchParams?.date)
     ? resolvedSearchParams.date
     : todayString;
+  // Past dates: always fetch fresh — games are final and results should never be stale.
+  // Future/today: fall through to the module-level ISR revalidate (3600s).
+  if (selectedDateString < todayString) {
+    noStore();
+  }
+
   const selectedDateParts = parseDateString(selectedDateString);
   const previousDate = formatDateString(shiftDateParts(selectedDateParts, -1));
   const nextDate = formatDateString(shiftDateParts(selectedDateParts, 1));
