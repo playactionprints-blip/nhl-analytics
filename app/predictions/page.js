@@ -472,26 +472,53 @@ export default async function PredictionsPage({ searchParams }) {
               </div>
 
               <div className="slate-scroll">
-                {predictions.map(({ game, prediction }) => {
+                {predictions.map(({ game, prediction, isCompleted, homeScore, awayScore }) => {
                   const homeColor = TEAM_COLOR[game.homeTeam.abbr] || "#1f5b85";
                   const awayColor = TEAM_COLOR[game.awayTeam.abbr] || "#1f5b85";
+                  const cardStyle = {
+                    textDecoration: "none",
+                    borderRadius: 18,
+                    border: "1px solid #1a2d40",
+                    background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.18)} 0%, rgba(9,16,23,0.96) 36%, rgba(9,16,23,0.96) 64%, ${hexToRgba(homeColor, 0.18)} 100%)`,
+                    padding: 14,
+                    display: "grid",
+                    gap: 10,
+                    minHeight: 148,
+                    transition: "transform 0.16s ease, border-color 0.16s ease",
+                  };
+
+                  if (isCompleted || !prediction) {
+                    const homeWon = homeScore != null && awayScore != null && homeScore > awayScore;
+                    return (
+                      <Link key={`overview-${game.id}`} href={predictionHref(selectedDateString, game.id)} style={cardStyle}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                          <div style={{ display: "inline-flex", padding: "2px 8px", borderRadius: 999, background: "rgba(255,255,255,0.05)", border: "1px solid #2a3d50", color: "#6d8a9f", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                            Final
+                          </div>
+                          <div style={{ color: "#4a6a88", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>
+                            {formatStartTime(game.startTimeUTC)}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={logoUrl(game.awayTeam.abbr)} alt={game.awayTeam.abbr} width={28} height={28} style={{ width: 28, height: 28, objectFit: "contain" }} />
+                          <div style={{ fontSize: 28, fontWeight: 900, color: homeWon ? "#4a6a88" : "#eff8ff" }}>{awayScore ?? "—"}</div>
+                          <div style={{ color: "#2e4a65", fontSize: 18, fontFamily: "'DM Mono',monospace" }}>–</div>
+                          <div style={{ fontSize: 28, fontWeight: 900, color: !homeWon ? "#4a6a88" : "#eff8ff" }}>{homeScore ?? "—"}</div>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={logoUrl(game.homeTeam.abbr)} alt={game.homeTeam.abbr} width={28} height={28} style={{ width: 28, height: 28, objectFit: "contain" }} />
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <div style={{ color: homeWon ? "#4a6a88" : awayColor, fontSize: 11, fontFamily: "'DM Mono',monospace", fontWeight: 700 }}>{game.awayTeam.abbr}</div>
+                          <div style={{ color: !homeWon ? "#4a6a88" : homeColor, fontSize: 11, fontFamily: "'DM Mono',monospace", fontWeight: 700 }}>{game.homeTeam.abbr}</div>
+                        </div>
+                      </Link>
+                    );
+                  }
+
                   const favoriteIsHome = prediction.homeWinPct >= prediction.awayWinPct;
                   return (
-                    <Link
-                      key={`overview-${game.id}`}
-                      href={predictionHref(selectedDateString, game.id)}
-                      style={{
-                        textDecoration: "none",
-                        borderRadius: 18,
-                        border: "1px solid #1a2d40",
-                        background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.18)} 0%, rgba(9,16,23,0.96) 36%, rgba(9,16,23,0.96) 64%, ${hexToRgba(homeColor, 0.18)} 100%)`,
-                        padding: 14,
-                        display: "grid",
-                        gap: 10,
-                        minHeight: 148,
-                        transition: "transform 0.16s ease, border-color 0.16s ease",
-                      }}
-                    >
+                    <Link key={`overview-${game.id}`} href={predictionHref(selectedDateString, game.id)} style={cardStyle}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                         <div style={{ color: "#7bcfff", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                           {formatStartTime(game.startTimeUTC)}
@@ -501,16 +528,8 @@ export default async function PredictionsPage({ searchParams }) {
                         </div>
                       </div>
                       {[
-                        {
-                          abbr: game.awayTeam.abbr,
-                          team: game.awayTeam.name,
-                          pct: prediction.awayWinPct,
-                        },
-                        {
-                          abbr: game.homeTeam.abbr,
-                          team: game.homeTeam.name,
-                          pct: prediction.homeWinPct,
-                        },
+                        { abbr: game.awayTeam.abbr, pct: prediction.awayWinPct },
+                        { abbr: game.homeTeam.abbr, pct: prediction.homeWinPct },
                       ].map((row) => (
                         <div key={`${game.id}-${row.abbr}`} style={{ display: "grid", gridTemplateColumns: "28px minmax(0, 1fr) auto", gap: 10, alignItems: "center" }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -520,17 +539,7 @@ export default async function PredictionsPage({ searchParams }) {
                               {row.abbr}
                             </div>
                           </div>
-                          <div
-                            style={{
-                              padding: "5px 8px",
-                              borderRadius: 10,
-                              background: row.pct >= 0.5 ? "rgba(83, 177, 255, 0.2)" : "rgba(255, 111, 123, 0.18)",
-                              color: row.pct >= 0.5 ? "#9dd8ff" : "#ff9aa4",
-                              fontWeight: 900,
-                              fontSize: 18,
-                              lineHeight: 1,
-                            }}
-                          >
+                          <div style={{ padding: "5px 8px", borderRadius: 10, background: row.pct >= 0.5 ? "rgba(83, 177, 255, 0.2)" : "rgba(255, 111, 123, 0.18)", color: row.pct >= 0.5 ? "#9dd8ff" : "#ff9aa4", fontWeight: 900, fontSize: 18, lineHeight: 1 }}>
                             {Math.round(row.pct * 100)}%
                           </div>
                         </div>
@@ -542,7 +551,59 @@ export default async function PredictionsPage({ searchParams }) {
             </section>
 
             <div className="predictions-grid">
-            {predictions.map(({ game, prediction, homeTeam, awayTeam, projectedHomeGoalie, projectedAwayGoalie, homeKeyPlayers, awayKeyPlayers }) => {
+            {predictions.map(({ game, prediction, homeTeam, awayTeam, projectedHomeGoalie, projectedAwayGoalie, homeKeyPlayers, awayKeyPlayers, isCompleted, homeScore, awayScore }) => {
+              const homeColor = TEAM_COLOR[game.homeTeam.abbr] || "#1f5b85";
+              const awayColor = TEAM_COLOR[game.awayTeam.abbr] || "#1f5b85";
+
+              // ── Completed game card ──────────────────────────────────────────
+              if (isCompleted || !prediction) {
+                const homeWon = homeScore != null && awayScore != null && homeScore > awayScore;
+                return (
+                  <Link
+                    key={game.id}
+                    className="prediction-card"
+                    href={predictionHref(selectedDateString, game.id)}
+                    style={{ display: "block", textDecoration: "none", border: "1px solid #17283b", borderRadius: 24, background: "#091017", overflow: "hidden", transition: "transform 0.18s ease, box-shadow 0.18s ease" }}
+                  >
+                    <div style={{ padding: 18, borderBottom: "1px solid #132131", background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.22)} 0%, rgba(9,16,23,0.94) 38%, rgba(9,16,23,0.94) 62%, ${hexToRgba(homeColor, 0.22)} 100%)` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 20 }}>
+                        <div style={{ display: "inline-flex", padding: "3px 10px", borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid #2a3d50", color: "#8db9dc", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>
+                          Final
+                        </div>
+                        <div style={{ fontSize: 11, color: "#4a6a88", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em" }}>
+                          {formatStartTime(game.startTimeUTC)}
+                        </div>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 16, alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={logoUrl(game.awayTeam.abbr)} alt={game.awayTeam.abbr} width={48} height={48} style={{ width: 48, height: 48, objectFit: "contain" }} />
+                          <div>
+                            <div style={{ color: "#eff8ff", fontSize: 13, fontWeight: 800 }}>{game.awayTeam.abbr}</div>
+                            <div style={{ color: homeWon ? "#4a6a88" : "#eff8ff", fontSize: 42, fontWeight: 900, lineHeight: 1 }}>{awayScore ?? "—"}</div>
+                          </div>
+                        </div>
+                        <div style={{ color: "#2e4a65", fontSize: 24, fontFamily: "'DM Mono',monospace" }}>—</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, flexDirection: "row-reverse" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={logoUrl(game.homeTeam.abbr)} alt={game.homeTeam.abbr} width={48} height={48} style={{ width: 48, height: 48, objectFit: "contain" }} />
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ color: "#eff8ff", fontSize: 13, fontWeight: 800 }}>{game.homeTeam.abbr}</div>
+                            <div style={{ color: !homeWon ? "#4a6a88" : "#eff8ff", fontSize: 42, fontWeight: 900, lineHeight: 1 }}>{homeScore ?? "—"}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ padding: "14px 18px" }}>
+                      <div style={{ color: "#3a5a78", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em" }}>
+                        View game stats →
+                      </div>
+                    </div>
+                  </Link>
+                );
+              }
+
+              // ── Active / upcoming prediction card ────────────────────────────
               const homeMeta = confidenceMeta(
                 prediction.homeWinPct >= prediction.awayWinPct
                   ? prediction.modelDiagnostics.confidenceBand
@@ -553,8 +614,6 @@ export default async function PredictionsPage({ searchParams }) {
                   ? prediction.modelDiagnostics.confidenceBand
                   : "low"
               );
-              const homeColor = TEAM_COLOR[game.homeTeam.abbr] || "#1f5b85";
-              const awayColor = TEAM_COLOR[game.awayTeam.abbr] || "#1f5b85";
               const winGap = Math.abs(prediction.homeWinPct - prediction.awayWinPct);
               const tieColor = confidenceMeta(
                 prediction.regulationTiePct > 0.24 ? "high" : prediction.regulationTiePct > 0.2 ? "medium" : "low"

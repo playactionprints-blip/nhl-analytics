@@ -714,13 +714,40 @@ export async function buildPredictionsForDate(dateString) {
       })
   );
 
+  // Build a score map from raw data so completed game cards can show final scores.
+  const scoresMap = {};
+  for (const raw of (todayGamesRaw || [])) {
+    const id = String(raw.id ?? raw.gameId ?? "");
+    if (id) scoresMap[id] = { homeScore: raw.homeTeam?.score ?? null, awayScore: raw.awayTeam?.score ?? null };
+  }
+
   const normalizedGames = (todayGamesRaw || [])
     .map((game) => normalizeScheduleGame(game, TEAM_FULL))
     .filter(Boolean)
-    .filter((game) => dateStringFromUtcInToronto(game.startTimeUTC) === dateString)
-    .filter((game) => !["FINAL", "OFF"].includes(game.gameState));
+    .filter((game) => dateStringFromUtcInToronto(game.startTimeUTC) === dateString);
 
-  const predictions = normalizedGames
+  const completedGames = normalizedGames.filter((g) => ["FINAL", "OFF"].includes(g.gameState));
+  const activeGames = normalizedGames.filter((g) => !["FINAL", "OFF"].includes(g.gameState));
+
+  const completedPredictions = completedGames.map((game) => ({
+    game,
+    homeScore: scoresMap[game.id]?.homeScore ?? null,
+    awayScore: scoresMap[game.id]?.awayScore ?? null,
+    prediction: null,
+    context: null,
+    homeTeam: null,
+    awayTeam: null,
+    homeRatings: null,
+    awayRatings: null,
+    homeLeaders: { topSkaters: [], topOffense: [], topDefense: [] },
+    awayLeaders: { topSkaters: [], topOffense: [], topDefense: [] },
+    projectedHomeGoalie: { starterName: "—", savePct: null, gsax: null, confidence: "low", notes: [], projectionLabel: "goalie" },
+    projectedAwayGoalie: { starterName: "—", savePct: null, gsax: null, confidence: "low", notes: [], projectionLabel: "goalie" },
+    market: null,
+    isCompleted: true,
+  }));
+
+  const activeGamePredictions = activeGames
     .map((game) => {
       const homeTeam = buildTeamSeasonStatsFromLiveData(
         game.homeTeam.abbr,
@@ -849,11 +876,14 @@ export async function buildPredictionsForDate(dateString) {
           : null,
       };
     })
-    .filter(Boolean)
+    .filter(Boolean);
+
+  const predictions = [...completedPredictions, ...activeGamePredictions]
     .sort((a, b) => new Date(a.game.startTimeUTC).getTime() - new Date(b.game.startTimeUTC).getTime());
 
   const todayString = formatDateString(getTorontoDateParts());
-  await upsertPredictionsLog(dateString, predictions, supabase);
+  // Only log active-game predictions — completed games have null model output.
+  await upsertPredictionsLog(dateString, activeGamePredictions, supabase);
   if (dateString < todayString) {
     await updatePredictionResultsForDate(dateString, supabase);
   }
