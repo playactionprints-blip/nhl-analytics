@@ -16,19 +16,6 @@ function toiToSec(toi) {
   return (m || 0) * 60 + (s || 0);
 }
 
-function warColor(v) {
-  if (v == null) return "#5a7a96";
-  return v > 0 ? "#35e3a0" : v < 0 ? "#ff8d9b" : "#8db9dc";
-}
-
-function ovrColor(v) {
-  if (v == null) return "#5a7a96";
-  if (v >= 80) return "#35e3a0";
-  if (v >= 60) return "#2fb4ff";
-  if (v >= 40) return "#f0c040";
-  return "#ff8d9b";
-}
-
 const HD = {
   color: "#3d5a75",
   fontSize: 10,
@@ -45,10 +32,10 @@ const VL = {
   textAlign: "right",
 };
 
-const SKATER_COLS = "minmax(130px,1fr) 44px 36px 24px 24px 30px 28px 28px 28px 44px 36px";
+const SKATER_COLS = "minmax(130px,1fr) 44px 36px 24px 24px 30px 28px 28px 28px 36px 40px 36px";
 const GOALIE_COLS = "minmax(130px,1fr) 50px 36px 36px 56px 36px";
 
-function SkaterGrid({ players, abbr, color, warMap }) {
+function SkaterGrid({ players, abbr, color, playerXGMap }) {
   const sorted = [...players].sort((a, b) => toiToSec(b.toi) - toiToSec(a.toi));
   return (
     <div>
@@ -65,15 +52,20 @@ function SkaterGrid({ players, abbr, color, warMap }) {
         <div style={HD}>SOG</div>
         <div style={HD}>HIT</div>
         <div style={HD}>BLK</div>
-        <div style={{ ...HD, color }}>WAR</div>
-        <div style={{ ...HD, color }}>OVR</div>
+        <div style={{ ...HD, color }}>xG</div>
+        <div style={{ ...HD, color }}>xG/60</div>
+        <div style={HD}>SH%</div>
         <div style={{ gridColumn: "1 / -1", height: 1, background: "#141f2d" }} />
         {sorted.map((p) => {
           const pid = String(p.playerId);
-          const wData = warMap[pid];
-          const war = wData?.war_total ?? null;
-          const ovr = wData?.overall_rating ?? null;
           const pm = p.plusMinus ?? 0;
+          const shots = p.shots ?? 0;
+          const goals = p.goals ?? 0;
+          const toiSec = toiToSec(p.toi);
+          const xgEntry = playerXGMap?.[pid];
+          const xg = xgEntry?.xg ?? null;
+          const xgPer60 = xg != null && toiSec > 0 ? (xg / toiSec) * 3600 : null;
+          const shPct = shots > 0 ? ((goals / shots) * 100).toFixed(1) + "%" : "—";
           return (
             <Fragment key={pid}>
               <div style={{ color: "#ddeeff", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -86,20 +78,21 @@ function SkaterGrid({ players, abbr, color, warMap }) {
               </div>
               <div style={{ ...VL, color: "#5a7a96" }}>{p.toi ?? "—"}</div>
               <div style={{ ...VL, color: "#eff8ff", fontWeight: 800 }}>{p.points ?? 0}</div>
-              <div style={VL}>{p.goals ?? 0}</div>
+              <div style={VL}>{goals}</div>
               <div style={VL}>{p.assists ?? 0}</div>
               <div style={{ ...VL, color: pm > 0 ? "#35e3a0" : pm < 0 ? "#ff8d9b" : "#8db9dc" }}>
                 {pm > 0 ? "+" : ""}{pm}
               </div>
-              <div style={VL}>{p.shots ?? 0}</div>
+              <div style={VL}>{shots}</div>
               <div style={VL}>{p.hits ?? 0}</div>
               <div style={VL}>{p.blockedShots ?? 0}</div>
-              <div style={{ ...VL, color: warColor(war) }}>
-                {war != null ? (war > 0 ? "+" : "") + war.toFixed(1) : "—"}
+              <div style={{ ...VL, color: "#9fd8ff" }}>
+                {xg != null ? xg.toFixed(2) : "—"}
               </div>
-              <div style={{ ...VL, color: ovrColor(ovr) }}>
-                {ovr != null ? Math.round(ovr) : "—"}
+              <div style={{ ...VL, color: "#9fd8ff" }}>
+                {xgPer60 != null ? xgPer60.toFixed(2) : "—"}
               </div>
+              <div style={VL}>{shPct}</div>
             </Fragment>
           );
         })}
@@ -150,7 +143,7 @@ function GoalieGrid({ goalies, abbr, color }) {
   );
 }
 
-export default function BoxscorePanel({ homeAbbr, awayAbbr, homeColor, awayColor, playerByGameStats, warMap }) {
+export default function BoxscorePanel({ homeAbbr, awayAbbr, homeColor, awayColor, playerByGameStats, playerXGMap = {} }) {
   const [tab, setTab] = useState("forwards");
   const away = playerByGameStats?.awayTeam;
   const home = playerByGameStats?.homeTeam;
@@ -195,7 +188,7 @@ export default function BoxscorePanel({ homeAbbr, awayAbbr, homeColor, awayColor
                 players={tab === "forwards" ? (away.forwards || []) : (away.defense || [])}
                 abbr={awayAbbr}
                 color={awayColor}
-                warMap={warMap}
+                playerXGMap={playerXGMap}
               />
             </div>
           )}
@@ -205,7 +198,7 @@ export default function BoxscorePanel({ homeAbbr, awayAbbr, homeColor, awayColor
                 players={tab === "forwards" ? (home.forwards || []) : (home.defense || [])}
                 abbr={homeAbbr}
                 color={homeColor}
-                warMap={warMap}
+                playerXGMap={playerXGMap}
               />
             </div>
           )}

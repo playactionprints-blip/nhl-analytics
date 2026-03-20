@@ -866,3 +866,8 @@ export async function buildPredictionsForDate(dateString) {
     players: safePlayers,
   };
 }
+
+export async function updatePredictionResults(dateString) {
+  const supabase = createServerClient();
+  return updatePredictionResultsForDate(dateString, supabase);
+}

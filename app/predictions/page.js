@@ -17,6 +17,7 @@ import {
   predictionHref,
   signedOdds,
   shiftDateParts,
+  updatePredictionResults,
 } from "@/app/lib/predictionsData";
 
 export const revalidate = 1800;
@@ -172,18 +173,23 @@ export default async function PredictionsPage({ searchParams }) {
   const selectedDateParts = parseDateString(selectedDateString);
   const previousDate = formatDateString(shiftDateParts(selectedDateParts, -1));
   const nextDate = formatDateString(shiftDateParts(selectedDateParts, 1));
-  const quickDates = Array.from({ length: 7 }, (_, index) => {
-    const dateString = formatDateString(shiftDateParts(today, index));
-    return {
-      dateString,
-      label: formatQuickDateLabel(dateString, todayString),
-      active: dateString === selectedDateString,
-    };
-  });
+  const yesterdayDateString = formatDateString(shiftDateParts(today, -1));
+  const quickDates = [
+    { dateString: yesterdayDateString, label: "Yesterday", active: yesterdayDateString === selectedDateString },
+    ...Array.from({ length: 7 }, (_, index) => {
+      const dateString = formatDateString(shiftDateParts(today, index));
+      return {
+        dateString,
+        label: formatQuickDateLabel(dateString, todayString),
+        active: dateString === selectedDateString,
+      };
+    }),
+  ];
   const [{ predictions }, accuracy] = await Promise.all([
     buildPredictionsForDate(selectedDateString),
     fetchPredictionAccuracy(),
   ]);
+  updatePredictionResults(yesterdayDateString).catch(() => null);
   console.log("[PredictionsPage] accuracy data:", accuracy ? `${accuracy.overall?.total} games tracked` : "null — table may not exist or no completed games yet");
 
   return (

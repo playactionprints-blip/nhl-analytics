@@ -15,6 +15,7 @@ import {
 } from "@/app/lib/predictionsData";
 import { createServerClient } from "@/app/lib/supabase";
 import BoxscorePanel from "./BoxscorePanel";
+import GameStatsPanel from "./GameStatsPanel";
 
 export const revalidate = 60;
 
@@ -587,7 +588,24 @@ export default async function GamePredictionDetailPage({ params }) {
           </>
         )}
 
-        {/* ── Section D: Player boxscore ───────────────────────────────────── */}
+        {/* ── Section D: Game analytics ─────────────────────────────────────── */}
+        {isLiveOrFinal && (
+          <>
+            <SectionDivider label="Game analytics" />
+            <GameStatsPanel
+              gameId={gameId}
+              homeTeamId={landingData?.homeTeam?.id}
+              awayTeamId={landingData?.awayTeam?.id}
+              homeAbbr={game.homeTeam.abbr}
+              awayAbbr={game.awayTeam.abbr}
+              homeColor={homeColor}
+              awayColor={awayColor}
+              gameState={gameState}
+            />
+          </>
+        )}
+
+        {/* ── Section E: Player boxscore ───────────────────────────────────── */}
         {isLiveOrFinal && pbgs && (
           <>
             <SectionDivider label="Player boxscore" />
@@ -597,7 +615,7 @@ export default async function GamePredictionDetailPage({ params }) {
               homeColor={homeColor}
               awayColor={awayColor}
               playerByGameStats={pbgs}
-              warMap={warMap}
+              playerXGMap={{}}
             />
           </>
         )}
