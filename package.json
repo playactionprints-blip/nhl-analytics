@@ -18,10 +18,10 @@
     "recharts": "^3.8.0"
   },
   "devDependencies": {
-    "@types/node": "^24.6.1",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
     "@tailwindcss/postcss": "^4",
+    "@types/node": "^24.6.1",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "^19.2.2",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",

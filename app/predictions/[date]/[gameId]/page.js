@@ -269,25 +269,22 @@ export default async function GamePredictionDetailPage({ params }) {
 
   if (!matchup) notFound();
 
-  const {
-    game,
-    prediction,
-    context,
-    homeTeam,
-    awayTeam,
-    homeRatings,
-    awayRatings,
-    homeLeaders,
-    awayLeaders,
-    projectedHomeGoalie,
-    projectedAwayGoalie,
-    market,
-  } = matchup;
+  const hasPrediction = matchup.prediction != null;
+  const prediction = matchup.prediction ?? null;
+  const context = matchup.context ?? null;
+  const homeRatings = matchup.homeRatings ?? null;
+  const awayRatings = matchup.awayRatings ?? null;
+  const homeLeaders = matchup.homeLeaders ?? { topSkaters: [], topOffense: [], topDefense: [] };
+  const awayLeaders = matchup.awayLeaders ?? { topSkaters: [], topOffense: [], topDefense: [] };
+  const projectedHomeGoalie = matchup.projectedHomeGoalie ?? { starterName: "—", savePct: null, gsax: null, confidence: "low", notes: [], projectionLabel: "goalie" };
+  const projectedAwayGoalie = matchup.projectedAwayGoalie ?? { starterName: "—", savePct: null, gsax: null, confidence: "low", notes: [], projectionLabel: "goalie" };
+  const market = matchup.market ?? null;
+  const { game, homeTeam, awayTeam } = matchup;
 
   const awayColor = TEAM_COLOR[game.awayTeam.abbr] || "#4d82af";
   const homeColor = TEAM_COLOR[game.homeTeam.abbr] || "#4d82af";
-  const favoriteIsHome = prediction.homeWinPct >= prediction.awayWinPct;
-  const confidence = confidenceMeta(prediction.modelDiagnostics.confidenceBand);
+  const favoriteIsHome = hasPrediction ? prediction.homeWinPct >= prediction.awayWinPct : null;
+  const confidence = hasPrediction ? confidenceMeta(prediction.modelDiagnostics.confidenceBand) : null;
 
   const gameState = landingData?.gameState ?? "FUT";
   const isLiveOrFinal = ["LIVE", "CRIT", "FINAL", "OFF"].includes(gameState);
@@ -319,16 +316,16 @@ export default async function GamePredictionDetailPage({ params }) {
     }
   }
 
-  const comparisonRows = [
+  const comparisonRows = hasPrediction && homeRatings && awayRatings ? [
     ["Offense", awayRatings.offenseRating, homeRatings.offenseRating],
     ["Defense", awayRatings.defenseRating, homeRatings.defenseRating],
     ["Finishing", awayRatings.finishingRating, homeRatings.finishingRating],
     ["Goalies", awayRatings.goaltendingRating, homeRatings.goaltendingRating],
     ["Special teams", awayRatings.specialTeamsRating, homeRatings.specialTeamsRating],
     ["Form", awayRatings.formRating, homeRatings.formRating],
-  ];
+  ] : [];
 
-  const teamContextCards = [
+  const teamContextCards = hasPrediction && context ? [
     {
       team: game.awayTeam.abbr,
       color: awayColor,
@@ -357,7 +354,7 @@ export default async function GamePredictionDetailPage({ params }) {
       goalieGsax: formatGoalieValue(projectedHomeGoalie.gsax, 2),
       goalieProjectionLabel: projectedHomeGoalie.projectionLabel,
     },
-  ];
+  ] : [];
 
   return (
     <div
@@ -622,6 +619,14 @@ export default async function GamePredictionDetailPage({ params }) {
 
         {isLiveOrFinal && <SectionDivider label="Pre-game prediction" />}
 
+        {!hasPrediction && isLiveOrFinal && (
+          <div style={{ color: "#5e7b98", fontSize: 13, fontFamily: "'DM Mono',monospace", padding: "12px 0", textAlign: "center" }}>
+            Pre-game prediction data not available for this game.
+          </div>
+        )}
+
+        {hasPrediction && (
+          <>
         <section
           style={{
             border: "1px solid #18304a",
@@ -1121,6 +1126,8 @@ export default async function GamePredictionDetailPage({ params }) {
             {renderLeaderList("Defensive drivers", homeLeaders.topDefense, homeColor, "def_rating")}
           </div>
         </section>
+          </>
+        )}
       </div>
     </div>
   );
