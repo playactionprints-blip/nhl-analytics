@@ -265,7 +265,7 @@ export default function GameStatsPanel({
     async function fetchPBP() {
       try {
         const res = await fetch(
-          `https://api-web.nhle.com/v1/gamecenter/${gameId}/play-by-play`,
+          `/api/nhl/pbp/${gameId}`,
           { cache: "no-store" }
         );
         if (!res.ok) {
