@@ -859,6 +859,50 @@ function GoalieContent({ player, accent }) {
   );
 }
 
+// ── Share Card Button ─────────────────────────────────────────────────────────
+function ShareCardBtn({ playerId }) {
+  const [copied, setCopied] = useState(false);
+  function handleClick() {
+    const url = `${window.location.origin}/api/og/player?id=${playerId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <button
+      onClick={handleClick}
+      style={{
+        fontSize: 9,
+        color: copied ? "#2fb4ff" : "#3a6a99",
+        fontFamily: "'DM Mono',monospace",
+        textTransform: "uppercase",
+        letterSpacing: "0.08em",
+        padding: "3px 8px",
+        border: `1px solid ${copied ? "#2fb4ff" : "#1e3a55"}`,
+        borderRadius: 4,
+        background: "transparent",
+        cursor: "pointer",
+        transition: "color 0.15s, border-color 0.15s",
+      }}
+      onMouseEnter={(e) => {
+        if (!copied) {
+          e.currentTarget.style.borderColor = "#2fb4ff";
+          e.currentTarget.style.color = "#9fd8ff";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!copied) {
+          e.currentTarget.style.borderColor = "#1e3a55";
+          e.currentTarget.style.color = "#3a6a99";
+        }
+      }}
+    >
+      {copied ? "Copied!" : "Share Card ↗"}
+    </button>
+  );
+}
+
 // ── Main Player Card ─────────────────────────────────────────────────────────
 function PlayerCard({ player }) {
   const [tab, setTab] = useState("overview");
@@ -1442,6 +1486,7 @@ function PlayerCard({ player }) {
             style={{ fontSize:9, color:"#3a6a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", textDecoration:"none", padding:"3px 8px", border:"1px solid #1e3a55", borderRadius:4 }}>
             Compare ↗
           </Link>
+          <ShareCardBtn playerId={player.player_id} />
           <span style={{ fontSize:9, color:"#2a4060", fontFamily:"'DM Mono',monospace" }}>hockeystats.dev</span>
         </div>
       </div>

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { fetchPlayerPayload } from "@/app/lib/playerData";
 import { getSiteUrl } from "@/app/lib/siteUrl";
+import ShareButton from "./ShareButton";
 
 function currentSeasonLabel() {
   return "25-26";
@@ -53,8 +54,9 @@ export default async function PlayerPage({ params }) {
       <p>Current season points: {player.currentSeason?.pts ?? 0}</p>
       <p>3Y WAR: {player.war?.war3yr != null ? player.war.war3yr.toFixed(2) : "—"}</p>
       <p>Overall rating: {player.ratings?.overall != null ? Math.round(player.ratings.overall) : "—"}</p>
-      <p>
+      <p style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <Link href="/">Back to player cards</Link>
+        <ShareButton playerId={playerId} />
       </p>
     </main>
   );
