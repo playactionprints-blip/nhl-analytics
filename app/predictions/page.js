@@ -706,129 +706,137 @@ export default async function PredictionsPage({ searchParams }) {
                         alignItems: "center",
                       }}
                     >
-                      {[
-                        {
-                          side: "away",
-                          abbr: game.awayTeam.abbr,
-                          name: game.awayTeam.name,
-                          record: formatRecord(awayTeam.awayRecord),
-                          winPct: prediction.awayWinPct,
-                          expectedGoals: prediction.expectedAwayGoals,
-                          expectedShots: prediction.expectedAwayShots,
-                          fairOdds: prediction.fairOdds.awayMoneyline,
-                          meta: awayMeta,
-                          align: "left",
-                          goalieInfo: projectedAwayGoalie,
-                        },
-                        {
-                          side: "home",
-                          abbr: game.homeTeam.abbr,
-                          name: game.homeTeam.name,
-                          record: formatRecord(homeTeam.homeRecord),
-                          winPct: prediction.homeWinPct,
-                          expectedGoals: prediction.expectedHomeGoals,
-                          expectedShots: prediction.expectedHomeShots,
-                          fairOdds: prediction.fairOdds.homeMoneyline,
-                          meta: homeMeta,
-                          align: "right",
-                          goalieInfo: projectedHomeGoalie,
-                        },
-                      ].map((teamRow, index) => (
-                        <div
-                          key={`${game.id}-${teamRow.side}`}
-                          style={{
-                            display: "grid",
-                            gap: 12,
-                            justifyItems: teamRow.align === "right" ? "end" : "start",
-                            textAlign: teamRow.align,
-                            minWidth: 0,
-                          }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: 12, flexDirection: teamRow.align === "right" ? "row-reverse" : "row", minWidth: 0 }}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={logoUrl(teamRow.abbr)}
-                              alt={teamRow.abbr}
-                              width={56}
-                              height={56}
-                              style={{ width: 56, height: 56, objectFit: "contain", flexShrink: 0 }}
-                            />
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900, lineHeight: 0.95 }}>{Math.round(teamRow.winPct * 100)}%</div>
-                              <div style={{ color: teamRow.meta.color, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {teamRow.side} win probability
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{ minWidth: 0, overflow: "hidden" }}>
-                            <div title={teamRow.name} style={{ color: "#ecf7ff", fontSize: teamRow.name.length > 14 ? 16 : 20, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{teamRow.name}</div>
-                            <div style={{ color: "#7f9ab5", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {teamRow.align === "right" ? "home" : "away"} split {teamRow.record}
-                            </div>
-                            {teamRow.goalieInfo?.starterName && (
-                              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
-                                <div style={{ color: "#b0d4ef", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>
-                                  {teamRow.goalieInfo.starterName}
+                      {(() => {
+                        const teamRows = [
+                          {
+                            side: "away",
+                            abbr: game.awayTeam.abbr,
+                            name: game.awayTeam.name,
+                            record: formatRecord(awayTeam.awayRecord),
+                            winPct: prediction.awayWinPct,
+                            expectedGoals: prediction.expectedAwayGoals,
+                            expectedShots: prediction.expectedAwayShots,
+                            fairOdds: prediction.fairOdds.awayMoneyline,
+                            meta: awayMeta,
+                            align: "left",
+                            goalieInfo: projectedAwayGoalie,
+                          },
+                          {
+                            side: "home",
+                            abbr: game.homeTeam.abbr,
+                            name: game.homeTeam.name,
+                            record: formatRecord(homeTeam.homeRecord),
+                            winPct: prediction.homeWinPct,
+                            expectedGoals: prediction.expectedHomeGoals,
+                            expectedShots: prediction.expectedHomeShots,
+                            fairOdds: prediction.fairOdds.homeMoneyline,
+                            meta: homeMeta,
+                            align: "right",
+                            goalieInfo: projectedHomeGoalie,
+                          },
+                        ];
+                        const renderTeam = (teamRow) => (
+                          <div
+                            key={`${game.id}-${teamRow.side}`}
+                            style={{
+                              display: "grid",
+                              gap: 12,
+                              justifyItems: teamRow.align === "right" ? "end" : "start",
+                              textAlign: teamRow.align,
+                              minWidth: 0,
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: 12, flexDirection: teamRow.align === "right" ? "row-reverse" : "row", minWidth: 0 }}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={logoUrl(teamRow.abbr)}
+                                alt={teamRow.abbr}
+                                width={56}
+                                height={56}
+                                style={{ width: 56, height: 56, objectFit: "contain", flexShrink: 0 }}
+                              />
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900, lineHeight: 0.95 }}>{Math.round(teamRow.winPct * 100)}%</div>
+                                <div style={{ color: teamRow.meta.color, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {teamRow.side} win probability
                                 </div>
-                                {teamRow.goalieInfo.overallRating != null && (
-                                  <div style={{ borderRadius: 7, background: "rgba(47,180,255,0.12)", border: "1px solid rgba(47,180,255,0.25)", color: "#7bcfff", fontSize: 11, fontWeight: 800, fontFamily: "'DM Mono',monospace", padding: "3px 7px", flexShrink: 0 }}>
-                                    {Math.round(teamRow.goalieInfo.overallRating)} OVR
-                                  </div>
-                                )}
-                                {teamRow.goalieInfo.gsaxPct != null && (
-                                  <div style={{ borderRadius: 7, background: "rgba(0,229,160,0.1)", border: "1px solid rgba(0,229,160,0.25)", color: "#00e5a0", fontSize: 11, fontWeight: 800, fontFamily: "'DM Mono',monospace", padding: "3px 7px", flexShrink: 0 }}>
-                                    {Math.round(teamRow.goalieInfo.gsaxPct)}th GSAx
-                                  </div>
-                                )}
                               </div>
-                            )}
+                            </div>
+                            <div style={{ minWidth: 0, overflow: "hidden" }}>
+                              <div title={teamRow.name} style={{ color: "#ecf7ff", fontSize: teamRow.name.length > 14 ? 16 : 20, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{teamRow.name}</div>
+                              <div style={{ color: "#7f9ab5", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {teamRow.align === "right" ? "home" : "away"} split {teamRow.record}
+                              </div>
+                              {teamRow.goalieInfo?.starterName && (
+                                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+                                  <div style={{ color: "#b0d4ef", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>
+                                    {teamRow.goalieInfo.starterName}
+                                  </div>
+                                  {teamRow.goalieInfo.overallRating != null && (
+                                    <div style={{ borderRadius: 7, background: "rgba(47,180,255,0.12)", border: "1px solid rgba(47,180,255,0.25)", color: "#7bcfff", fontSize: 11, fontWeight: 800, fontFamily: "'DM Mono',monospace", padding: "3px 7px", flexShrink: 0 }}>
+                                      {Math.round(teamRow.goalieInfo.overallRating)} OVR
+                                    </div>
+                                  )}
+                                  {teamRow.goalieInfo.gsaxPct != null && (
+                                    <div style={{ borderRadius: 7, background: "rgba(0,229,160,0.1)", border: "1px solid rgba(0,229,160,0.25)", color: "#00e5a0", fontSize: 11, fontWeight: 800, fontFamily: "'DM Mono',monospace", padding: "3px 7px", flexShrink: 0 }}>
+                                      {Math.round(teamRow.goalieInfo.gsaxPct)}th GSAx
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ width: "100%", maxWidth: 240, height: 10, borderRadius: 999, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                              <div
+                                style={{
+                                  width: `${teamRow.winPct * 100}%`,
+                                  height: "100%",
+                                  background: `linear-gradient(90deg, ${hexToRgba(teamRow.align === "right" ? homeColor : awayColor, 0.7)} 0%, ${teamRow.align === "right" ? homeColor : awayColor} 100%)`,
+                                }}
+                              />
+                            </div>
                           </div>
-                          <div style={{ width: "100%", maxWidth: 240, height: 10, borderRadius: 999, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                        );
+                        return (
+                          <>
+                            {renderTeam(teamRows[0])}
                             <div
                               style={{
-                                width: `${teamRow.winPct * 100}%`,
-                                height: "100%",
-                                background: `linear-gradient(90deg, ${hexToRgba(teamRow.align === "right" ? homeColor : awayColor, 0.7)} 0%, ${teamRow.align === "right" ? homeColor : awayColor} 100%)`,
+                                display: "grid",
+                                gap: 10,
+                                justifyItems: "center",
+                                alignContent: "center",
+                                minWidth: 120,
                               }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-
-                      <div
-                        style={{
-                          display: "grid",
-                          gap: 10,
-                          justifyItems: "center",
-                          alignContent: "center",
-                          minWidth: 120,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 8,
-                            padding: "6px 10px",
-                            borderRadius: 999,
-                            background: tieColor.bg,
-                            color: tieColor.color,
-                            fontSize: 11,
-                            fontWeight: 800,
-                            letterSpacing: "0.08em",
-                            textTransform: "uppercase",
-                            fontFamily: "'DM Mono',monospace",
-                          }}
-                        >
-                          Tie {percent(prediction.regulationTiePct)}
-                        </div>
-                        <div style={{ color: "#89a8c1", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                          {prediction.modelDiagnostics.simulationCount.toLocaleString()} sims
-                        </div>
-                        <div style={{ color: "#eff8ff", fontSize: 16, fontWeight: 900 }}>
-                          xG {prediction.expectedAwayGoals.toFixed(2)} - {prediction.expectedHomeGoals.toFixed(2)}
-                        </div>
-                      </div>
+                            >
+                              <div
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  padding: "6px 10px",
+                                  borderRadius: 999,
+                                  background: tieColor.bg,
+                                  color: tieColor.color,
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  letterSpacing: "0.08em",
+                                  textTransform: "uppercase",
+                                  fontFamily: "'DM Mono',monospace",
+                                }}
+                              >
+                                Tie {percent(prediction.regulationTiePct)}
+                              </div>
+                              <div style={{ color: "#89a8c1", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                                {prediction.modelDiagnostics.simulationCount.toLocaleString()} sims
+                              </div>
+                              <div style={{ color: "#eff8ff", fontSize: 16, fontWeight: 900 }}>
+                                xG {prediction.expectedAwayGoals.toFixed(2)} - {prediction.expectedHomeGoals.toFixed(2)}
+                              </div>
+                            </div>
+                            {renderTeam(teamRows[1])}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
 
