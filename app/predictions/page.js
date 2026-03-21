@@ -506,7 +506,6 @@ export default async function PredictionsPage({ searchParams }) {
                     padding: 14,
                     display: "grid",
                     gap: 10,
-                    minHeight: 148,
                     transition: "transform 0.16s ease, border-color 0.16s ease",
                   };
 
@@ -586,7 +585,7 @@ export default async function PredictionsPage({ searchParams }) {
                     key={game.id}
                     className="prediction-card"
                     href={predictionHref(selectedDateString, game.id)}
-                    style={{ display: "block", textDecoration: "none", border: "1px solid #17283b", borderRadius: 24, background: "#091017", overflow: "hidden", transition: "transform 0.18s ease, box-shadow 0.18s ease" }}
+                    style={{ display: "block", textDecoration: "none", border: "1px solid #17283b", borderRadius: 24, background: "#091017", transition: "transform 0.18s ease, box-shadow 0.18s ease" }}
                   >
                     <div style={{ padding: 18, borderBottom: "1px solid #132131", background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.22)} 0%, rgba(9,16,23,0.94) 38%, rgba(9,16,23,0.94) 62%, ${hexToRgba(homeColor, 0.22)} 100%)` }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 20 }}>
@@ -653,7 +652,6 @@ export default async function PredictionsPage({ searchParams }) {
                     border: "1px solid #17283b",
                     borderRadius: 24,
                     background: "#091017",
-                    overflow: "hidden",
                     transition: "transform 0.18s ease, box-shadow 0.18s ease",
                   }}
                 >
@@ -744,10 +742,9 @@ export default async function PredictionsPage({ searchParams }) {
                             justifyItems: teamRow.align === "right" ? "end" : "start",
                             textAlign: teamRow.align,
                             minWidth: 0,
-                            overflow: "hidden",
                           }}
                         >
-                          <div style={{ display: "flex", alignItems: "center", gap: 12, flexDirection: teamRow.align === "right" ? "row-reverse" : "row", minWidth: 0, overflow: "hidden" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, flexDirection: teamRow.align === "right" ? "row-reverse" : "row", minWidth: 0 }}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={logoUrl(teamRow.abbr)}
