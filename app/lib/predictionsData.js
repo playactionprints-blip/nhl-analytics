@@ -572,7 +572,7 @@ function getTeamKeyPlayers(players, teamId) {
 
 async function upsertPredictionsLog(dateString, predictions, supabase) {
   if (!predictions?.length) return;
-  const rows = predictions.map(({ game, prediction }) => ({
+  const rows = predictions.map(({ game, prediction, market }) => ({
     game_date: dateString,
     game_id: String(game.id),
     home_team: game.homeTeam.abbr,
@@ -583,6 +583,8 @@ async function upsertPredictionsLog(dateString, predictions, supabase) {
       ? game.homeTeam.abbr
       : game.awayTeam.abbr,
     model_confidence: prediction.modelDiagnostics.confidenceBand,
+    home_odds: market?.homeMoneyline ?? null,
+    away_odds: market?.awayMoneyline ?? null,
   }));
   await supabase.from("predictions_log").upsert(rows, {
     onConflict: "game_id",
@@ -629,7 +631,7 @@ export async function fetchPredictionAccuracy() {
   try {
     const { data } = await supabase
       .from("predictions_log")
-      .select("correct,model_confidence,game_date,home_team,away_team,predicted_winner,actual_winner,home_win_prob,away_win_prob,home_score,away_score")
+      .select("correct,model_confidence,game_date,home_team,away_team,predicted_winner,actual_winner,home_win_prob,away_win_prob,home_score,away_score,home_odds,away_odds")
       .not("actual_winner", "is", null)
       .order("game_date", { ascending: false })
       .limit(100);
@@ -653,6 +655,30 @@ export async function fetchPredictionAccuracy() {
     const recentTotal = recent.length;
     const recentCorrect = recent.filter((r) => r.correct === true).length;
 
+    const unitBets = withResult
+      .filter((r) => {
+        const isHome = r.predicted_winner === r.home_team;
+        return isHome ? r.home_odds != null : r.away_odds != null;
+      })
+      .map((r) => {
+        const isHome = r.predicted_winner === r.home_team;
+        const odds = isHome ? r.home_odds : r.away_odds;
+        const profit = r.correct
+          ? (odds > 0 ? odds / 100 : 100 / Math.abs(odds))
+          : -1;
+        return { game_date: r.game_date, profit };
+      });
+
+    const unitBetsSorted = [...unitBets].sort((a, b) => a.game_date.localeCompare(b.game_date));
+    let running = 0;
+    const unitTimeline = unitBetsSorted.map(({ game_date, profit }) => {
+      running += profit;
+      return { date: game_date, cumulative: Math.round(running * 100) / 100 };
+    });
+
+    const unitTotal = Math.round(unitBets.reduce((sum, b) => sum + b.profit, 0) * 100) / 100;
+    const unitRoi = unitBets.length > 0 ? Math.round((unitTotal / unitBets.length) * 10000) / 100 : null;
+
     return {
       overall: { correct, total, pct: total > 0 ? correct / total : null },
       byConfidence: Object.fromEntries(
@@ -666,6 +692,12 @@ export async function fetchPredictionAccuracy() {
         correct: recentCorrect,
         total: recentTotal,
         pct: recentTotal > 0 ? recentCorrect / recentTotal : null,
+      },
+      units: {
+        total: unitTotal,
+        bets: unitBets.length,
+        roi: unitRoi,
+        timeline: unitTimeline,
       },
     };
   } catch {

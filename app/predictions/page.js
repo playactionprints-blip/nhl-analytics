@@ -51,7 +51,7 @@ function ModelAccuracySection({ accuracy }) {
       </section>
     );
   }
-  const { overall, byConfidence, rolling7, last10 } = accuracy;
+  const { overall, byConfidence, rolling7, last10, units } = accuracy;
   const pctLabel = (v) => (v != null ? `${Math.round(v * 100)}%` : "—");
   const bandColors = { high: "#35e3a0", medium: "#f0c040", low: "#ff8d9b" };
   return (
@@ -86,6 +86,29 @@ function ModelAccuracySection({ accuracy }) {
           );
         })}
       </div>
+      {units?.bets > 0 && (
+        <div style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "16px 18px" }}>
+          <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+            Unit tracker · 1u flat per predicted game at book odds
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <div style={{ color: "#567894", fontSize: 11 }}>P&amp;L</div>
+              <div style={{ color: units.total >= 0 ? "#35e3a0" : "#ff8d9b", fontSize: 26, fontWeight: 900, marginTop: 2 }}>
+                {units.total >= 0 ? "+" : ""}{units.total.toFixed(2)}u
+              </div>
+              <div style={{ color: "#567894", fontSize: 11, marginTop: 2 }}>{units.bets} tracked bets</div>
+            </div>
+            <div>
+              <div style={{ color: "#567894", fontSize: 11 }}>ROI</div>
+              <div style={{ color: (units.roi ?? 0) >= 0 ? "#35e3a0" : "#ff8d9b", fontSize: 26, fontWeight: 900, marginTop: 2 }}>
+                {units.roi != null ? `${units.roi >= 0 ? "+" : ""}${units.roi.toFixed(1)}%` : "—"}
+              </div>
+              <div style={{ color: "#567894", fontSize: 11, marginTop: 2 }}>per unit risked</div>
+            </div>
+          </div>
+        </div>
+      )}
       {last10?.length > 0 && (
         <div style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "12px 14px" }}>
           <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Last 10 tracked games</div>
