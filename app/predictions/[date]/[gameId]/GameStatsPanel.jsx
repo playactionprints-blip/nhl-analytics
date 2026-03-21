@@ -12,8 +12,16 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
+import BoxscorePanel from "./BoxscorePanel";
 
-// ── Pure helpers ────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 function computeXG(xCoord, yCoord, shotType) {
   let nx = xCoord ?? 0;
@@ -72,13 +80,11 @@ function parsePBP(data, homeTeamId, awayTeamId) {
     const xCoord = det.xCoord;
     const yCoord = det.yCoord;
     const shotType = det.shotType ?? "wrist";
-    // teamId: try details first, then top-level
     const teamId = det.eventOwnerTeamId ?? play.eventOwnerTeamId;
     const periodNum = play.periodDescriptor?.number ?? 1;
     const periodType = play.periodDescriptor?.periodType ?? "REG";
     const timeInPeriod = play.timeInPeriod;
 
-    // For blocked shots: eventOwnerTeamId is the BLOCKING team
     let isHome;
     if (typeKey === "blocked-shot") {
       isHome = teamId !== homeTeamId;
@@ -112,8 +118,8 @@ function parsePBP(data, homeTeamId, awayTeamId) {
     }
   }
 
-  for (const [sec, label] of [[1200, "P2"], [2400, "P3"]]) {
-    winProbTimeline.push({ x: sec, marker: label });
+  for (const [sec] of [[1200], [2400]]) {
+    winProbTimeline.push({ x: sec, marker: true });
   }
   winProbTimeline.sort((a, b) => a.x - b.x);
 
@@ -123,47 +129,147 @@ function parsePBP(data, homeTeamId, awayTeamId) {
   return { shotEvents, winProbTimeline, xgByPeriod, playerXG, totalHomeXG, totalAwayXG };
 }
 
-// ── SVG helpers ─────────────────────────────────────────────────────────────
+// ── SVG helpers ──────────────────────────────────────────────────────────────
 
-function toSvgX(x) { return (x + 100) * 2.5; }
-function toSvgY(y) { return (y + 42.5) * 2.47; }
+function toSvgX(x) { return (x + 100) * 3.0; }
+function toSvgY(y) { return (y + 42.5) * 3.0; }
 
-function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr }) {
+// ── Style constants ──────────────────────────────────────────────────────────
+
+const CARD = {
+  background: "#091017",
+  border: "1px solid #17283b",
+  borderRadius: 20,
+  padding: "16px 18px",
+  display: "grid",
+  gap: 10,
+};
+
+const SECTION_LABEL = {
+  color: "#8db9dc",
+  fontSize: 11,
+  fontFamily: "'DM Mono',monospace",
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  fontWeight: 600,
+};
+
+const MUTED = { color: "#5e7b98", fontFamily: "'DM Mono',monospace", fontSize: 11 };
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function SectionDivider({ label }) {
   return (
-    <svg viewBox="0 0 500 210" style={{ width: "100%", maxWidth: 500, height: "auto", display: "block", margin: "0 auto" }}>
-      <rect x={0} y={0} width={500} height={210} rx={20} fill="#071118" />
-      <line x1={250} y1={0} x2={250} y2={210} stroke="#cc3333" strokeWidth={1.5} opacity={0.6} />
-      <line x1={150} y1={0} x2={150} y2={210} stroke="#2255cc" strokeWidth={1.5} opacity={0.6} />
-      <line x1={350} y1={0} x2={350} y2={210} stroke="#2255cc" strokeWidth={1.5} opacity={0.6} />
-      <line x1={55} y1={20} x2={55} y2={190} stroke="#cc3333" strokeWidth={1} opacity={0.5} />
-      <line x1={445} y1={20} x2={445} y2={190} stroke="#cc3333" strokeWidth={1} opacity={0.5} />
-      <rect x={45} y={97} width={10} height={16} rx={2} fill="none" stroke="#aabbcc" strokeWidth={1} />
-      <rect x={445} y={97} width={10} height={16} rx={2} fill="none" stroke="#aabbcc" strokeWidth={1} />
-      <text x={28} y={12} textAnchor="middle" fill={awayColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
-      <text x={472} y={12} textAnchor="middle" fill={homeColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
-      {shotEvents.map((ev, i) => {
-        if (ev.x == null || ev.y == null) return null;
-        const cx = toSvgX(ev.x);
-        const cy = toSvgY(ev.y);
-        const r = 3 + ev.xg * 8;
-        const isGoal = ev.type === "goal";
-        const isMissed = ev.type === "missed-shot";
-        const isBlocked = ev.type === "blocked-shot";
-        const opacity = isGoal ? 1.0 : isMissed ? 0.3 : isBlocked ? 0.2 : 0.65;
-        return (
-          <circle
-            key={i}
-            cx={cx}
-            cy={cy}
-            r={r}
-            fill={ev.isHome ? homeColor : awayColor}
-            opacity={opacity}
-            stroke={isGoal ? "#ffffff" : "none"}
-            strokeWidth={isGoal ? 1.5 : 0}
-          />
-        );
-      })}
-    </svg>
+    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 12, alignItems: "center" }}>
+      <div style={{ color: "#8db9dc", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>{label}</div>
+      <div style={{ height: 1, background: "linear-gradient(90deg,rgba(115,141,165,0.55),rgba(23,40,59,0.4))" }} />
+    </div>
+  );
+}
+
+function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHomeXG, totalAwayXG }) {
+  const homeShots = shotEvents.filter(e => e.isHome && (e.type === "shot-on-goal" || e.type === "goal")).length;
+  const awayShots = shotEvents.filter(e => !e.isHome && (e.type === "shot-on-goal" || e.type === "goal")).length;
+
+  const goalLineLeft = 66;   // toSvgX(-78)
+  const goalLineRight = 534; // toSvgX(78)
+  const blueLineLeft = 180;  // toSvgX(-40)
+  const blueLineRight = 420; // toSvgX(40)
+  const centerX = 300;
+  const centerY = 127.5;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ color: awayColor, fontFamily: "'DM Mono',monospace", fontSize: 12, fontWeight: 700 }}>
+          {awayAbbr}: {awayShots} shots · {totalAwayXG.toFixed(2)} xG
+        </span>
+        <span style={{ color: homeColor, fontFamily: "'DM Mono',monospace", fontSize: 12, fontWeight: 700 }}>
+          {homeAbbr}: {homeShots} shots · {totalHomeXG.toFixed(2)} xG
+        </span>
+      </div>
+      <svg viewBox="0 0 600 255" style={{ width: "100%", maxWidth: 600, height: "auto", display: "block", margin: "0 auto" }}>
+        {/* Boards */}
+        <rect x={0} y={0} width={600} height={255} rx={28} fill="#071118" stroke="#1a3a5a" strokeWidth={2.5} />
+        {/* Center ice circle */}
+        <circle cx={centerX} cy={centerY} r={32} fill="none" stroke="rgba(200,50,50,0.25)" strokeWidth={1.5} />
+        {/* Center line */}
+        <line x1={centerX} y1={0} x2={centerX} y2={255} stroke="rgba(220,50,50,0.6)" strokeWidth={2} />
+        {/* Blue lines */}
+        <line x1={blueLineLeft} y1={0} x2={blueLineLeft} y2={255} stroke="rgba(50,100,220,0.6)" strokeWidth={2.5} />
+        <line x1={blueLineRight} y1={0} x2={blueLineRight} y2={255} stroke="rgba(50,100,220,0.6)" strokeWidth={2.5} />
+        {/* Goal lines */}
+        <line x1={goalLineLeft} y1={22} x2={goalLineLeft} y2={233} stroke="rgba(220,50,50,0.5)" strokeWidth={1.5} />
+        <line x1={goalLineRight} y1={22} x2={goalLineRight} y2={233} stroke="rgba(220,50,50,0.5)" strokeWidth={1.5} />
+        {/* Goal creases */}
+        <path
+          d={`M ${goalLineLeft},${centerY - 22} Q ${goalLineLeft + 24},${centerY} ${goalLineLeft},${centerY + 22}`}
+          fill="rgba(50,100,220,0.12)" stroke="rgba(50,100,220,0.3)" strokeWidth={1}
+        />
+        <path
+          d={`M ${goalLineRight},${centerY - 22} Q ${goalLineRight - 24},${centerY} ${goalLineRight},${centerY + 22}`}
+          fill="rgba(50,100,220,0.12)" stroke="rgba(50,100,220,0.3)" strokeWidth={1}
+        />
+        {/* Nets */}
+        <rect x={goalLineLeft - 9} y={centerY - 9} width={9} height={18} rx={2} fill="none" stroke="#aabbcc" strokeWidth={1} />
+        <rect x={goalLineRight} y={centerY - 9} width={9} height={18} rx={2} fill="none" stroke="#aabbcc" strokeWidth={1} />
+        {/* Team labels */}
+        <text x={goalLineLeft - 24} y={15} textAnchor="middle" fill={awayColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
+        <text x={goalLineRight + 24} y={15} textAnchor="middle" fill={homeColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
+        {/* Shot dots */}
+        {shotEvents.map((ev, i) => {
+          if (ev.x == null || ev.y == null) return null;
+          const cx = toSvgX(ev.x);
+          const cy = toSvgY(ev.y);
+          const baseR = Math.min(ev.xg * 10 + 5, 14);
+          const isGoal = ev.type === "goal";
+          const isMissed = ev.type === "missed-shot";
+          const isBlocked = ev.type === "blocked-shot";
+          const r = isGoal ? Math.min(baseR + 3, 17) : baseR;
+          const color = ev.isHome ? homeColor : awayColor;
+
+          if (isGoal) {
+            return (
+              <g key={i}>
+                <circle cx={cx} cy={cy} r={r + 4} fill={color} opacity={0.28} />
+                <circle cx={cx} cy={cy} r={r} fill={color} opacity={1.0} stroke="#ffffff" strokeWidth={2} />
+              </g>
+            );
+          }
+          if (isMissed) {
+            return <circle key={i} cx={cx} cy={cy} r={baseR} fill="none" stroke={color} strokeWidth={1.5} opacity={0.5} />;
+          }
+          if (isBlocked) {
+            return <circle key={i} cx={cx} cy={cy} r={Math.max(baseR - 2, 3)} fill={color} opacity={0.25} />;
+          }
+          return <circle key={i} cx={cx} cy={cy} r={baseR} fill={color} opacity={0.8} />;
+        })}
+      </svg>
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 14, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
+        {[
+          { label: "Goal", fillOpacity: 1.0, stroke: "#ffffff", sw: 1.5 },
+          { label: "Shot", fillOpacity: 0.8, stroke: "none", sw: 0 },
+          { label: "Missed", fillOpacity: 0, stroke: "#8db9dc", sw: 1.5 },
+          { label: "Blocked", fillOpacity: 0.25, stroke: "none", sw: 0 },
+        ].map(({ label, fillOpacity, stroke, sw }) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <svg width={12} height={12}>
+              <circle cx={6} cy={6} r={5} fill="#8db9dc" fillOpacity={fillOpacity} stroke={stroke} strokeWidth={sw} />
+            </svg>
+            <span style={{ color: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>{label}</span>
+          </div>
+        ))}
+        <div style={{ flexBasis: "100%", display: "flex", gap: 16, justifyContent: "center", marginTop: 2 }}>
+          {[{ label: awayAbbr, color: awayColor }, { label: homeAbbr, color: homeColor }].map(({ label, color }) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <svg width={10} height={10}><circle cx={5} cy={5} r={4} fill={color} opacity={0.85} /></svg>
+              <span style={{ color, fontSize: 10, fontFamily: "'DM Mono',monospace" }}>{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -171,24 +277,30 @@ function PuckLuckMeter({ homeXG, awayXG, homeAbbr, awayAbbr, homeColor, awayColo
   const total = homeXG + awayXG;
   const homeXGPct = total > 0 ? homeXG / total : 0.5;
   const theta = Math.PI * homeXGPct;
-  const cx = 150, cy = 140, r = 110;
+  const cx = 160, cy = 148, r = 110;
   const nx = cx + r * Math.cos(Math.PI - theta);
   const ny = cy - r * Math.sin(Math.PI - theta);
   return (
     <div style={{ textAlign: "center" }}>
-      <div style={{ color: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
-        Puck luck (xG share)
-      </div>
-      <svg viewBox="0 0 300 160" style={{ width: "100%", maxWidth: 300, height: "auto", display: "block", margin: "0 auto" }}>
-        <path d={`M 40,140 A 110,110 0 0,1 150,30`} fill="none" stroke={awayColor} strokeWidth={16} strokeLinecap="round" opacity={0.4} />
-        <path d={`M 150,30 A 110,110 0 0,1 260,140`} fill="none" stroke={homeColor} strokeWidth={16} strokeLinecap="round" opacity={0.4} />
+      <svg viewBox="0 0 320 175" style={{ width: "100%", maxWidth: 320, height: "auto", display: "block", margin: "0 auto" }}>
+        <path d="M 50,148 A 110,110 0 0,1 160,38" fill="none" stroke={awayColor} strokeWidth={18} strokeLinecap="round" opacity={0.4} />
+        <path d="M 160,38 A 110,110 0 0,1 270,148" fill="none" stroke={homeColor} strokeWidth={18} strokeLinecap="round" opacity={0.4} />
         <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#eff8ff" strokeWidth={2.5} strokeLinecap="round" />
-        <circle cx={cx} cy={cy} r={5} fill="#eff8ff" />
-        <text x={28} y={155} textAnchor="middle" fill={awayColor} fontSize={11} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
-        <text x={272} y={155} textAnchor="middle" fill={homeColor} fontSize={11} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
-        <text x={28} y={140} textAnchor="middle" fill={awayColor} fontSize={10} fontFamily="'DM Mono',monospace">{awayXG.toFixed(2)}</text>
-        <text x={272} y={140} textAnchor="middle" fill={homeColor} fontSize={10} fontFamily="'DM Mono',monospace">{homeXG.toFixed(2)}</text>
+        <circle cx={cx} cy={cy} r={6} fill="#eff8ff" />
+        <text x={cx} y={cy - 18} textAnchor="middle" fill="#eff8ff" fontSize={22} fontWeight={900} fontFamily="'DM Mono',monospace">
+          {(homeXGPct * 100).toFixed(0)}%
+        </text>
+        <text x={cx} y={cy - 4} textAnchor="middle" fill="#5e7b98" fontSize={9} fontFamily="'DM Mono',monospace" letterSpacing="2">
+          HOME xG SHARE
+        </text>
+        <text x={38} y={170} textAnchor="middle" fill={awayColor} fontSize={11} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
+        <text x={282} y={170} textAnchor="middle" fill={homeColor} fontSize={11} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
+        <text x={38} y={155} textAnchor="middle" fill={awayColor} fontSize={10} fontFamily="'DM Mono',monospace">{awayXG.toFixed(2)}</text>
+        <text x={282} y={155} textAnchor="middle" fill={homeColor} fontSize={10} fontFamily="'DM Mono',monospace">{homeXG.toFixed(2)}</text>
       </svg>
+      <div style={{ color: "#5e7b98", fontSize: 9, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 2 }}>
+        xG share — shot quality control
+      </div>
     </div>
   );
 }
@@ -221,23 +333,7 @@ function XGBarTooltip({ active, payload, homeAbbr, awayAbbr }) {
   );
 }
 
-// ── Main component ──────────────────────────────────────────────────────────
-
-const SECTION_LABEL = {
-  color: "#5a7a96",
-  fontSize: 10,
-  fontFamily: "'DM Mono',monospace",
-  textTransform: "uppercase",
-  letterSpacing: "0.08em",
-  marginBottom: 8,
-};
-
-const CARD = {
-  borderRadius: 20,
-  border: "1px solid #17283b",
-  background: "#091017",
-  padding: "16px 20px",
-};
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function GameStatsPanel({
   gameId,
@@ -248,6 +344,7 @@ export default function GameStatsPanel({
   homeColor,
   awayColor,
   gameState,
+  playerByGameStats,
 }) {
   const [pbp, setPbp] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -256,43 +353,35 @@ export default function GameStatsPanel({
   useEffect(() => {
     if (!gameId) return;
     let cancelled = false;
-
-    // Reset state on new gameId
     setLoading(true);
     setError(false);
     setPbp(null);
 
     async function fetchPBP() {
       try {
-        const res = await fetch(
-          `/api/nhl/pbp/${gameId}`,
-          { cache: "no-store" }
-        );
+        const res = await fetch(`/api/nhl/pbp/${gameId}`, { cache: "no-store" });
         if (!res.ok) {
           if (!cancelled) { setError(true); setLoading(false); }
           return;
         }
         const data = await res.json();
         if (!cancelled) { setPbp(data); setLoading(false); }
-      } catch (err) {
+      } catch {
         if (!cancelled) { setError(true); setLoading(false); }
       }
     }
 
     fetchPBP();
-
     let interval = null;
     if (gameState === "LIVE" || gameState === "CRIT") {
       interval = setInterval(fetchPBP, 60_000);
     }
-
     return () => {
       cancelled = true;
       if (interval) clearInterval(interval);
     };
   }, [gameId, gameState]);
 
-  // ── Loading state ──
   if (loading) {
     return (
       <div style={{ color: "#5a7a96", fontFamily: "'DM Mono',monospace", fontSize: 12, padding: "16px 0" }}>
@@ -301,7 +390,6 @@ export default function GameStatsPanel({
     );
   }
 
-  // ── Error state ──
   if (error || !pbp) {
     return (
       <div style={{ color: "#5a7a96", fontFamily: "'DM Mono',monospace", fontSize: 12, padding: "16px 0" }}>
@@ -312,24 +400,12 @@ export default function GameStatsPanel({
 
   const { shotEvents, winProbTimeline, xgByPeriod, playerXG, totalHomeXG, totalAwayXG } =
     parsePBP(pbp, homeTeamId, awayTeamId);
-
   const totalXG = totalHomeXG + totalAwayXG;
 
-  // ── Debug indicator (remove after confirming data loads) ──
-  const debugBar = (
-    <div style={{ color: "#ff4444", fontSize: 11, fontFamily: "'DM Mono',monospace", marginBottom: 8 }}>
-      shots: {shotEvents.length} | totalXG: {totalXG.toFixed(2)} | pbp: {pbp ? "loaded" : "null"} | homeTeamId: {String(homeTeamId)}
-    </div>
-  );
-
-  // ── No data yet ──
   if (totalXG < 0.01) {
     return (
-      <div style={{ display: "grid", gap: 8 }}>
-        {debugBar}
-        <div style={{ color: "#5a7a96", fontFamily: "'DM Mono',monospace", fontSize: 12, padding: "16px 0" }}>
-          No shot data available yet
-        </div>
+      <div style={{ color: "#5a7a96", fontFamily: "'DM Mono',monospace", fontSize: 12, padding: "16px 0" }}>
+        No shot data available yet
       </div>
     );
   }
@@ -342,37 +418,74 @@ export default function GameStatsPanel({
     .filter(([, v]) => v.home > 0 || v.away > 0)
     .map(([k, v]) => ({ period: periodLabels[k] ?? k, home: +v.home.toFixed(2), away: +v.away.toFixed(2) }));
 
-  const topPlayers = Object.entries(playerXG)
+  const awayPlayers = Object.entries(playerXG)
+    .filter(([, v]) => !v.isHome)
     .sort(([, a], [, b]) => b.xg - a.xg)
-    .slice(0, 12)
-    .map(([, v]) => ({ name: v.name.split(" ").slice(-1)[0], xg: +v.xg.toFixed(2), isHome: v.isHome }));
+    .slice(0, 6)
+    .map(([, v]) => ({ name: v.name.split(" ").pop() ?? v.name, xg: +v.xg.toFixed(2) }));
 
-  const playerBarHeight = Math.max(topPlayers.length * 24 + 16, 60);
+  const homePlayers = Object.entries(playerXG)
+    .filter(([, v]) => v.isHome)
+    .sort(([, a], [, b]) => b.xg - a.xg)
+    .slice(0, 6)
+    .map(([, v]) => ({ name: v.name.split(" ").pop() ?? v.name, xg: +v.xg.toFixed(2) }));
+
+  const hasWinProb = winProbTimeline.filter(d => !d.marker).length > 2;
+  const playerBarHeight = 200;
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      {debugBar}
+    <div style={{ display: "grid", gap: 16 }}>
+      <style>{`
+        .gsp-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 700px) { .gsp-two-col { grid-template-columns: 1fr; } }
+      `}</style>
 
-      {/* xG share bar */}
+      {/* 1. xG Share bar */}
       <div style={CARD}>
-        <div style={SECTION_LABEL}>Expected goals share</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ color: awayColor, fontFamily: "'DM Mono',monospace", fontSize: 12, fontWeight: 700, minWidth: 32 }}>{awayAbbr}</span>
-          <div style={{ flex: 1, height: 10, borderRadius: 999, background: "#1a2d40", overflow: "hidden", display: "flex" }}>
-            <div style={{ width: `${awayXGPct * 100}%`, background: awayColor, transition: "width 0.4s ease" }} />
-            <div style={{ flex: 1, background: homeColor }} />
+        <div style={SECTION_LABEL}>xG Share</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ textAlign: "left", minWidth: 64 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`https://assets.nhle.com/logos/nhl/svg/${awayAbbr}_light.svg`}
+              width={24} height={24}
+              style={{ display: "block", marginBottom: 4 }}
+              alt={awayAbbr}
+            />
+            <div style={{ color: awayColor, fontSize: 18, fontWeight: 900, fontFamily: "'DM Mono',monospace" }}>
+              {(awayXGPct * 100).toFixed(1)}%
+            </div>
+            <div style={MUTED}>xG: {totalAwayXG.toFixed(2)}</div>
           </div>
-          <span style={{ color: homeColor, fontFamily: "'DM Mono',monospace", fontSize: 12, fontWeight: 700, minWidth: 32, textAlign: "right" }}>{homeAbbr}</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-          <span style={{ color: awayColor, fontFamily: "'DM Mono',monospace", fontSize: 11 }}>{(awayXGPct * 100).toFixed(1)}% · {totalAwayXG.toFixed(2)} xG</span>
-          <span style={{ color: homeColor, fontFamily: "'DM Mono',monospace", fontSize: 11 }}>{totalHomeXG.toFixed(2)} xG · {(homeXGPct * 100).toFixed(1)}%</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ height: 12, borderRadius: 999, background: "#1a2d40", overflow: "hidden", display: "flex" }}>
+              <div style={{ width: `${awayXGPct * 100}%`, background: awayColor, transition: "width 0.4s ease" }} />
+              <div style={{ flex: 1, background: homeColor }} />
+            </div>
+          </div>
+          <div style={{ textAlign: "right", minWidth: 64 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`https://assets.nhle.com/logos/nhl/svg/${homeAbbr}_light.svg`}
+              width={24} height={24}
+              style={{ display: "block", marginBottom: 4, marginLeft: "auto" }}
+              alt={homeAbbr}
+            />
+            <div style={{ color: homeColor, fontSize: 18, fontWeight: 900, fontFamily: "'DM Mono',monospace" }}>
+              {(homeXGPct * 100).toFixed(1)}%
+            </div>
+            <div style={{ ...MUTED, textAlign: "right" }}>xG: {totalHomeXG.toFixed(2)}</div>
+          </div>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        {/* Puck luck meter */}
-        <div style={CARD}>
+      {/* 2. Puck Luck | Win Probability */}
+      <div className="gsp-two-col">
+        <div style={{
+          ...CARD,
+          background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.08)} 0%, #091017 40%, #091017 60%, ${hexToRgba(homeColor, 0.08)} 100%)`,
+        }}>
+          <div style={SECTION_LABEL}>Puck luck · xG share</div>
           <PuckLuckMeter
             homeXG={totalHomeXG}
             awayXG={totalAwayXG}
@@ -383,104 +496,157 @@ export default function GameStatsPanel({
           />
         </div>
 
-        {/* xG by period */}
-        {xgPeriodData.length > 0 && (
+        {hasWinProb ? (
           <div style={CARD}>
-            <div style={SECTION_LABEL}>xG by period</div>
-            <div style={{ width: "100%", height: 140 }}>
+            <div style={SECTION_LABEL}>Win probability over time</div>
+            <div style={{ width: "100%", height: 200 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={xgPeriodData} barGap={2} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <LineChart data={winProbTimeline} margin={{ top: 4, right: 8, left: -14, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#141f2d" vertical={false} />
-                  <XAxis dataKey="period" tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<XGBarTooltip homeAbbr={homeAbbr} awayAbbr={awayAbbr} />} />
-                  <Bar dataKey="away" fill={awayColor} opacity={0.75} radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="home" fill={homeColor} opacity={0.75} radius={[3, 3, 0, 0]} />
-                </BarChart>
+                  <XAxis
+                    dataKey="x"
+                    type="number"
+                    domain={[0, 3600]}
+                    ticks={[0, 1200, 2400, 3600]}
+                    tickFormatter={(v) => v === 0 ? "START" : v === 1200 ? "P2" : v === 2400 ? "P3" : "END"}
+                    tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    ticks={[0, 25, 50, 75, 100]}
+                    tickFormatter={(v) => `${v}%`}
+                    tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <ReferenceLine y={50} stroke="#1a2d40" strokeDasharray="4 4" />
+                  <ReferenceLine x={1200} stroke="#1a2d40" strokeDasharray="4 4" />
+                  <ReferenceLine x={2400} stroke="#1a2d40" strokeDasharray="4 4" />
+                  <Tooltip content={<WinProbTooltip homeAbbr={homeAbbr} awayAbbr={awayAbbr} homeColor={homeColor} awayColor={awayColor} />} />
+                  <Line dataKey="away" stroke={awayColor} dot={false} strokeWidth={2} connectNulls strokeDasharray="5 3" />
+                  <Line dataKey="home" stroke={homeColor} dot={false} strokeWidth={2} connectNulls />
+                </LineChart>
               </ResponsiveContainer>
             </div>
+            <div style={{ display: "flex", gap: 16, justifyContent: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <svg width={22} height={8}><line x1={0} y1={4} x2={22} y2={4} stroke={awayColor} strokeWidth={2} strokeDasharray="5 3" /></svg>
+                <span style={MUTED}>{awayAbbr}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <svg width={22} height={8}><line x1={0} y1={4} x2={22} y2={4} stroke={homeColor} strokeWidth={2} /></svg>
+                <span style={MUTED}>{homeAbbr}</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ ...CARD, alignItems: "center", justifyContent: "center" }}>
+            <div style={MUTED}>Win probability data not yet available</div>
           </div>
         )}
       </div>
 
-      {/* Win probability over time */}
-      {winProbTimeline.length > 2 && (
+      {/* 3. xG By Period */}
+      {xgPeriodData.length > 0 && (
         <div style={CARD}>
-          <div style={SECTION_LABEL}>Win probability over time</div>
-          <div style={{ width: "100%", height: 160 }}>
+          <div style={SECTION_LABEL}>xG by period</div>
+          <div style={{ width: "100%", height: 180 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={winProbTimeline} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+              <BarChart data={xgPeriodData} barGap={4} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#141f2d" vertical={false} />
-                <XAxis
-                  dataKey="x"
-                  type="number"
-                  domain={[0, 3600]}
-                  tickCount={5}
-                  tickFormatter={(v) => `P${Math.min(Math.floor(v / 1200) + 1, 3)}`}
-                  tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  domain={[0, 100]}
-                  tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) => `${v}%`}
-                />
-                <ReferenceLine y={50} stroke="#1e3349" strokeDasharray="4 4" />
-                <ReferenceLine x={1200} stroke="#1e3349" strokeDasharray="4 4" />
-                <ReferenceLine x={2400} stroke="#1e3349" strokeDasharray="4 4" />
-                <Tooltip content={<WinProbTooltip homeAbbr={homeAbbr} awayAbbr={awayAbbr} homeColor={homeColor} awayColor={awayColor} />} />
-                <Line dataKey="away" stroke={awayColor} dot={false} strokeWidth={2} connectNulls />
-                <Line dataKey="home" stroke={homeColor} dot={false} strokeWidth={2} connectNulls />
-              </LineChart>
+                <XAxis dataKey="period" tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />
+                <ReferenceLine y={0} stroke="#1a2d40" />
+                <Tooltip content={<XGBarTooltip homeAbbr={homeAbbr} awayAbbr={awayAbbr} />} />
+                <Bar dataKey="away" fill={awayColor} opacity={0.9} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="home" fill={homeColor} opacity={0.9} radius={[3, 3, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
-      )}
-
-      {/* Shot map */}
-      {shotEvents.length > 0 && (
-        <div style={CARD}>
-          <div style={SECTION_LABEL}>Shot map</div>
-          <IceRink shotEvents={shotEvents} homeColor={homeColor} awayColor={awayColor} homeAbbr={homeAbbr} awayAbbr={awayAbbr} />
-          <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
-            {[
-              { label: "Goal", opacity: 1.0, stroke: true },
-              { label: "Shot on goal", opacity: 0.65 },
-              { label: "Missed", opacity: 0.3 },
-              { label: "Blocked", opacity: 0.2 },
-            ].map(({ label, opacity, stroke }) => (
-              <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <svg width={10} height={10}>
-                  <circle cx={5} cy={5} r={4} fill="#8db9dc" opacity={opacity} stroke={stroke ? "#ffffff" : "none"} strokeWidth={stroke ? 1 : 0} />
-                </svg>
-                <span style={{ color: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>{label}</span>
+          <div style={{ display: "flex", gap: 16, justifyContent: "center" }}>
+            {[{ label: awayAbbr, color: awayColor }, { label: homeAbbr, color: homeColor }].map(({ label, color }) => (
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 10, height: 10, borderRadius: 2, background: color, opacity: 0.9 }} />
+                <span style={MUTED}>{label}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* xG per player */}
-      {topPlayers.length > 0 && (
+      {/* 4. Shot map */}
+      {shotEvents.length > 0 && (
         <div style={CARD}>
-          <div style={SECTION_LABEL}>xG per player (top 12)</div>
-          <div style={{ width: "100%", height: playerBarHeight }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topPlayers} layout="vertical" margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
-                <XAxis type="number" tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" width={70} tick={{ fill: "#b8d4e8", fontSize: 11, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  formatter={(v) => [`${Number(v).toFixed(2)} xG`]}
-                  contentStyle={{ background: "#0d1926", border: "1px solid #1e3349", borderRadius: 8, fontFamily: "'DM Mono',monospace", fontSize: 11 }}
-                />
-                <Bar dataKey="xg" fill="#2fb4ff" radius={[0, 3, 3, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <div style={SECTION_LABEL}>Shot map</div>
+          <IceRink
+            shotEvents={shotEvents}
+            homeColor={homeColor}
+            awayColor={awayColor}
+            homeAbbr={homeAbbr}
+            awayAbbr={awayAbbr}
+            totalHomeXG={totalHomeXG}
+            totalAwayXG={totalAwayXG}
+          />
         </div>
+      )}
+
+      {/* 5. xG per player */}
+      {(awayPlayers.length > 0 || homePlayers.length > 0) && (
+        <div className="gsp-two-col">
+          {awayPlayers.length > 0 && (
+            <div style={CARD}>
+              <div style={SECTION_LABEL}>{awayAbbr} xG Leaders</div>
+              <div style={{ width: "100%", height: playerBarHeight }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={awayPlayers} layout="vertical" margin={{ top: 0, right: 32, left: 0, bottom: 0 }}>
+                    <XAxis type="number" tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="name" width={72} tick={{ fill: "#b8d4e8", fontSize: 11, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      formatter={(v) => [`${Number(v).toFixed(2)} xG`]}
+                      contentStyle={{ background: "#0d1926", border: "1px solid #1e3349", borderRadius: 8, fontFamily: "'DM Mono',monospace", fontSize: 11 }}
+                    />
+                    <Bar dataKey="xg" fill={awayColor} radius={[0, 3, 3, 0]} opacity={0.9} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+          {homePlayers.length > 0 && (
+            <div style={CARD}>
+              <div style={SECTION_LABEL}>{homeAbbr} xG Leaders</div>
+              <div style={{ width: "100%", height: playerBarHeight }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={homePlayers} layout="vertical" margin={{ top: 0, right: 32, left: 0, bottom: 0 }}>
+                    <XAxis type="number" tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="name" width={72} tick={{ fill: "#b8d4e8", fontSize: 11, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      formatter={(v) => [`${Number(v).toFixed(2)} xG`]}
+                      contentStyle={{ background: "#0d1926", border: "1px solid #1e3349", borderRadius: 8, fontFamily: "'DM Mono',monospace", fontSize: 11 }}
+                    />
+                    <Bar dataKey="xg" fill={homeColor} radius={[0, 3, 3, 0]} opacity={0.9} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 6. BoxscorePanel with real playerXGMap */}
+      {playerByGameStats && (
+        <>
+          <SectionDivider label="Player boxscore" />
+          <BoxscorePanel
+            homeAbbr={homeAbbr}
+            awayAbbr={awayAbbr}
+            homeColor={homeColor}
+            awayColor={awayColor}
+            playerByGameStats={playerByGameStats}
+            playerXGMap={playerXG}
+          />
+        </>
       )}
     </div>
   );
