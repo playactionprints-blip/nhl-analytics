@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import {
   LineChart,
   Line,
@@ -163,8 +163,28 @@ function simulateDeservedWin(shotEvents, numSims = 5000) {
 
 // ── SVG helpers ──────────────────────────────────────────────────────────────
 
-function toSvgX(x) { return (x + 100) * 3.5; }
-function toSvgY(y) { return (y + 42.5) * 3.5; }
+const ICE_RECT = {
+  x: 44,
+  y: 14,
+  width: 612,
+  height: 272,
+  rx: 20,
+};
+
+const NHL_COORDS = {
+  minX: -100,
+  maxX: 100,
+  minY: -42.5,
+  maxY: 42.5,
+};
+
+function rinkSvgX(x) {
+  return ICE_RECT.x + ((x - NHL_COORDS.minX) / (NHL_COORDS.maxX - NHL_COORDS.minX)) * ICE_RECT.width;
+}
+
+function rinkSvgY(y) {
+  return ICE_RECT.y + ((y - NHL_COORDS.minY) / (NHL_COORDS.maxY - NHL_COORDS.minY)) * ICE_RECT.height;
+}
 
 // ── Style constants ──────────────────────────────────────────────────────────
 
@@ -201,16 +221,19 @@ function SectionDivider({ label }) {
 
 function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHomeXG, totalAwayXG }) {
   const [hoveredShot, setHoveredShot] = useState(null);
+  const clipId = useId().replace(/:/g, "");
   const displayShots = shotEvents.filter(s => s.type !== "blocked-shot");
   const homeShots = displayShots.filter(s => s.isHome).length;
   const awayShots = displayShots.filter(s => !s.isHome).length;
 
-  const goalLineLeft = 77;
-  const goalLineRight = 623;
-  const blueLineLeft = 210;
-  const blueLineRight = 490;
-  const centerX = 350;
-  const centerY = 149;
+  const goalLineLeft = rinkSvgX(-89);
+  const goalLineRight = rinkSvgX(89);
+  const blueLineLeft = rinkSvgX(-25);
+  const blueLineRight = rinkSvgX(25);
+  const centerX = rinkSvgX(0);
+  const centerY = rinkSvgY(0);
+  const iceTop = ICE_RECT.y;
+  const iceBottom = ICE_RECT.y + ICE_RECT.height;
 
   const handleShotEnter = (e, shot) => {
     const rect = e.currentTarget.closest("svg").getBoundingClientRect();
@@ -229,20 +252,31 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
       </div>
       <div style={{ position: "relative", width: "100%" }}>
         <svg viewBox="0 0 700 300" style={{ width: "100%", height: "auto", display: "block" }}>
+          <defs>
+            <clipPath id={clipId}>
+              <rect
+                x={ICE_RECT.x}
+                y={ICE_RECT.y}
+                width={ICE_RECT.width}
+                height={ICE_RECT.height}
+                rx={ICE_RECT.rx}
+              />
+            </clipPath>
+          </defs>
           {/* Boards */}
           <rect x={30} y={8} width={640} height={284} rx={28} fill="#071118" stroke="#1a3a5a" strokeWidth={2.5} />
           {/* Ice surface */}
-          <rect x={44} y={14} width={612} height={272} rx={20} fill="#e8f4f8" stroke="#b0ccd8" strokeWidth={1.5} />
+          <rect x={ICE_RECT.x} y={ICE_RECT.y} width={ICE_RECT.width} height={ICE_RECT.height} rx={ICE_RECT.rx} fill="#e8f4f8" stroke="#b0ccd8" strokeWidth={1.5} />
           {/* Center ice circle */}
           <circle cx={centerX} cy={centerY} r={37} fill="none" stroke="rgba(50,100,220,0.4)" strokeWidth={1.5} />
           {/* Center line */}
-          <line x1={centerX} y1={0} x2={centerX} y2={255} stroke="rgba(220,50,50,0.7)" strokeWidth={2} />
+          <line x1={centerX} y1={iceTop} x2={centerX} y2={iceBottom} stroke="rgba(220,50,50,0.7)" strokeWidth={2} />
           {/* Blue lines */}
-          <line x1={blueLineLeft} y1={0} x2={blueLineLeft} y2={255} stroke="rgba(50,100,220,0.7)" strokeWidth={2.5} />
-          <line x1={blueLineRight} y1={0} x2={blueLineRight} y2={255} stroke="rgba(50,100,220,0.7)" strokeWidth={2.5} />
+          <line x1={blueLineLeft} y1={iceTop} x2={blueLineLeft} y2={iceBottom} stroke="rgba(50,100,220,0.7)" strokeWidth={2.5} />
+          <line x1={blueLineRight} y1={iceTop} x2={blueLineRight} y2={iceBottom} stroke="rgba(50,100,220,0.7)" strokeWidth={2.5} />
           {/* Goal lines */}
-          <line x1={goalLineLeft} y1={22} x2={goalLineLeft} y2={233} stroke="rgba(220,50,50,0.5)" strokeWidth={1.5} />
-          <line x1={goalLineRight} y1={22} x2={goalLineRight} y2={233} stroke="rgba(220,50,50,0.5)" strokeWidth={1.5} />
+          <line x1={goalLineLeft} y1={iceTop} x2={goalLineLeft} y2={iceBottom} stroke="rgba(220,50,50,0.5)" strokeWidth={1.5} />
+          <line x1={goalLineRight} y1={iceTop} x2={goalLineRight} y2={iceBottom} stroke="rgba(220,50,50,0.5)" strokeWidth={1.5} />
           {/* Goal creases */}
           <path
             d={`M ${goalLineLeft},${centerY - 26} Q ${goalLineLeft + 28},${centerY} ${goalLineLeft},${centerY + 26}`}
@@ -259,48 +293,50 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
           <text x={goalLineLeft - 28} y={22} textAnchor="middle" fill={awayColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
           <text x={goalLineRight + 28} y={22} textAnchor="middle" fill={homeColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
           {/* Shot dots */}
-          {displayShots.map((ev, i) => {
-            const px = ev.plotX ?? ev.x;
-            const py = ev.plotY ?? ev.y;
-            if (px == null || py == null) return null;
-            const cx = toSvgX(px);
-            const cy = toSvgY(py);
-            const baseR = Math.min(ev.xg * 10 + 4, 12);
-            const isGoal = ev.type === "goal";
-            const isMissed = ev.type === "missed-shot";
-            const r = isGoal ? Math.min(baseR + 3, 17) : baseR;
-            const color = ev.isHome ? homeColor : awayColor;
+          <g clipPath={`url(#${clipId})`}>
+            {displayShots.map((ev, i) => {
+              const px = ev.plotX ?? ev.x;
+              const py = ev.plotY ?? ev.y;
+              if (px == null || py == null) return null;
+              const cx = rinkSvgX(px);
+              const cy = rinkSvgY(py);
+              const baseR = Math.min(ev.xg * 10 + 4, 12);
+              const isGoal = ev.type === "goal";
+              const isMissed = ev.type === "missed-shot";
+              const r = isGoal ? Math.min(baseR + 3, 17) : baseR;
+              const color = ev.isHome ? homeColor : awayColor;
 
-            if (isGoal) {
-              return (
-                <g key={i} style={{ cursor: "pointer" }}
-                  onMouseEnter={(e) => handleShotEnter(e, ev)}
-                  onMouseLeave={() => setHoveredShot(null)}>
-                  <circle cx={cx + 1} cy={cy + 1} r={r} fill={color} opacity={0.2} />
-                  <circle cx={cx} cy={cy} r={r + 4} fill={color} opacity={0.28} />
-                  <circle cx={cx} cy={cy} r={r} fill={color} opacity={1.0} stroke="#1a1a1a" strokeWidth={2} />
-                </g>
-              );
-            }
-            if (isMissed) {
+              if (isGoal) {
+                return (
+                  <g key={i} style={{ cursor: "pointer" }}
+                    onMouseEnter={(e) => handleShotEnter(e, ev)}
+                    onMouseLeave={() => setHoveredShot(null)}>
+                    <circle cx={cx + 1} cy={cy + 1} r={r} fill={color} opacity={0.2} />
+                    <circle cx={cx} cy={cy} r={r + 4} fill={color} opacity={0.28} />
+                    <circle cx={cx} cy={cy} r={r} fill={color} opacity={1.0} stroke="#1a1a1a" strokeWidth={2} />
+                  </g>
+                );
+              }
+              if (isMissed) {
+                return (
+                  <g key={i} style={{ cursor: "pointer" }}
+                    onMouseEnter={(e) => handleShotEnter(e, ev)}
+                    onMouseLeave={() => setHoveredShot(null)}>
+                    <circle cx={cx + 1} cy={cy + 1} r={baseR} fill={color} opacity={0.2} />
+                    <circle cx={cx} cy={cy} r={baseR} fill="none" stroke={color} strokeWidth={1.5} opacity={0.5} />
+                  </g>
+                );
+              }
               return (
                 <g key={i} style={{ cursor: "pointer" }}
                   onMouseEnter={(e) => handleShotEnter(e, ev)}
                   onMouseLeave={() => setHoveredShot(null)}>
                   <circle cx={cx + 1} cy={cy + 1} r={baseR} fill={color} opacity={0.2} />
-                  <circle cx={cx} cy={cy} r={baseR} fill="none" stroke={color} strokeWidth={1.5} opacity={0.5} />
+                  <circle cx={cx} cy={cy} r={baseR} fill={color} opacity={0.8} />
                 </g>
               );
-            }
-            return (
-              <g key={i} style={{ cursor: "pointer" }}
-                onMouseEnter={(e) => handleShotEnter(e, ev)}
-                onMouseLeave={() => setHoveredShot(null)}>
-                <circle cx={cx + 1} cy={cy + 1} r={baseR} fill={color} opacity={0.2} />
-                <circle cx={cx} cy={cy} r={baseR} fill={color} opacity={0.8} />
-              </g>
-            );
-          })}
+            })}
+          </g>
         </svg>
         {hoveredShot && (
           <div style={{
@@ -498,9 +534,13 @@ export default function GameStatsPanel({
   useEffect(() => {
     if (!gameId) return;
     let cancelled = false;
-    setLoading(true);
-    setError(false);
-    setPbp(null);
+    const resetTimer = setTimeout(() => {
+      if (!cancelled) {
+        setLoading(true);
+        setError(false);
+        setPbp(null);
+      }
+    }, 0);
 
     async function fetchPBP() {
       try {
@@ -523,6 +563,7 @@ export default function GameStatsPanel({
     }
     return () => {
       cancelled = true;
+      clearTimeout(resetTimer);
       if (interval) clearInterval(interval);
     };
   }, [gameId, gameState]);
