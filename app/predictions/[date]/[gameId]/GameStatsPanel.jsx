@@ -228,7 +228,7 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
         </span>
       </div>
       <div style={{ position: "relative", width: "100%" }}>
-        <svg viewBox="0 0 700 300" style={{ width: "100%", maxWidth: 700, height: "auto", display: "block", margin: "0 auto" }}>
+        <svg viewBox="0 0 700 300" style={{ width: "100%", height: "auto", display: "block" }}>
           {/* Boards */}
           <rect x={30} y={8} width={640} height={284} rx={28} fill="#071118" stroke="#1a3a5a" strokeWidth={2.5} />
           {/* Ice surface */}
