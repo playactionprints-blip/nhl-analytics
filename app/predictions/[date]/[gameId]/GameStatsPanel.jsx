@@ -163,8 +163,8 @@ function simulateDeservedWin(shotEvents, numSims = 5000) {
 
 // ── SVG helpers ──────────────────────────────────────────────────────────────
 
-function toSvgX(x) { return (x + 100) * 3.0; }
-function toSvgY(y) { return (y + 42.5) * 3.0; }
+function toSvgX(x) { return (x + 100) * 3.5; }
+function toSvgY(y) { return (y + 42.5) * 3.5; }
 
 // ── Style constants ──────────────────────────────────────────────────────────
 
@@ -205,12 +205,12 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
   const homeShots = displayShots.filter(s => s.isHome).length;
   const awayShots = displayShots.filter(s => !s.isHome).length;
 
-  const goalLineLeft = 66;
-  const goalLineRight = 534;
-  const blueLineLeft = 180;
-  const blueLineRight = 420;
-  const centerX = 300;
-  const centerY = 127.5;
+  const goalLineLeft = 77;
+  const goalLineRight = 623;
+  const blueLineLeft = 210;
+  const blueLineRight = 490;
+  const centerX = 350;
+  const centerY = 149;
 
   const handleShotEnter = (e, shot) => {
     const rect = e.currentTarget.closest("svg").getBoundingClientRect();
@@ -228,13 +228,13 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
         </span>
       </div>
       <div style={{ position: "relative", width: "100%" }}>
-        <svg viewBox="0 0 600 255" style={{ width: "100%", maxWidth: 600, height: "auto", display: "block", margin: "0 auto" }}>
+        <svg viewBox="0 0 700 300" style={{ width: "100%", maxWidth: 700, height: "auto", display: "block", margin: "0 auto" }}>
           {/* Boards */}
-          <rect x={0} y={0} width={600} height={255} rx={28} fill="#071118" stroke="#1a3a5a" strokeWidth={2.5} />
+          <rect x={30} y={8} width={640} height={284} rx={28} fill="#071118" stroke="#1a3a5a" strokeWidth={2.5} />
           {/* Ice surface */}
-          <rect x={42} y={5} width={516} height={245} rx={20} fill="#e8f4f8" stroke="#b0ccd8" strokeWidth={1.5} />
+          <rect x={44} y={14} width={612} height={272} rx={20} fill="#e8f4f8" stroke="#b0ccd8" strokeWidth={1.5} />
           {/* Center ice circle */}
-          <circle cx={centerX} cy={centerY} r={32} fill="none" stroke="rgba(50,100,220,0.4)" strokeWidth={1.5} />
+          <circle cx={centerX} cy={centerY} r={37} fill="none" stroke="rgba(50,100,220,0.4)" strokeWidth={1.5} />
           {/* Center line */}
           <line x1={centerX} y1={0} x2={centerX} y2={255} stroke="rgba(220,50,50,0.7)" strokeWidth={2} />
           {/* Blue lines */}
@@ -245,19 +245,19 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
           <line x1={goalLineRight} y1={22} x2={goalLineRight} y2={233} stroke="rgba(220,50,50,0.5)" strokeWidth={1.5} />
           {/* Goal creases */}
           <path
-            d={`M ${goalLineLeft},${centerY - 22} Q ${goalLineLeft + 24},${centerY} ${goalLineLeft},${centerY + 22}`}
+            d={`M ${goalLineLeft},${centerY - 26} Q ${goalLineLeft + 28},${centerY} ${goalLineLeft},${centerY + 26}`}
             fill="rgba(50,100,220,0.15)" stroke="rgba(50,100,220,0.5)" strokeWidth={1}
           />
           <path
-            d={`M ${goalLineRight},${centerY - 22} Q ${goalLineRight - 24},${centerY} ${goalLineRight},${centerY + 22}`}
+            d={`M ${goalLineRight},${centerY - 26} Q ${goalLineRight - 28},${centerY} ${goalLineRight},${centerY + 26}`}
             fill="rgba(50,100,220,0.15)" stroke="rgba(50,100,220,0.5)" strokeWidth={1}
           />
           {/* Nets */}
-          <rect x={goalLineLeft - 9} y={centerY - 9} width={9} height={18} rx={2} fill="none" stroke="#8899aa" strokeWidth={1} />
-          <rect x={goalLineRight} y={centerY - 9} width={9} height={18} rx={2} fill="none" stroke="#8899aa" strokeWidth={1} />
+          <rect x={goalLineLeft - 10} y={centerY - 10.5} width={10} height={21} rx={2} fill="none" stroke="#8899aa" strokeWidth={1} />
+          <rect x={goalLineRight} y={centerY - 10.5} width={10} height={21} rx={2} fill="none" stroke="#8899aa" strokeWidth={1} />
           {/* Team labels */}
-          <text x={goalLineLeft - 24} y={15} textAnchor="middle" fill={awayColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
-          <text x={goalLineRight + 24} y={15} textAnchor="middle" fill={homeColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
+          <text x={goalLineLeft - 28} y={22} textAnchor="middle" fill={awayColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
+          <text x={goalLineRight + 28} y={22} textAnchor="middle" fill={homeColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
           {/* Shot dots */}
           {displayShots.map((ev, i) => {
             const px = ev.plotX ?? ev.x;
@@ -265,7 +265,7 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
             if (px == null || py == null) return null;
             const cx = toSvgX(px);
             const cy = toSvgY(py);
-            const baseR = Math.min(ev.xg * 10 + 5, 14);
+            const baseR = Math.min(ev.xg * 10 + 4, 12);
             const isGoal = ev.type === "goal";
             const isMissed = ev.type === "missed-shot";
             const r = isGoal ? Math.min(baseR + 3, 17) : baseR;
