@@ -139,13 +139,200 @@ function positionGroup(position) {
   return position === "D" ? "D" : position === "G" ? "G" : "F";
 }
 
+function formatPercentileSuffix(value) {
+  if (value == null || Number.isNaN(Number(value))) return null;
+  const rounded = Math.round(Number(value));
+  const mod100 = rounded % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${rounded}th percentile`;
+  const mod10 = rounded % 10;
+  if (mod10 === 1) return `${rounded}st percentile`;
+  if (mod10 === 2) return `${rounded}nd percentile`;
+  if (mod10 === 3) return `${rounded}rd percentile`;
+  return `${rounded}th percentile`;
+}
+
+function metricDisplayLabel(label) {
+  const map = {
+    "EV Off": "Even Strength Offence",
+    "EV Def": "Even Strength Defence",
+    "PP": "Power Play Impact",
+    "PK": "Penalty Kill Impact",
+    "Shooting": "Finishing Impact",
+    "RAPM Off": "Offence Impact",
+    "RAPM Def": "Defence Impact",
+    "Off Rating": "Offence Rating",
+    "Def Rating": "Defence Rating",
+    "Goals/60": "Goals",
+    "Pts/60": "Points",
+    "Competition": "Competition",
+    "Teammates": "Teammates",
+    "Penalties": "Penalty Impact",
+    "WAR": "3-Year WAR",
+  };
+  return map[label] || label;
+}
+
+function metricDefinition(label) {
+  const map = {
+    "Even Strength Offence": "Impact on team offence at 5v5 through chance generation, play-driving, and offensive involvement.",
+    "Even Strength Defence": "Impact on suppressing chances and defending play at even strength.",
+    "Power Play Impact": "Value created on the power play through usage, shot creation, and offensive results.",
+    "Penalty Kill Impact": "Defensive value on the penalty kill through suppression and trusted shorthanded usage.",
+    "Finishing Impact": "Finishing impact relative to expected scoring results rather than raw goal totals alone.",
+    "Penalty Impact": "Net impact created through drawing penalties and avoiding costly ones.",
+    "Competition": "Deployment context based on the quality of opponents faced. This is useful, but still somewhat provisional.",
+    "Teammates": "Deployment context based on the quality of linemates and partners. This is useful, but still somewhat provisional.",
+    "Offence Impact": "Offensive RAPM-style impact at 5v5 after adjusting for teammates and opponents.",
+    "Defence Impact": "Defensive RAPM-style impact at 5v5 after adjusting for teammates and opponents.",
+    "3-Year WAR": "Weighted multi-season wins above replacement estimate built to reduce single-season noise.",
+    "Offence Rating": "Overall offensive profile percentile built from creation, production, and impact inputs.",
+    "Defence Rating": "Overall defensive profile percentile built from suppression, usage, and impact inputs.",
+    "Goals": "Goal-scoring percentile relative to players at the same position group.",
+    "Points": "Point production percentile relative to players at the same position group.",
+  };
+  return map[label] || null;
+}
+
+function InfoLabel({ label, info, accent = "#6daee4" }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span>{label}</span>
+      {info ? (
+        <span
+          title={info}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 14,
+            height: 14,
+            borderRadius: "50%",
+            border: `1px solid ${accent}55`,
+            color: accent,
+            fontSize: 9,
+            fontFamily: "'DM Mono',monospace",
+            lineHeight: 1,
+            cursor: "help",
+          }}
+        >
+          i
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function getPlayerTier(player) {
+  const pct = player.percentiles?.["WAR"] ?? player.percentiles?.["Overall"] ?? player.overall_rating ?? null;
+  const war = player.war_total ?? null;
+  const pos = (player.position || "").toUpperCase();
+  if (pos === "D") {
+    if ((pct != null && pct >= 95) || (war != null && war >= 3.5)) return "Elite";
+    if ((pct != null && pct >= 82) || (war != null && war >= 2.2)) return "Top Pair";
+    if ((pct != null && pct >= 65) || (war != null && war >= 1.2)) return "Top Four";
+    if ((pct != null && pct >= 40) || (war != null && war >= 0.3)) return "Depth";
+    return "Replacement Level";
+  }
+  if (pos === "G") {
+    if ((pct != null && pct >= 92) || (war != null && war >= 3.0)) return "Elite";
+    if ((pct != null && pct >= 75) || (war != null && war >= 1.6)) return "Starter";
+    if ((pct != null && pct >= 45) || (war != null && war >= 0.4)) return "Tandem";
+    return "Depth";
+  }
+  if ((pct != null && pct >= 95) || (war != null && war >= 3.5)) return "Elite";
+  if ((pct != null && pct >= 82) || (war != null && war >= 2.2)) return "First-Line";
+  if ((pct != null && pct >= 65) || (war != null && war >= 1.2)) return "Top-Six";
+  if ((pct != null && pct >= 40) || (war != null && war >= 0.3)) return "Depth";
+  return "Replacement Level";
+}
+
+function getUsageSummary(player) {
+  const evenStrengthRole = roleLabel(player);
+  const gp = player.gp || 0;
+  const ppPerGame = gp && player.toi_pp ? player.toi_pp / gp : 0;
+  const pkPerGame = gp && player.toi_pk ? player.toi_pk / gp : 0;
+  const parts = [];
+  parts.push(evenStrengthRole);
+  if (ppPerGame >= 2.3) parts.push("PP1");
+  else if (ppPerGame >= 1.0) parts.push("PP2");
+  if (pkPerGame >= 2.0) parts.push("PK1");
+  else if (pkPerGame >= 0.8) parts.push("PK2");
+  return parts.join(" / ");
+}
+
+function getPlayerDescriptor(player) {
+  const p = player.percentiles || {};
+  const pos = (player.position || "").toUpperCase();
+  const evOff = p["EV Off"] ?? p["RAPM Off"] ?? player.rapm_off_pct ?? 0;
+  const evDef = p["EV Def"] ?? p["RAPM Def"] ?? player.rapm_def_pct ?? 0;
+  const shooting = p["Shooting"] ?? 0;
+  const pp = p["PP"] ?? 0;
+  const pk = p["PK"] ?? 0;
+  const war = p["WAR"] ?? p["Overall"] ?? player.overall_rating ?? 0;
+
+  if (pos === "D") {
+    if (evDef >= 85 && evOff >= 70) return "Strong two-way defenceman";
+    if (evOff >= 85) return "Offence-driving defenceman";
+    if (evDef >= 85) return "Matchup defender";
+    if (pp >= 80) return "Power-play defenceman";
+    return war >= 70 ? "Reliable everyday defenceman" : "Depth blue-line option";
+  }
+  if (pos === "G") {
+    if (war >= 90) return "High-end starter impact";
+    if (war >= 70) return "Reliable starting goalie";
+    return "Goaltending depth option";
+  }
+  if (evOff >= 92 && shooting >= 75) return "Elite offensive play driver";
+  if (evOff >= 88) return "Top-line scoring forward";
+  if (evDef >= 80 && evOff >= 65) return "Strong two-way forward";
+  if (pp >= 82) return "Power-play specialist";
+  if (pk >= 80) return "Trusted defensive forward";
+  if (shooting >= 85) return "High-end finishing threat";
+  return war >= 70 ? "Reliable top-nine contributor" : "Depth lineup contributor";
+}
+
+function getTopStrengths(player, limit = 3) {
+  const p = player.percentiles || {};
+  const metrics = [
+    { label: "Finishing", value: p["Shooting"] },
+    { label: "Offensive production", value: p["Pts/60"] },
+    { label: "Goal scoring", value: p["Goals/60"] },
+    { label: "Even strength offence", value: p["EV Off"] ?? p["RAPM Off"] ?? player.rapm_off_pct },
+    { label: "Even strength defence", value: p["EV Def"] ?? p["RAPM Def"] ?? player.rapm_def_pct },
+    { label: "Power play impact", value: p["PP"] },
+    { label: "Penalty impact", value: p["Penalties"] },
+    { label: "Penalty kill impact", value: p["PK"] },
+  ]
+    .filter((item) => item.value != null)
+    .sort((a, b) => (b.value || 0) - (a.value || 0))
+    .slice(0, limit);
+  return metrics;
+}
+
+function getTrendInsight(player) {
+  const warTrend = player.warTrend || [];
+  if (warTrend.length < 2) return null;
+  const latest = warTrend[warTrend.length - 1]?.war;
+  const previous = warTrend[warTrend.length - 2]?.war;
+  if (latest == null || previous == null) return null;
+  if (latest >= 95) return `Now ranks in the top 5% by WAR percentile in ${warTrend[warTrend.length - 1].season}.`;
+  if (latest - previous >= 12) return "Rapid improvement over the last two seasons.";
+  if (previous - latest >= 12) return "Impact has cooled from the previous season peak.";
+  if (latest >= 75) return "Stable top-line impact across recent seasons.";
+  return "Recent value has been relatively stable season to season.";
+}
+
 // ── Sub-components ───────────────────────────────────────────────────────────
 function PercentileBar({ label, value }) {
   const color = pctColor(value);
+  const displayLabel = metricDisplayLabel(label);
+  const info = metricDefinition(displayLabel);
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-        <span style={{ fontSize:11, color:"#8899aa", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.05em" }}>{label}</span>
+        <span style={{ fontSize:11, color:"#8899aa", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.05em" }}>
+          <InfoLabel label={displayLabel} info={info} accent={color} />
+        </span>
         <span style={{ fontSize:12, fontWeight:700, color, fontFamily:"'DM Mono',monospace" }}>{value}</span>
       </div>
       <div style={{ height:5, background:"#1a2535", borderRadius:3, overflow:"hidden" }}>
@@ -298,9 +485,12 @@ function TrendPanel({ title, subtitle, data, lines, accent }) {
 }
 
 function RankedBar({ label, value, color, valueColor, bg = "#1a2028" }) {
+  const info = metricDefinition(label.replace(/\*$/, ""));
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "148px 1fr 42px", gap: 10, alignItems: "center" }}>
-      <div style={{ fontSize: 17, color: "#8d9197", fontWeight: 600 }}>{label}</div>
+    <div style={{ display: "grid", gridTemplateColumns: "168px 1fr 42px", gap: 10, alignItems: "center" }}>
+      <div style={{ fontSize: 15, color: "#8d9197", fontWeight: 600 }}>
+        <InfoLabel label={label} info={info} accent={color} />
+      </div>
       <div style={{ height: 8, background: bg, borderRadius: 999, overflow: "hidden" }}>
         <div style={{ width: `${clamp(value || 0, 0, 100)}%`, height: "100%", background: color, borderRadius: 999 }} />
       </div>
@@ -372,12 +562,12 @@ function CollapsibleMetricSection({ title, isOpen, onToggle, children }) {
 function CompactPercentileSummary({ player }) {
   const percentiles = player.percentiles || {};
   const summaryStats = [
-    { label: "WAR", value: percentiles["WAR"] ?? percentiles["Overall"] ?? player.overall_rating },
-    { label: "EV Off", value: percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct },
-    { label: "EV Def", value: percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct },
-    { label: "PP", value: percentiles["PP"] },
-    { label: "Penalties", value: percentiles["Penalties"] },
-    { label: "Shooting WAR", value: percentiles["Shooting"] },
+    { label: "3-Year WAR", value: percentiles["WAR"] ?? percentiles["Overall"] ?? player.overall_rating },
+    { label: "Even Strength Offence", value: percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct },
+    { label: "Even Strength Defence", value: percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct },
+    { label: "Power Play Impact", value: percentiles["PP"] },
+    { label: "Penalty Impact", value: percentiles["Penalties"] },
+    { label: "Finishing Impact", value: percentiles["Shooting"] },
   ].filter((item) => item.value != null);
 
   if (!summaryStats.length) {
@@ -399,7 +589,7 @@ function CompactPercentileSummary({ player }) {
       <div style={{ display: "grid", gap: 10 }}>
         {summaryStats.map((item) => (
           <div key={item.label} style={{ display: "grid", gridTemplateColumns: "76px 1fr 40px", gap: 10, alignItems: "center" }}>
-            <div style={{ fontSize: 11, color: "#9aacbf", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            <div style={{ fontSize: 11, color: "#9aacbf", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.04em" }} title={metricDefinition(item.label) || undefined}>
               {item.label}
             </div>
             <div style={{ height: 8, background: "#172231", borderRadius: 999, overflow: "hidden" }}>
@@ -425,10 +615,13 @@ function CompactPercentileSummary({ player }) {
 
 function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
   const avgToi = parseAvgToi(player.toi);
-  const totalToiHours = avgToi && player.gp ? (avgToi * player.gp) / 60 : null;
-  const pts = player.pts ?? (((player.g || 0) + (player.a || 0)) || null);
   const percentiles = player.percentiles || {};
   const profilePct = percentiles["WAR"] ?? percentiles["Overall"] ?? player.overall_rating ?? null;
+  const tier = getPlayerTier(player);
+  const descriptor = getPlayerDescriptor(player);
+  const usage = getUsageSummary(player);
+  const strengths = getTopStrengths(player);
+  const trendInsight = getTrendInsight(player);
   const positionLabel =
     player.position === "D"
       ? "defencemen"
@@ -448,23 +641,23 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
     : null;
   const ixgPerGame = player.gp && player.ixg != null ? player.ixg / player.gp : null;
   const barsLeft = [
-    { label: "EV Offence", value: percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct, color: "#19c2ff" },
-    { label: "EV Defence", value: percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct, color: "#21b8ff" },
-    { label: "Power Play", value: percentiles["PP"], color: "#1bbcff" },
-    { label: "Penalty Kill", value: percentiles["PK"], color: "#1fb0e3" },
-    { label: "Shooting WAR", value: percentiles["Shooting"], color: "#2cc8ff" },
+    { label: "Even Strength Offence", value: percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct, color: "#19c2ff" },
+    { label: "Even Strength Defence", value: percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct, color: "#21b8ff" },
+    { label: "Power Play Impact", value: percentiles["PP"], color: "#1bbcff" },
+    { label: "Penalty Kill Impact", value: percentiles["PK"], color: "#1fb0e3" },
+    { label: "Finishing Impact", value: percentiles["Shooting"], color: "#2cc8ff" },
   ];
   const barsRight = [
     { label: "Goals", value: percentiles["Goals/60"], color: "#ffb51f" },
     { label: "Points", value: percentiles["Pts/60"], color: "#ffb11a" },
-    { label: "Penalties", value: percentiles["Penalties"], color: "#ffb31c" },
+    { label: "Penalty Impact", value: percentiles["Penalties"], color: "#ffb31c" },
     { label: "Competition*", value: percentiles["Competition"], color: "#f6a91c" },
     { label: "Teammates*", value: percentiles["Teammates"], color: "#ffb927" },
   ];
   const summaryBars = [
-    { label: "Offence", value: percentiles["Off Rating"] ?? player.off_rating, color: "linear-gradient(90deg,#24566d 0%,#16c6ff 100%)", textColor: "#19c2ff" },
-    { label: "Defence", value: percentiles["Def Rating"] ?? player.def_rating, color: "linear-gradient(90deg,#6f3840 0%,#ff4d57 100%)", textColor: "#ff4d57" },
-    { label: "Shooting WAR", value: percentiles["Shooting"], color: "linear-gradient(90deg,#6d5430 0%,#f1ab1c 100%)", textColor: "#ffb11a" },
+    { label: "Offence Impact", value: percentiles["Off Rating"] ?? player.off_rating, color: "linear-gradient(90deg,#24566d 0%,#16c6ff 100%)", textColor: "#19c2ff" },
+    { label: "Defensive Impact", value: percentiles["Def Rating"] ?? player.def_rating, color: "linear-gradient(90deg,#6f3840 0%,#ff4d57 100%)", textColor: "#ff4d57" },
+    { label: "Finishing Impact", value: percentiles["Shooting"], color: "linear-gradient(90deg,#6d5430 0%,#f1ab1c 100%)", textColor: "#ffb11a" },
   ];
   const warTrend = player.warTrend || [];
   const impactTrend = player.impactTrend || [];
@@ -505,6 +698,17 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
             <div style={{ fontSize: 16, color: "#8b9097", marginTop: 6 }}>
               {physicalBits.join(" • ")}
             </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+              <span style={{ fontSize: 11, color: "#04111d", background: accent, borderRadius: 999, padding: "5px 10px", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                {tier}
+              </span>
+              <span style={{ fontSize: 12, color: "#d7ecfb", fontWeight: 700 }}>
+                {descriptor}
+              </span>
+            </div>
+            <div style={{ marginTop: 8, fontSize: 12, color: "#88aac5", fontFamily: "'DM Mono',monospace" }}>
+              Usage: {usage}
+            </div>
           </div>
         </div>
 
@@ -517,16 +721,41 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
           background: `${accent}12`,
         }}>
           <div style={{ fontSize: 12, color: accent, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            WAR %ile
+            3-Year WAR
           </div>
           <div style={{ fontSize: 24, fontWeight: 900, color: accent, lineHeight: 1.1 }}>
-            {profilePct != null ? Math.round(profilePct) : "—"}
+            {player.war_total != null ? `${player.war_total > 0 ? "+" : ""}${player.war_total.toFixed(1)}` : "—"}
+          </div>
+          <div style={{ fontSize: 9, color: "#8bd9b1", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
+            {profilePct != null ? formatPercentileSuffix(profilePct) : "Value signal building"}
           </div>
         </div>
       </div>
 
       <div className="pc-percentile-top" style={{ display: "grid", gridTemplateColumns: "1fr 0.98fr", gap: 18, paddingTop: 22, paddingBottom: 22, borderBottom: "1px solid #1b222a" }}>
         <div style={{ display: "grid", gap: 16 }}>
+          <div style={{ display: "grid", gap: 10, padding: "14px 16px", borderRadius: 16, border: "1px solid #202a34", background: "#141a21" }}>
+            <div style={{ fontSize: 10, color: "#6d87a1", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              At a glance
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ color: "#eef8ff", fontSize: 17, fontWeight: 800 }}>
+                {descriptor}
+              </div>
+              <div style={{ color: "#90a8bc", fontSize: 13, lineHeight: 1.6 }}>
+                {profilePct != null ? `${formatPercentileSuffix(profilePct)} overall player value signal.` : "Player value signal still building."}
+              </div>
+            </div>
+            {strengths.length ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {strengths.map((item) => (
+                  <span key={item.label} style={{ fontSize: 11, color: "#dff2ff", borderRadius: 999, border: "1px solid #234663", background: "#0f1b28", padding: "6px 10px" }}>
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <TrendPanel
             title="Trend Charts"
             subtitle="WAR Percentile Rank"
@@ -534,9 +763,14 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
             lines={[{ key: "war", label: "WAR", color: "#f1efe9" }]}
             accent={accent}
           />
+          {trendInsight ? (
+            <div style={{ marginTop: -4, color: "#89a5be", fontSize: 12, lineHeight: 1.6, fontFamily: "'DM Mono',monospace" }}>
+              {trendInsight}
+            </div>
+          ) : null}
           <TrendPanel
             title=" "
-            subtitle={<span>EV <span style={{ color: "#19c2ff" }}>Offence</span> vs <span style={{ color: "#ff4d57" }}>Defence</span></span>}
+            subtitle={<span>Even Strength <span style={{ color: "#19c2ff" }}>Offence</span> vs <span style={{ color: "#ff4d57" }}>Defence</span></span>}
             data={impactTrend}
             lines={[
               { key: "off", label: "EV Off", color: "#19c2ff" },
@@ -554,17 +788,19 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
           alignSelf: "start",
         }}>
           <div style={{ fontSize: 12, color: "#7a7f86", fontFamily: "'DM Mono',monospace", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 14 }}>
-            Contract
+            Usage & Contract
           </div>
           {[
-            { label: "Cap hit", value: player.contract_info?.cap_hit ? `${formatMoneyShort(player.contract_info.cap_hit)}${player.contract_info?.years_remaining ? ` × ${player.contract_info.years_remaining} yrs` : ""}` : "—" },
-            { label: "Market value", value: marketValue != null ? formatMoneyShort(marketValue) : "—" },
-            { label: "Surplus value", value: surplusValue != null ? formatSigned(surplusValue / 1_000_000, 1).replace("+", "+$").replace("-", "-$") + "M" : "—", color: surplusValue > 0 ? "#32e39a" : "#f1efe9" },
-            { label: "TOI role", value: roleLabel(player) },
-            { label: "TOI / gm", value: avgToi != null ? `${avgToi.toFixed(1)} min` : "—" },
-            { label: "Expiry", value: player.contract_info?.expiry ? `${player.contract_info.expiry}` : "—" },
-          ].map((item) => (
-            <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: item.label === "Expiry" ? "none" : "1px solid #252c34" }}>
+            { label: "Usage", value: usage },
+            { label: "TOI", value: avgToi != null ? `${avgToi.toFixed(1)} minutes per game` : null },
+            { label: "PP TOI", value: player.gp && player.toi_pp ? `${fmtMinSec(player.toi_pp / player.gp)} per game` : null },
+            { label: "PK TOI", value: player.gp && player.toi_pk ? `${fmtMinSec(player.toi_pk / player.gp)} per game` : null },
+            { label: "Cap hit", value: player.contract_info?.cap_hit ? `${formatMoneyShort(player.contract_info.cap_hit)}${player.contract_info?.years_remaining ? ` × ${player.contract_info.years_remaining} yrs` : ""}` : null },
+            { label: "Market value", value: marketValue != null ? formatMoneyShort(marketValue) : null },
+            { label: "Surplus value", value: surplusValue != null ? formatSigned(surplusValue / 1_000_000, 1).replace("+", "+$").replace("-", "-$") + "M" : null, color: surplusValue > 0 ? "#32e39a" : "#f1efe9" },
+            { label: "Expiry", value: player.contract_info?.expiry ? `${player.contract_info.expiry}` : null },
+          ].filter((item) => item.value != null).map((item, index, arr) => (
+            <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: index === arr.length - 1 ? "none" : "1px solid #252c34" }}>
               <span style={{ fontSize: 15, color: "#8b9097" }}>{item.label}</span>
               <span style={{ fontSize: 15, color: item.color || "#f1efe9", fontWeight: 700, textAlign: "right" }}>{item.value}</span>
             </div>
@@ -576,6 +812,18 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
         <div style={{ fontSize: 12, color: "#7a7f86", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 16 }}>
           Percentile Ranks — Among All {positionLabel}
         </div>
+        {strengths.length ? (
+          <div style={{ marginBottom: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: "#6d87a1", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Top strengths:
+            </span>
+            {strengths.map((item) => (
+              <span key={item.label} style={{ fontSize: 11, color: "#eff8ff", borderRadius: 999, border: "1px solid #254766", background: "#0e1722", padding: "5px 10px" }}>
+                {item.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
         <div className="pc-percentile-ranks" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
           <div style={{ display: "grid", gap: 12 }}>
             {barsLeft.map((item) => <RankedBar key={item.label} {...item} valueColor="#f1efe9" />)}
@@ -588,13 +836,16 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
           * `Competition` and `Teammates` are still first-pass deployment context metrics and are less stable than WAR or EV impact.
         </div>
         <div style={{ fontSize: 11, color: "#727880", marginTop: 8, fontFamily: "'DM Mono',monospace" }}>
-          Stable right now: WAR3, EV Offence, Goals, Points, ixG, GSAx. `Shooting WAR` reflects finishing impact relative to expected results, not raw scoring talent alone.
+          Stable right now: 3-Year WAR, Even Strength Offence, Goals, Points, ixG, GSAx. Finishing impact reflects results relative to expected scoring, not raw scoring talent alone.
         </div>
       </div>
 
       <div style={{ paddingTop: 20, paddingBottom: 20, borderBottom: "1px solid #1b222a" }}>
         <div style={{ fontSize: 12, color: "#7a7f86", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 16 }}>
-          Offence vs Defence vs Shooting WAR
+          Offence vs Defence vs Finishing Impact
+        </div>
+        <div style={{ fontSize: 11, color: "#727880", marginBottom: 12, fontFamily: "'DM Mono',monospace" }}>
+          League average is roughly the 50th percentile. Higher bars show which dimension is driving this player&apos;s value most.
         </div>
         <div style={{ display: "grid", gap: 14 }}>
           {summaryBars.map((bar) => (
@@ -613,34 +864,37 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
 
       <div style={{ paddingTop: 20, paddingBottom: 20, borderBottom: "1px solid #1b222a" }}>
         <div style={{ fontSize: 12, color: "#7a7f86", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 16 }}>
-          Detailed Percentile Radar
+          Radar Profile
+        </div>
+        <div style={{ fontSize: 11, color: "#727880", marginBottom: 12, fontFamily: "'DM Mono',monospace" }}>
+          A secondary multi-metric snapshot for power users. The percentile bars above are the clearest quick read.
         </div>
         <RadarViz percentiles={percentiles} color={accent} detailed />
       </div>
 
       <div className="pc-percentile-tiles" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, paddingTop: 20 }}>
         <SummaryMetricTile
-          label="Offensive ±"
+          label="Offence Impact"
           value={formatSigned(player.rapm_off, 2)}
           subtitle={`${Math.round(percentiles["RAPM Off"] ?? player.rapm_off_pct ?? 0)}th %ile`}
           color="#19c2ff"
         />
         <SummaryMetricTile
-          label="Defensive ±*"
+          label="Defence Impact*"
           value={formatSigned(player.rapm_def, 2)}
           subtitle={`provisional | ${Math.round(percentiles["RAPM Def"] ?? player.rapm_def_pct ?? 0)}th %ile`}
           color="#8e9398"
         />
         <SummaryMetricTile
-          label="xGoals / gm"
+          label="xG per Game"
           value={ixgPerGame != null ? ixgPerGame.toFixed(2) : "—"}
           subtitle={`${Math.round(percentiles["ixG/60"] ?? 0)}th %ile`}
           color="#ffb11a"
         />
         <SummaryMetricTile
-          label="WAR3"
+          label="3-Year WAR"
           value={player.war_total != null ? player.war_total.toFixed(2) : "—"}
-          subtitle={`${profilePct != null ? Math.round(profilePct) : "—"}th %ile`}
+          subtitle={profilePct != null ? formatPercentileSuffix(profilePct) : "—"}
           color="#32e39a"
         />
       </div>
@@ -932,6 +1186,14 @@ function PlayerCard({ player }) {
   const pts = player.pts ?? 0;
   const gp = player.gp ?? 0;
   const ptsPer82 = gp > 0 ? Math.round((pts / gp) * 82) : 0;
+  const goalsPer82 = gp > 0 && player.g != null ? Math.round((player.g / gp) * 82) : 0;
+  const ixgPerGameOverview = gp > 0 && player.ixg != null ? player.ixg / gp : null;
+  const ptsPer60 = player.toi && gp > 0 && pts > 0 ? pts / ((parseAvgToi(player.toi) || 0) * gp / 60) : null;
+  const tier = getPlayerTier(player);
+  const descriptor = getPlayerDescriptor(player);
+  const usage = getUsageSummary(player);
+  const strengths = getTopStrengths(player);
+  const trendInsight = getTrendInsight(player);
   const tabs = isGoalie ? ["goalie stats"] : ["overview", "percentile card", "on-ice", "war / rapm", "ratings", "career"];
   const cardWidth = !isGoalie && tab === "percentile card" ? 1080 : 420;
 
@@ -996,11 +1258,26 @@ function PlayerCard({ player }) {
             </div>
             <div style={{ fontSize:26, fontWeight:800, color:"#e8f4ff", lineHeight:1, letterSpacing:"-0.5px" }}>{firstName}</div>
             <div style={{ fontSize:30, fontWeight:900, color:"white", lineHeight:1, letterSpacing:"-1px", textTransform:"uppercase" }}>{lastName}</div>
+            {!isGoalie && (
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginTop:8 }}>
+                <span style={{ fontSize:10, color:"#04111d", background:accent, borderRadius:999, padding:"4px 9px", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>
+                  {tier}
+                </span>
+                <span style={{ fontSize:12, color:"#dcefff", fontWeight:700 }}>
+                  {descriptor}
+                </span>
+              </div>
+            )}
             {/* Team row with logo */}
             <div style={{ marginTop:6, display:"flex", alignItems:"center", gap:6 }}>
               <TeamLogo abbr={teamAbbr} size={20} />
               <span style={{ fontSize:11, color:"#4a6a88", fontFamily:"'DM Mono',monospace" }}>{teamFull}</span>
             </div>
+            {!isGoalie && (
+              <div style={{ marginTop:6, fontSize:10, color:"#7fa0bc", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                Usage: {usage}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1013,8 +1290,8 @@ function PlayerCard({ player }) {
             </>
           ) : (
             <>
-              <div style={{ fontSize:20, fontWeight:900, color:"#00e5a0", lineHeight:1 }}>{player.war_total != null ? player.war_total.toFixed(1) : "—"}</div>
-              <div style={{ fontSize:9, color:"#00e5a088", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em" }}>3Y WAR</div>
+              <div style={{ fontSize:20, fontWeight:900, color:"#00e5a0", lineHeight:1 }}>{player.war_total != null ? `${player.war_total > 0 ? "+" : ""}${player.war_total.toFixed(1)}` : "—"}</div>
+              <div style={{ fontSize:9, color:"#00e5a088", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em" }}>3-Year WAR</div>
             </>
           )}
         </div>
@@ -1035,33 +1312,51 @@ function PlayerCard({ player }) {
 
         {!isGoalie && tab === "overview" && (
           <div>
+            <div style={{ marginBottom: 14, padding: "12px 14px", background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 12 }}>
+              <div style={{ fontSize: 10, color: "#5a7a99", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+                At a glance
+              </div>
+              <div style={{ fontSize: 16, color: "#e8f4ff", fontWeight: 800, marginBottom: 6 }}>
+                {descriptor}
+              </div>
+              <div style={{ fontSize: 11, color: "#88a6c0", lineHeight: 1.6, fontFamily: "'DM Mono',monospace" }}>
+                {trendInsight || `${tier} profile with strengths in ${strengths.map((item) => item.label.toLowerCase()).slice(0, 2).join(" and ") || "overall impact"}.`}
+              </div>
+            </div>
             <div className="pc-stat-grid-4" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:16 }}>
               <StatBox label="GP" value={player.gp} />
               <StatBox label="G" value={player.g} />
               <StatBox label="A" value={player.a} />
               <StatBox label="PTS" value={player.pts} highlight />
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:20 }}>
-              <StatBox label="PPP" value={player.ppp} />
-              <StatBox label="+/-" value={player.plus_minus != null ? `${player.plus_minus > 0 ? "+" : ""}${player.plus_minus}` : null} />
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:20 }}>
               <StatBox label="Pts/82" value={ptsPer82 || null} highlight />
+              <StatBox label="Goals/82" value={goalsPer82 || null} />
+              <StatBox label="Pts/60" value={ptsPer60 != null ? ptsPer60.toFixed(2) : null} />
+              <StatBox label="xG/Game" value={ixgPerGameOverview != null ? ixgPerGameOverview.toFixed(2) : null} />
             </div>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
-              <span style={{ fontSize:11, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Avg TOI</span>
-              <span style={{ fontSize:20, fontWeight:800, color:accent }}>{player.toi || "—"}</span>
+            <div style={{ display:"grid", gap:8, marginBottom:12 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+                <span style={{ fontSize:11, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Usage</span>
+                <span style={{ fontSize:14, fontWeight:800, color:accent, textAlign:"right" }}>{usage}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+                <span style={{ fontSize:11, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Average TOI</span>
+                <span style={{ fontSize:20, fontWeight:800, color:accent }}>{player.toi || "—"}</span>
+              </div>
             </div>
             {((player.toi_pp > 0) || (player.toi_pk > 0)) && (player.gp > 0) && (
               <div style={{ display:"grid", gridTemplateColumns:(player.toi_pp > 0 && player.toi_pk > 0) ? "1fr 1fr" : "1fr", gap:8, marginBottom:player.contract_info?.cap_hit ? 8 : 16 }}>
                 {player.toi_pp > 0 && (
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
                     <span style={{ fontSize:10, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>PP TOI</span>
-                    <span style={{ fontSize:14, fontWeight:800, color:"#38bdf8", fontFamily:"'Barlow Condensed',sans-serif" }}>{fmtMinSec(player.toi_pp / player.gp)}/gm</span>
+                    <span style={{ fontSize:14, fontWeight:800, color:"#38bdf8", fontFamily:"'Barlow Condensed',sans-serif" }}>{fmtMinSec(player.toi_pp / player.gp)} per game</span>
                   </div>
                 )}
                 {player.toi_pk > 0 && (
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
                     <span style={{ fontSize:10, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>PK TOI</span>
-                    <span style={{ fontSize:14, fontWeight:800, color:"#818cf8", fontFamily:"'Barlow Condensed',sans-serif" }}>{fmtMinSec(player.toi_pk / player.gp)}/gm</span>
+                    <span style={{ fontSize:14, fontWeight:800, color:"#818cf8", fontFamily:"'Barlow Condensed',sans-serif" }}>{fmtMinSec(player.toi_pk / player.gp)} per game</span>
                   </div>
                 )}
               </div>
@@ -1077,6 +1372,18 @@ function PlayerCard({ player }) {
                     </span>
                   )}
                 </div>
+              </div>
+            )}
+            {strengths.length > 0 && (
+              <div style={{ marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 10, color: "#5a7a99", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Strengths
+                </span>
+                {strengths.map((item) => (
+                  <span key={item.label} style={{ fontSize: 11, color: "#e8f4ff", borderRadius: 999, border: "1px solid #234663", background: "#0e1722", padding: "5px 10px" }}>
+                    {item.label}
+                  </span>
+                ))}
               </div>
             )}
             <div style={{ marginBottom:4 }}>
