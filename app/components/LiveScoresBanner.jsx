@@ -19,6 +19,20 @@ function periodInfo(game) {
   const desc = game.periodDescriptor ?? {};
   const clock = game.clock ?? {};
   const state = game.gameState ?? "";
+  const startTime = game.startTimeUTC ? new Date(game.startTimeUTC) : null;
+
+  if (["PRE", "FUT"].includes(state)) {
+    const label = startTime
+      ? new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/Toronto",
+          hour: "numeric",
+          minute: "2-digit",
+          timeZoneName: "short",
+        }).format(startTime)
+      : "UPCOMING";
+
+    return { label, tone: "upcoming" };
+  }
 
   if (["OFF", "FINAL"].includes(state)) {
     if (desc.periodType === "SO" || (desc.number ?? 0) > 4) return { label: "FINAL/SO", tone: "final" };
@@ -35,7 +49,7 @@ function periodInfo(game) {
 }
 
 function isRelevantGame(game) {
-  return ["LIVE", "CRIT", "OFF", "FINAL"].includes(game.gameState ?? "");
+  return ["LIVE", "CRIT", "OFF", "FINAL", "PRE", "FUT"].includes(game.gameState ?? "");
 }
 
 function sortGames(games) {
@@ -44,6 +58,8 @@ function sortGames(games) {
     CRIT: 0,
     OFF: 1,
     FINAL: 1,
+    PRE: 2,
+    FUT: 2,
   };
 
   return [...games].sort((a, b) => {
@@ -90,7 +106,7 @@ function ScoreCard({ game, dateString }) {
         style={{
           fontSize: 12,
           fontWeight: 800,
-          color: status.tone === "final" ? "#35e3a0" : "#d8e8f7",
+          color: status.tone === "final" ? "#35e3a0" : status.tone === "live" ? "#d8e8f7" : "#8fb5da",
           fontFamily: "'DM Mono',monospace",
           letterSpacing: "0.05em",
           textTransform: "uppercase",
@@ -126,7 +142,10 @@ async function fetchScoreboardForDate(dateString) {
     const res = await fetch(`https://api-web.nhle.com/v1/schedule/${dateString}`, { cache: "no-store" });
     if (!res.ok) return [];
     const data = await res.json();
-    const games = data.games || (data.gameWeek || []).flatMap((day) => day.games || []);
+    const games =
+      data.games ||
+      data.gameWeek?.find((day) => day.date === dateString)?.games ||
+      [];
     return sortGames((games || []).filter(isRelevantGame));
   } catch {
     return [];
@@ -159,10 +178,26 @@ export default function LiveScoresBanner() {
     () => games.filter((game) => ["LIVE", "CRIT"].includes(game.gameState ?? "")).length,
     [games]
   );
+  const finalCount = useMemo(
+    () => games.filter((game) => ["OFF", "FINAL"].includes(game.gameState ?? "")).length,
+    [games]
+  );
+  const upcomingCount = useMemo(
+    () => games.filter((game) => ["PRE", "FUT"].includes(game.gameState ?? "")).length,
+    [games]
+  );
 
   if (!dateString || games.length === 0) return null;
 
   const dateBadge = formatDateBadge(dateString);
+  const statusLabel =
+    liveCount > 0
+      ? `${liveCount} live`
+      : finalCount > 0 && upcomingCount === 0
+        ? `${finalCount} final`
+        : upcomingCount > 0 && finalCount === 0
+          ? `${upcomingCount} upcoming`
+          : `${games.length} games`;
 
   return (
     <>
@@ -216,7 +251,7 @@ export default function LiveScoresBanner() {
               />
             )}
             <span style={{ fontSize: 10, color: "#7f9bb7", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-              {liveCount > 0 ? `${liveCount} live` : `${games.length} final`}
+              {statusLabel}
             </span>
           </div>
         </div>
