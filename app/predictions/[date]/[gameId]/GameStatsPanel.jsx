@@ -92,6 +92,12 @@ function parsePBP(data, homeTeamId, awayTeamId) {
       isHome = teamId === homeTeamId;
     }
 
+    // Normalize coordinates so home shots are always at positive x, away at negative x
+    let plotX = xCoord ?? 0;
+    let plotY = yCoord ?? 0;
+    if (isHome && plotX < 0) { plotX = -plotX; plotY = -plotY; }
+    else if (!isHome && plotX > 0) { plotX = -plotX; plotY = -plotY; }
+
     const xg = computeXG(xCoord, yCoord, shotType);
     const totalSec = periodSeconds(periodNum, timeInPeriod);
 
@@ -101,7 +107,7 @@ function parsePBP(data, homeTeamId, awayTeamId) {
     }
 
     shotEvents.push({
-      x: xCoord, y: yCoord, xg, type: typeKey, isHome, period: periodNum, timeInPeriod,
+      x: xCoord, y: yCoord, plotX, plotY, xg, type: typeKey, isHome, period: periodNum, timeInPeriod,
       shooterName: nameMap[String(det.shootingPlayerId ?? det.scoringPlayerId ?? "")] ?? null,
     });
 
@@ -253,9 +259,11 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
           <text x={goalLineRight + 24} y={15} textAnchor="middle" fill={homeColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
           {/* Shot dots */}
           {shotEvents.map((ev, i) => {
-            if (ev.x == null || ev.y == null) return null;
-            const cx = toSvgX(ev.x);
-            const cy = toSvgY(ev.y);
+            const px = ev.plotX ?? ev.x;
+            const py = ev.plotY ?? ev.y;
+            if (px == null || py == null) return null;
+            const cx = toSvgX(px);
+            const cy = toSvgY(py);
             const baseR = Math.min(ev.xg * 10 + 5, 14);
             const isGoal = ev.type === "goal";
             const isMissed = ev.type === "missed-shot";
@@ -329,7 +337,7 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
               fontWeight: 900, fontSize: 11, textTransform: "uppercase",
               letterSpacing: "0.08em", marginBottom: 6,
             }}>
-              {hoveredShot.isHome ? homeAbbr : awayAbbr} · {hoveredShot.type === "goal" ? "⚽ GOAL" : hoveredShot.type === "shot-on-goal" ? "SHOT ON GOAL" : hoveredShot.type === "missed-shot" ? "MISSED" : "BLOCKED"}
+              {hoveredShot.isHome ? homeAbbr : awayAbbr} · {hoveredShot.type === "goal" ? "GOAL" : hoveredShot.type === "shot-on-goal" ? "SHOT ON GOAL" : hoveredShot.type === "missed-shot" ? "MISSED" : "BLOCKED"}
             </div>
             {hoveredShot.shooterName && (
               <div style={{ color: "#eff8ff", fontWeight: 700, marginBottom: 4 }}>
@@ -389,20 +397,25 @@ function DeservedToWinMeter({ homeDeserve, awayDeserve, homeAbbr, awayAbbr, home
   const needleX = cx + R * Math.cos(needleAngleRad);
   const needleY = cy - R * Math.sin(needleAngleRad);
 
-  function arcPath(startDeg, endDeg, radius) {
-    const startRad = (startDeg * Math.PI) / 180;
-    const endRad = (endDeg * Math.PI) / 180;
-    const x1 = cx + radius * Math.cos(startRad);
-    const y1 = cy - radius * Math.sin(startRad);
-    const x2 = cx + radius * Math.cos(endRad);
-    const y2 = cy - radius * Math.sin(endRad);
-    const largeArc = Math.abs(endDeg - startDeg) > 180 ? 1 : 0;
-    return `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 0 ${x2} ${y2}`;
+  function pt(deg) {
+    const rad = (deg * Math.PI) / 180;
+    return [cx + R * Math.cos(rad), cy - R * Math.sin(rad)];
+  }
+  function bgArc() {
+    // Two 90° segments to avoid the degenerate 180° case
+    const [lx, ly] = pt(180), [tx, ty] = pt(90), [rx, ry] = pt(0);
+    return `M ${lx.toFixed(2)} ${ly.toFixed(2)} A ${R} ${R} 0 0 1 ${tx.toFixed(2)} ${ty.toFixed(2)} A ${R} ${R} 0 0 1 ${rx.toFixed(2)} ${ry.toFixed(2)}`;
+  }
+  function coloredArc(startDeg, endDeg) {
+    if (Math.abs(startDeg - endDeg) < 0.5) return "";
+    const [x1, y1] = pt(startDeg), [x2, y2] = pt(endDeg);
+    const largeArc = Math.abs(startDeg - endDeg) > 180 ? 1 : 0;
+    return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
   }
 
-  const bgArcPath = arcPath(180, 0, R);
-  const awayArcPath = needleAngleDeg < 180 ? arcPath(180, needleAngleDeg, R) : null;
-  const homeArcPath = needleAngleDeg > 0 ? arcPath(needleAngleDeg, 0, R) : null;
+  const bgArcPath = bgArc();
+  const awayArcPath = needleAngleDeg < 179.5 ? coloredArc(180, needleAngleDeg) : null;
+  const homeArcPath = needleAngleDeg > 0.5 ? coloredArc(needleAngleDeg, 0) : null;
 
   const leader = homeDeserve >= awayDeserve ? homeAbbr : awayAbbr;
   const leaderPct = Math.max(homeDeserve, awayDeserve);
@@ -411,7 +424,7 @@ function DeservedToWinMeter({ homeDeserve, awayDeserve, homeAbbr, awayAbbr, home
     <div style={{ display: "grid", gap: 8 }}>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: W, height: "auto", display: "block", margin: "0 auto", overflow: "visible" }}>
         {/* Background arc */}
-        <path d={bgArcPath} fill="none" stroke="#1a2d40" strokeWidth={18} strokeLinecap="round" />
+        <path d={bgArcPath} fill="none" stroke="#1a2d40" strokeWidth={18} strokeLinecap="butt" />
         {/* Away colored arc */}
         {awayArcPath && (
           <path d={awayArcPath} fill="none" stroke={awayColor} strokeWidth={18} strokeLinecap="round" opacity={0.85} />
