@@ -240,80 +240,6 @@ function PercentileTile({ label, value, subtitle, big = false }) {
   );
 }
 
-function HomeSignalTile({ label, value, subvalue, tone = "blue" }) {
-  const tones = {
-    blue: {
-      border: "#1f3a57",
-      bg: "linear-gradient(180deg, rgba(15,27,42,0.96) 0%, rgba(10,17,27,0.92) 100%)",
-      value: "#eef8ff",
-      glow: "rgba(47,180,255,0.22)",
-    },
-    teal: {
-      border: "#1d4d4a",
-      bg: "linear-gradient(180deg, rgba(12,30,31,0.96) 0%, rgba(9,18,22,0.92) 100%)",
-      value: "#dffff3",
-      glow: "rgba(0,229,160,0.18)",
-    },
-    amber: {
-      border: "#584722",
-      bg: "linear-gradient(180deg, rgba(38,28,12,0.96) 0%, rgba(20,16,9,0.92) 100%)",
-      value: "#fff4d6",
-      glow: "rgba(240,192,64,0.14)",
-    },
-  };
-  const palette = tones[tone] || tones.blue;
-
-  return (
-    <div
-      style={{
-        padding: "16px 16px 14px",
-        borderRadius: 16,
-        border: `1px solid ${palette.border}`,
-        background: palette.bg,
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 40px ${palette.glow}`,
-      }}
-    >
-      <div style={{ fontSize: 10, color: "#5e7b98", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 10 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 28, fontWeight: 900, color: palette.value, lineHeight: 1 }}>
-        {value}
-      </div>
-      <div style={{ fontSize: 12, color: "#8aa4bf", marginTop: 8 }}>
-        {subvalue}
-      </div>
-    </div>
-  );
-}
-
-function HomeDestinationCard({ href, eyebrow, title, description, accent }) {
-  return (
-    <Link
-      href={href}
-      style={{
-        display: "block",
-        padding: "18px 18px 16px",
-        borderRadius: 18,
-        border: `1px solid ${accent}55`,
-        background: `linear-gradient(180deg, ${accent}18 0%, rgba(11,18,28,0.96) 48%, rgba(8,13,20,0.98) 100%)`,
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 20px 40px rgba(0,0,0,0.24)`,
-        textDecoration: "none",
-        minHeight: 138,
-      }}
-    >
-      <div style={{ fontSize: 10, color: accent, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 10 }}>
-        {eyebrow}
-      </div>
-      <div style={{ fontSize: 24, fontWeight: 900, color: "#eef8ff", lineHeight: 1.02, marginBottom: 10 }}>
-        {title}
-      </div>
-      <div style={{ fontSize: 13, color: "#7f97b0", lineHeight: 1.45 }}>
-        {description}
-      </div>
-    </Link>
-  );
-}
-
 function TrendPanel({ title, subtitle, data, lines, accent }) {
   const valid = (data || []).filter((row) => lines.some((line) => row[line.key] != null));
   if (valid.length < 2) return null;
@@ -2003,15 +1929,6 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
   }, [searchResults, filterPos, filterTeam, filterRatingMin, filterWarMin]);
 
   const visiblePlayers = browseMode === "search" ? filteredSearchResults : teamFilteredPlayers;
-  const totalTeams = useMemo(
-    () => new Set(allPlayers.map((player) => (player.team || "").toUpperCase()).filter(Boolean)).size,
-    [allPlayers]
-  );
-  const topLeader = defaultSearchPlayers[0] || null;
-  const elitePlayers = useMemo(
-    () => allPlayers.filter((player) => (player.war_total ?? -99) >= 2).length,
-    [allPlayers]
-  );
   const searchHighlights = useMemo(() => defaultSearchPlayers.slice(0, 4), [defaultSearchPlayers]);
 
   return (
@@ -2031,10 +1948,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
         @media (max-width:639px) {
           .app-outer { padding:16px 10px 40px !important; }
           .app-h1 { font-size:28px !important; letter-spacing:-0.5px !important; }
-          .app-hero-shell { grid-template-columns: 1fr !important; padding: 18px !important; gap: 18px !important; }
-          .app-destination-grid { grid-template-columns: 1fr !important; }
           .app-search-shell { grid-template-columns: 1fr !important; }
-          .app-signal-grid { grid-template-columns: 1fr 1fr !important; }
           .app-mode-btn { padding:8px 10px !important; font-size:11px !important; }
           .pc-card { width:calc(100vw - 24px) !important; }
           .pc-header-row { flex-direction:column !important; align-items:center !important; gap:8px !important; }
@@ -2052,106 +1966,11 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
           .pc-modal-wrapper { position:fixed !important; inset:0 !important; z-index:200 !important; display:flex !important; flex-direction:column !important; align-items:center !important; padding:70px 12px 24px !important; overflow-y:auto !important; background:transparent !important; }
         }
         @media (max-width:980px) {
-          .app-hero-shell { grid-template-columns: 1fr !important; }
           .app-search-shell { grid-template-columns: 1fr !important; }
         }
       `}</style>
 
       <div className="app-outer" style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)", display:"flex", flexDirection:"column", alignItems:"center", padding:"40px 20px", fontFamily:"'Barlow Condensed',sans-serif" }}>
-
-        {/* Header */}
-        <div className="app-hero-shell" style={{
-          width: "100%",
-          maxWidth: 1180,
-          marginBottom: 24,
-          display: "grid",
-          gridTemplateColumns: "1.2fr 0.8fr",
-          gap: 22,
-          padding: 24,
-          borderRadius: 26,
-          border: "1px solid #17304a",
-          background: "linear-gradient(135deg, rgba(16,34,53,0.94) 0%, rgba(10,17,27,0.96) 44%, rgba(7,11,17,0.98) 100%)",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 28px 90px rgba(0,0,0,0.36)",
-          position: "relative",
-          overflow: "hidden",
-        }}>
-          <div style={{
-            position: "absolute",
-            inset: "auto -8% -55% auto",
-            width: 380,
-            height: 380,
-            borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(47,180,255,0.18) 0%, rgba(47,180,255,0.06) 36%, transparent 70%)",
-            pointerEvents: "none",
-          }} />
-          <div style={{ position: "relative", zIndex: 1 }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 999, border: "1px solid #234869", background: "rgba(10,18,29,0.7)", marginBottom: 16 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#2fb4ff", boxShadow: "0 0 14px rgba(47,180,255,0.75)" }} />
-              <span style={{ fontSize: 10, color: "#91cfff", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: "'DM Mono',monospace" }}>
-                NHL Analytics Command Center
-              </span>
-            </div>
-            <h1 className="app-h1" style={{ fontSize: 54, fontWeight: 900, color: "#f3f9ff", letterSpacing: "-1.6px", lineHeight: 0.96, maxWidth: 620 }}>
-              Player cards with real model depth, not just a stat dump.
-            </h1>
-            <div style={{ fontSize: 15, color: "#8ca7c1", lineHeight: 1.65, marginTop: 16, maxWidth: 620 }}>
-              Search any player, compare impact across seasons, and move seamlessly into predictions, playoff odds, lottery simulations, and roster building from one place.
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
-              {["3Y weighted WAR", "RAPM + On-Ice", "Season trends", "Percentile cards"].map((tag) => (
-                <div
-                  key={tag}
-                  style={{
-                    padding: "8px 11px",
-                    borderRadius: 999,
-                    border: "1px solid #1d3854",
-                    background: "rgba(9,17,26,0.72)",
-                    color: "#9db8d2",
-                    fontSize: 11,
-                    fontFamily: "'DM Mono',monospace",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                  }}
-                >
-                  {tag}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="app-signal-grid" style={{ position: "relative", zIndex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignSelf: "start" }}>
-            <HomeSignalTile
-              label="Player Universe"
-              value={allPlayers.length.toLocaleString()}
-              subvalue="Current skaters and goalies loaded"
-              tone="blue"
-            />
-            <HomeSignalTile
-              label="Teams Covered"
-              value={totalTeams}
-              subvalue="League-wide roster and card coverage"
-              tone="teal"
-            />
-            <HomeSignalTile
-              label="WAR Leaders"
-              value={elitePlayers}
-              subvalue="Players at 2.0+ current-season WAR"
-              tone="amber"
-            />
-            <HomeSignalTile
-              label="Current Top Card"
-              value={topLeader?.full_name || topLeader?.name || "—"}
-              subvalue={topLeader?.war_total != null ? `${topLeader.team} · ${Number(topLeader.war_total).toFixed(2)} WAR` : "Top current-season WAR leader"}
-              tone="blue"
-            />
-          </div>
-        </div>
-
-        <div className="app-destination-grid" style={{ width: "100%", maxWidth: 1180, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14, marginBottom: 24 }}>
-          <HomeDestinationCard href="/predictions" eyebrow="Game Models" title="Predictions" description="Tonight’s slate, fair odds, goalie context, and detailed matchup pages." accent="#2fb4ff" />
-          <HomeDestinationCard href="/playoff-odds" eyebrow="Simulation Hub" title="Playoff Odds" description="Division, conference, and round-by-round probabilities with scenario-driven standings context." accent="#00e5a0" />
-          <HomeDestinationCard href="/compare" eyebrow="Decision Tools" title="Compare + Build" description="Jump from player cards into comparisons, roster building, and draft-lottery scenarios." accent="#f0c040" />
-        </div>
 
         {/* Mode toggle */}
         <div style={{ display:"flex", gap:0, marginBottom:20, background:"#0d1825", border:"1px solid #1e2d40", borderRadius:10, overflow:"hidden" }}>

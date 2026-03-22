@@ -1,97 +1,150 @@
 "use client";
-import { useState, useEffect } from "react";
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+
+function formatTorontoDate(date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(date);
+}
+
+function formatDateBadge(dateString) {
+  const date = new Date(`${dateString}T12:00:00-04:00`);
+  return {
+    month: new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "America/Toronto" }).format(date).toUpperCase(),
+    day: new Intl.DateTimeFormat("en-US", { day: "2-digit", timeZone: "America/Toronto" }).format(date),
+  };
+}
 
 function periodInfo(game) {
   const desc = game.periodDescriptor ?? {};
   const clock = game.clock ?? {};
-  if (clock.inIntermission) return { label: "INT", color: "#f0c040" };
+  const state = game.gameState ?? "";
+
+  if (["OFF", "FINAL"].includes(state)) {
+    if (desc.periodType === "SO" || (desc.number ?? 0) > 4) return { label: "FINAL/SO", tone: "final" };
+    if (desc.periodType === "OT" || (desc.number ?? 0) === 4) return { label: "FINAL/OT", tone: "final" };
+    return { label: "FINAL", tone: "final" };
+  }
+
+  if (clock.inIntermission) return { label: "INT", tone: "live" };
   const n = desc.number ?? 1;
   const time = clock.timeRemaining ?? "";
-  if (desc.periodType === "OT" || n === 4) return { label: `OT ${time}`, color: "#eff8ff" };
-  if (desc.periodType === "SO" || n > 4) return { label: "SO", color: "#eff8ff" };
-  return { label: `P${n} ${time}`, color: "#eff8ff" };
+  if (desc.periodType === "OT" || n === 4) return { label: `OT ${time}`.trim(), tone: "live" };
+  if (desc.periodType === "SO" || n > 4) return { label: "SO", tone: "live" };
+  return { label: `P${n} ${time}`.trim(), tone: "live" };
 }
 
-function GameChip({ game, today }) {
+function isRelevantGame(game) {
+  return ["LIVE", "CRIT", "OFF", "FINAL"].includes(game.gameState ?? "");
+}
+
+function sortGames(games) {
+  const priority = {
+    LIVE: 0,
+    CRIT: 0,
+    OFF: 1,
+    FINAL: 1,
+  };
+
+  return [...games].sort((a, b) => {
+    const stateDiff = (priority[a.gameState] ?? 9) - (priority[b.gameState] ?? 9);
+    if (stateDiff !== 0) return stateDiff;
+    const startA = new Date(a.startTimeUTC ?? 0).getTime();
+    const startB = new Date(b.startTimeUTC ?? 0).getTime();
+    return startA - startB;
+  });
+}
+
+function winnerStyles(awayScore, homeScore) {
+  const tied = awayScore === homeScore;
+  return {
+    away: tied || awayScore < homeScore ? "#6e8094" : "#f5fbff",
+    home: tied || homeScore < awayScore ? "#6e8094" : "#f5fbff",
+  };
+}
+
+function ScoreCard({ game, dateString }) {
   const away = game.awayTeam ?? {};
   const home = game.homeTeam ?? {};
   const awayScore = away.score ?? 0;
   const homeScore = home.score ?? 0;
-  const tied = awayScore === homeScore;
-  const awayWin = awayScore > homeScore;
-  const period = periodInfo(game);
-  const href = `/predictions/${today}/${game.id}`;
+  const colors = winnerStyles(awayScore, homeScore);
+  const status = periodInfo(game);
+  const href = `/predictions/${dateString}/${game.id}`;
 
   return (
     <Link
       href={href}
       style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "4px 10px",
-        borderRadius: 999,
-        background: "#0d1926",
-        border: "1px solid #1e3048",
+        minWidth: 190,
+        padding: "10px 14px",
+        borderLeft: "1px solid #183149",
         textDecoration: "none",
+        display: "grid",
+        gap: 10,
         flexShrink: 0,
-        fontSize: 12,
-        fontFamily: "'DM Mono',monospace",
-        letterSpacing: "0.03em",
-        color: "#eff8ff",
-        transition: "border-color 0.15s ease",
+        background: "linear-gradient(180deg, rgba(12,21,32,0.98) 0%, rgba(10,17,27,0.96) 100%)",
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#2fb4ff")}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#1e3048")}
     >
-      <span style={{ color: tied || !awayWin ? "#4a6a88" : "#eff8ff" }}>
-        {away.abbrev ?? "—"}
-      </span>
-      <span style={{ color: tied || !awayWin ? "#4a6a88" : "#eff8ff", fontWeight: 800 }}>
-        {awayScore}
-      </span>
-      <span style={{ color: "#2e4a65" }}>–</span>
-      <span style={{ color: tied || awayWin ? "#4a6a88" : "#eff8ff", fontWeight: 800 }}>
-        {homeScore}
-      </span>
-      <span style={{ color: tied || awayWin ? "#4a6a88" : "#eff8ff" }}>
-        {home.abbrev ?? "—"}
-      </span>
-      <span style={{ color: "#2e4a65", margin: "0 1px" }}>·</span>
-      <span style={{ color: period.color, fontSize: 10, letterSpacing: "0.05em" }}>
-        {period.label}
-      </span>
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 800,
+          color: status.tone === "final" ? "#35e3a0" : "#d8e8f7",
+          fontFamily: "'DM Mono',monospace",
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+        }}
+      >
+        {status.label}
+      </div>
+      <div style={{ display: "grid", gap: 8 }}>
+        {[{ team: away, score: awayScore, color: colors.away }, { team: home, score: homeScore, color: colors.home }].map(({ team, score, color }) => (
+          <div key={team.abbrev} style={{ display: "grid", gridTemplateColumns: "28px 1fr auto", gap: 10, alignItems: "center" }}>
+            <img
+              src={`https://assets.nhle.com/logos/nhl/svg/${team.abbrev}_light.svg`}
+              alt={team.abbrev}
+              width={24}
+              height={24}
+              style={{ objectFit: "contain", opacity: color === "#6e8094" ? 0.55 : 1 }}
+            />
+            <div style={{ color, fontSize: 18, fontWeight: 800, lineHeight: 1, letterSpacing: "0.01em" }}>
+              {team.abbrev ?? "—"}
+            </div>
+            <div style={{ color, fontSize: 18, fontWeight: 900, lineHeight: 1 }}>
+              {score}
+            </div>
+          </div>
+        ))}
+      </div>
     </Link>
   );
 }
 
-async function fetchLiveGames() {
+async function fetchScoreboardForDate(dateString) {
   try {
-    const res = await fetch("https://api-web.nhle.com/v1/schedule/now", { cache: "no-store" });
+    const res = await fetch(`https://api-web.nhle.com/v1/schedule/${dateString}`, { cache: "no-store" });
     if (!res.ok) return [];
     const data = await res.json();
-    const games = data.gameWeek?.[0]?.games ?? [];
-    return games.filter((g) => ["LIVE", "CRIT"].includes(g.gameState));
+    const games = data.games || (data.gameWeek || []).flatMap((day) => day.games || []);
+    return sortGames((games || []).filter(isRelevantGame));
   } catch {
     return [];
   }
 }
 
 export default function LiveScoresBanner() {
-  const [liveGames, setLiveGames] = useState([]);
-  const [today, setToday] = useState("");
+  const [games, setGames] = useState([]);
+  const [dateString] = useState(() => formatTorontoDate(new Date()));
 
   useEffect(() => {
-    setToday(
-      new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date())
-    );
-
     let cancelled = false;
 
     async function refresh() {
-      const games = await fetchLiveGames();
-      if (!cancelled) setLiveGames(games);
+      const nextGames = await fetchScoreboardForDate(dateString);
+      if (!cancelled) {
+        setGames(nextGames);
+      }
     }
 
     refresh();
@@ -100,16 +153,23 @@ export default function LiveScoresBanner() {
       cancelled = true;
       clearInterval(id);
     };
-  }, []);
+  }, [dateString]);
 
-  if (liveGames.length === 0) return null;
+  const liveCount = useMemo(
+    () => games.filter((game) => ["LIVE", "CRIT"].includes(game.gameState ?? "")).length,
+    [games]
+  );
+
+  if (!dateString || games.length === 0) return null;
+
+  const dateBadge = formatDateBadge(dateString);
 
   return (
     <>
       <style>{`
         @keyframes livePulse {
           0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
+          50% { opacity: 0.35; }
         }
       `}</style>
       <div
@@ -118,47 +178,51 @@ export default function LiveScoresBanner() {
           top: 44,
           zIndex: 99,
           width: "100%",
-          background: "#060d16",
-          borderBottom: "1px solid #1a2d40",
-          padding: "0 16px",
-          height: 36,
+          background: "#101b29",
+          borderBottom: "1px solid #183149",
           display: "flex",
-          alignItems: "center",
-          gap: 20,
+          alignItems: "stretch",
           overflowX: "auto",
           scrollbarWidth: "none",
         }}
       >
-        {/* LIVE label */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          <div
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: "#ff4444",
-              animation: "livePulse 1.5s ease-in-out infinite",
-            }}
-          />
-          <div
-            style={{
-              background: "rgba(255,68,68,0.15)",
-              color: "#ff4444",
-              fontSize: 10,
-              fontFamily: "'DM Mono',monospace",
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-              padding: "3px 8px",
-              borderRadius: 999,
-            }}
-          >
-            Live
+        <div
+          style={{
+            minWidth: 96,
+            padding: "10px 12px",
+            borderRight: "1px solid #183149",
+            display: "grid",
+            placeItems: "center",
+            background: "linear-gradient(180deg, rgba(18,32,47,0.98) 0%, rgba(14,24,36,0.98) 100%)",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ fontSize: 12, color: "#64a7e3", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            {dateBadge.month}
+          </div>
+          <div style={{ fontSize: 20, color: "#eef8ff", fontWeight: 900, lineHeight: 1.1 }}>
+            {dateBadge.day}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+            {liveCount > 0 && (
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "#35e3a0",
+                  animation: "livePulse 1.5s ease-in-out infinite",
+                }}
+              />
+            )}
+            <span style={{ fontSize: 10, color: "#7f9bb7", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              {liveCount > 0 ? `${liveCount} live` : `${games.length} final`}
+            </span>
           </div>
         </div>
 
-        {/* Game chips */}
-        {liveGames.map((game) => (
-          <GameChip key={game.id} game={game} today={today} />
+        {games.map((game) => (
+          <ScoreCard key={game.id} game={game} dateString={dateString} />
         ))}
       </div>
     </>
