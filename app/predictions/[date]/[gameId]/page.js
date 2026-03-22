@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BreadcrumbSetter } from "@/Breadcrumbs";
 import { TEAM_COLOR, logoUrl } from "@/app/lib/nhlTeams";
+import { applyGameOutcomeToStandings, simulatePlayoffOdds } from "@/app/lib/playoffOddsModel";
 import {
   buildPredictionsForDate,
   confidenceMeta,
@@ -233,6 +234,90 @@ function statRow(label, awayValue, homeValue, awayColor, homeColor, format = "in
   );
 }
 
+function headshotUrlForPlayer(playerId, headshot) {
+  if (headshot) return headshot;
+  if (!playerId) return null;
+  return `https://assets.nhle.com/mugs/nhl/20252026/${playerId}.png`;
+}
+
+function elapsedSeconds(periodDescriptor, timeInPeriod) {
+  const periodNum = periodDescriptor?.number ?? 1;
+  if (!timeInPeriod) return (periodNum - 1) * 1200;
+  const [mins, secs] = String(timeInPeriod).split(":").map(Number);
+  return (periodNum - 1) * 1200 + (mins || 0) * 60 + (secs || 0);
+}
+
+function computeGameWinProb(homeScore, awayScore, totalSecondsElapsed) {
+  const remaining = Math.max(3600 - totalSecondsElapsed, 0);
+  const scoreDiff = homeScore - awayScore;
+  const timeWeight = remaining / 3600;
+  return Math.min(Math.max(0.5 + scoreDiff * 0.15 * (1 - timeWeight * 0.3), 0.02), 0.98);
+}
+
+function flattenKeyMoments(scoringSummary) {
+  const goals = (scoringSummary || []).flatMap((period) =>
+    (period.goals || []).map((goal) => {
+      const isHome = Boolean(goal.isHome);
+      const afterHome = Number(goal.homeScore || 0);
+      const afterAway = Number(goal.awayScore || 0);
+      const beforeHome = isHome ? afterHome - 1 : afterHome;
+      const beforeAway = isHome ? afterAway : afterAway - 1;
+      const timeElapsed = elapsedSeconds(period.periodDescriptor, goal.timeInPeriod);
+      const beforeHomeProb = computeGameWinProb(beforeHome, beforeAway, timeElapsed);
+      const afterHomeProb = computeGameWinProb(afterHome, afterAway, timeElapsed);
+      const beforeTeamProb = isHome ? beforeHomeProb : 1 - beforeHomeProb;
+      const afterTeamProb = isHome ? afterHomeProb : 1 - afterHomeProb;
+
+      return {
+        ...goal,
+        periodDescriptor: period.periodDescriptor,
+        displayName: goal.name?.default || [goal.firstName?.default, goal.lastName?.default].filter(Boolean).join(" "),
+        scoreLine: `${afterAway}-${afterHome}`,
+        headshotUrl: headshotUrlForPlayer(goal.playerId, goal.headshot),
+        swing: afterTeamProb - beforeTeamProb,
+      };
+    })
+  );
+
+  return goals
+    .sort((a, b) => Math.abs(b.swing) - Math.abs(a.swing))
+    .slice(0, 4);
+}
+
+function scenarioLabelForTeam(teamSide, scenarioKey) {
+  const labels = {
+    away_reg: teamSide === "away" ? "If win reg" : "If lose reg",
+    away_ot: teamSide === "away" ? "If win OT" : "If lose OT",
+    home_ot: teamSide === "home" ? "If win OT" : "If lose OT",
+    home_reg: teamSide === "home" ? "If win reg" : "If lose reg",
+  };
+  return labels[scenarioKey] || scenarioKey;
+}
+
+function formatPlayoffDelta(value) {
+  const pctPoints = (value || 0) * 100;
+  const rounded = Math.abs(pctPoints) < 0.05 ? "0.0" : Math.abs(pctPoints).toFixed(1);
+  return `${pctPoints >= 0 ? "+" : "-"}${rounded}%`;
+}
+
+function formatPointsDelta(value) {
+  const rounded = Math.abs(value || 0) < 0.05 ? "0.0" : Math.abs(value).toFixed(1);
+  return `${(value || 0) >= 0 ? "+" : "-"}${rounded}`;
+}
+
+async function fetchStandings() {
+  try {
+    const res = await fetch("https://api-web.nhle.com/v1/standings/now", {
+      next: { revalidate: 900 },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Array.isArray(data.standings) ? data.standings : null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchGameLanding(gameId) {
   try {
     const res = await fetch(`https://api-web.nhle.com/v1/gamecenter/${gameId}/landing`, {
@@ -259,10 +344,11 @@ async function fetchGameBoxscore(gameId) {
 
 export default async function GamePredictionDetailPage({ params }) {
   const { date, gameId } = await params;
-  const [{ predictions }, landingData, boxscoreData] = await Promise.all([
+  const [{ predictions }, landingData, boxscoreData, standings] = await Promise.all([
     buildPredictionsForDate(date),
     fetchGameLanding(gameId),
     fetchGameBoxscore(gameId),
+    fetchStandings(),
   ]);
   const matchup = predictions.find((item) => item.game.id === gameId);
 
@@ -354,6 +440,55 @@ export default async function GamePredictionDetailPage({ params }) {
       goalieProjectionLabel: projectedHomeGoalie.projectionLabel,
     },
   ] : [];
+  const keyMoments = flattenKeyMoments(landingData?.summary?.scoring);
+
+  const playoffImplications = (() => {
+    if (!hasPrediction || !standings || ["OFF", "FINAL"].includes(gameState)) return null;
+
+    const simCount = 6000;
+    const baseline = simulatePlayoffOdds(standings, simCount);
+    const scenarioKeys = ["away_reg", "away_ot", "home_ot", "home_reg"];
+    const scenarioResults = Object.fromEntries(
+      scenarioKeys.map((key) => [
+        key,
+        simulatePlayoffOdds(
+          applyGameOutcomeToStandings(standings, game.awayTeam.abbr, game.homeTeam.abbr, key),
+          simCount
+        ),
+      ])
+    );
+
+    function buildTeamPerspective(teamAbbr, teamName, teamColor, teamSide) {
+      const baselineRow = baseline[teamAbbr];
+      if (!baselineRow) return null;
+      const orderedScenarios = teamSide === "away"
+        ? ["away_reg", "away_ot", "home_ot", "home_reg"]
+        : ["home_reg", "home_ot", "away_ot", "away_reg"];
+
+      return {
+        teamAbbr,
+        teamName,
+        teamColor,
+        baseline: baselineRow,
+        scenarios: orderedScenarios.map((scenarioKey) => {
+          const row = scenarioResults[scenarioKey]?.[teamAbbr];
+          return {
+            key: scenarioKey,
+            label: scenarioLabelForTeam(teamSide, scenarioKey),
+            playoffOdds: row?.playoffOdds ?? null,
+            projectedPoints: row?.projectedPoints ?? null,
+            playoffDelta: row && baselineRow ? row.playoffOdds - baselineRow.playoffOdds : null,
+            pointsDelta: row && baselineRow ? row.projectedPoints - baselineRow.projectedPoints : null,
+          };
+        }),
+      };
+    }
+
+    return [
+      buildTeamPerspective(game.awayTeam.abbr, game.awayTeam.name, awayColor, "away"),
+      buildTeamPerspective(game.homeTeam.abbr, game.homeTeam.name, homeColor, "home"),
+    ].filter(Boolean);
+  })();
 
   return (
     <div
@@ -569,6 +704,85 @@ export default async function GamePredictionDetailPage({ params }) {
                   </div>
                 ) : null
               )}
+            </section>
+          </>
+        )}
+
+        {isLiveOrFinal && keyMoments.length > 0 && (
+          <>
+            <SectionDivider label="Key moments" />
+            <section className="dual-grid">
+              {keyMoments.map((moment) => {
+                const teamColor = TEAM_COLOR[moment.teamAbbrev?.default] || "#4d82af";
+                return (
+                  <div
+                    key={`${moment.eventId}-${moment.playerId}`}
+                    style={{
+                      borderRadius: 20,
+                      border: `1px solid ${hexToRgba(teamColor, 0.28)}`,
+                      background: "linear-gradient(135deg, rgba(12,20,30,0.98) 0%, rgba(9,15,23,0.98) 70%)",
+                      padding: "16px 18px",
+                      display: "grid",
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ display: "grid", gridTemplateColumns: "52px minmax(0,1fr) auto", gap: 12, alignItems: "center" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={moment.headshotUrl || ""}
+                        alt={moment.displayName}
+                        width={52}
+                        height={52}
+                        style={{ width: 52, height: 52, borderRadius: 12, objectFit: "cover", background: "#101a24", border: `1px solid ${hexToRgba(teamColor, 0.3)}` }}
+                      />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: "#eff8ff", fontSize: 18, fontWeight: 900, lineHeight: 1 }}>
+                          {moment.displayName}
+                        </div>
+                        <div style={{ color: "#89a6be", fontSize: 12, marginTop: 4 }}>
+                          {moment.assists?.length ? `Assists: ${moment.assists.map((assist) => assist.name?.default).filter(Boolean).join(", ")}` : "Unassisted goal"}
+                        </div>
+                      </div>
+                      <div style={{ ...teamPillStyle(teamColor), justifySelf: "end" }}>
+                        {moment.teamAbbrev?.default}
+                      </div>
+                    </div>
+
+                    <div className="dual-grid" style={{ gap: 10 }}>
+                      {[
+                        ["Moment", `${periodLabel(moment.periodDescriptor)} · ${moment.timeInPeriod}`],
+                        ["Score after goal", moment.scoreLine],
+                        ["Goal type", moment.goalModifier || moment.shotType || "Goal"],
+                        ["WP swing", `${moment.swing >= 0 ? "+" : ""}${(moment.swing * 100).toFixed(1)}%`],
+                      ].map(([label, value]) => (
+                        <div key={`${moment.eventId}-${label}`} style={{ borderRadius: 14, background: "#0f1822", border: "1px solid #1b2c3f", padding: "10px 12px" }}>
+                          <div style={{ color: "#738da5", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            {label}
+                          </div>
+                          <div style={{ color: label === "WP swing" ? teamColor : "#eff8ff", fontSize: 16, fontWeight: 800, marginTop: 6 }}>
+                            {value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {moment.highlightClipSharingUrl && (
+                      <a
+                        href={moment.highlightClipSharingUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          ...teamPillStyle(teamColor),
+                          width: "fit-content",
+                          textDecoration: "none",
+                        }}
+                      >
+                        Watch highlight
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
             </section>
           </>
         )}
@@ -858,6 +1072,103 @@ export default async function GamePredictionDetailPage({ params }) {
             </div>
           </div>
         </section>
+
+        {playoffImplications?.length > 0 && (
+          <>
+            <SectionDivider label="Playoff implications" />
+            <section className="dual-grid">
+              {playoffImplications.map((teamCard) => (
+                <div
+                  key={`${teamCard.teamAbbr}-implications`}
+                  style={{
+                    border: `1px solid ${hexToRgba(teamCard.teamColor, 0.3)}`,
+                    borderRadius: 24,
+                    background: "#091017",
+                    padding: 20,
+                    display: "grid",
+                    gap: 16,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={logoUrl(teamCard.teamAbbr)} alt={teamCard.teamAbbr} width={42} height={42} style={{ width: 42, height: 42, objectFit: "contain" }} />
+                      <div>
+                        <div style={{ color: teamCard.teamColor, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
+                          {teamCard.teamAbbr} implications
+                        </div>
+                        <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900, marginTop: 4 }}>
+                          {teamCard.teamName}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ ...teamPillStyle(teamCard.teamColor), textAlign: "right" }}>
+                      Base {formatPct(teamCard.baseline.playoffOdds)}
+                    </div>
+                  </div>
+
+                  <div style={{ overflowX: "auto", paddingBottom: 2 }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "120px repeat(4, minmax(120px, 1fr))",
+                        gap: 10,
+                        alignItems: "stretch",
+                        minWidth: 650,
+                      }}
+                    >
+                      <div />
+                      {teamCard.scenarios.map((scenario) => (
+                        <div
+                          key={`${teamCard.teamAbbr}-${scenario.key}-head`}
+                          style={{
+                            borderRadius: 14,
+                            border: `1px solid ${hexToRgba(teamCard.teamColor, 0.24)}`,
+                            background: hexToRgba(teamCard.teamColor, 0.08),
+                            padding: "10px 8px",
+                            color: "#dceaf7",
+                            fontSize: 11,
+                            fontWeight: 800,
+                            textAlign: "center",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
+                            fontFamily: "'DM Mono',monospace",
+                          }}
+                        >
+                          {scenario.label}
+                        </div>
+                      ))}
+
+                      <div style={{ color: "#738da5", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", alignSelf: "center" }}>
+                        Playoff %
+                      </div>
+                      {teamCard.scenarios.map((scenario) => (
+                        <div key={`${teamCard.teamAbbr}-${scenario.key}-playoff`} style={{ borderRadius: 14, background: "#0f1822", border: "1px solid #1b2c3f", padding: "12px 10px", textAlign: "center" }}>
+                          <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900 }}>{formatPct(scenario.playoffOdds)}</div>
+                          <div style={{ color: scenario.playoffDelta >= 0 ? "#35e3a0" : "#ff8d9b", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 5 }}>
+                            {formatPlayoffDelta(scenario.playoffDelta)}
+                          </div>
+                        </div>
+                      ))}
+
+                      <div style={{ color: "#738da5", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", alignSelf: "center" }}>
+                        Projected pts
+                      </div>
+                      {teamCard.scenarios.map((scenario) => (
+                        <div key={`${teamCard.teamAbbr}-${scenario.key}-points`} style={{ borderRadius: 14, background: "#0f1822", border: "1px solid #1b2c3f", padding: "12px 10px", textAlign: "center" }}>
+                          <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900 }}>{scenario.projectedPoints ?? "—"}</div>
+                          <div style={{ color: scenario.pointsDelta >= 0 ? "#7cc7ff" : "#ffb56a", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 5 }}>
+                            {formatPointsDelta(scenario.pointsDelta)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </section>
+          </>
+        )}
 
         <SectionDivider label="Projected goalies" />
         <section className="dual-grid">

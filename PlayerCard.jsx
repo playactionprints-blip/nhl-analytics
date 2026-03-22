@@ -377,7 +377,7 @@ function CompactPercentileSummary({ player }) {
     { label: "EV Def", value: percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct },
     { label: "PP", value: percentiles["PP"] },
     { label: "Penalties", value: percentiles["Penalties"] },
-    { label: "Shooting", value: percentiles["Shooting"] },
+    { label: "Shooting WAR", value: percentiles["Shooting"] },
   ].filter((item) => item.value != null);
 
   if (!summaryStats.length) {
@@ -452,7 +452,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
     { label: "EV Defence", value: percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct, color: "#21b8ff" },
     { label: "Power Play", value: percentiles["PP"], color: "#1bbcff" },
     { label: "Penalty Kill", value: percentiles["PK"], color: "#1fb0e3" },
-    { label: "Finishing", value: percentiles["Shooting"], color: "#2cc8ff" },
+    { label: "Shooting WAR", value: percentiles["Shooting"], color: "#2cc8ff" },
   ];
   const barsRight = [
     { label: "Goals", value: percentiles["Goals/60"], color: "#ffb51f" },
@@ -464,7 +464,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
   const summaryBars = [
     { label: "Offence", value: percentiles["Off Rating"] ?? player.off_rating, color: "linear-gradient(90deg,#24566d 0%,#16c6ff 100%)", textColor: "#19c2ff" },
     { label: "Defence", value: percentiles["Def Rating"] ?? player.def_rating, color: "linear-gradient(90deg,#6f3840 0%,#ff4d57 100%)", textColor: "#ff4d57" },
-    { label: "Finishing", value: percentiles["Shooting"], color: "linear-gradient(90deg,#6d5430 0%,#f1ab1c 100%)", textColor: "#ffb11a" },
+    { label: "Shooting WAR", value: percentiles["Shooting"], color: "linear-gradient(90deg,#6d5430 0%,#f1ab1c 100%)", textColor: "#ffb11a" },
   ];
   const warTrend = player.warTrend || [];
   const impactTrend = player.impactTrend || [];
@@ -588,13 +588,13 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
           * `Competition` and `Teammates` are still first-pass deployment context metrics and are less stable than WAR or EV impact.
         </div>
         <div style={{ fontSize: 11, color: "#727880", marginTop: 8, fontFamily: "'DM Mono',monospace" }}>
-          Stable right now: WAR3, EV Offence, Goals, Points, ixG, GSAx. Provisional right now: EV Defence, Penalties, Competition, Teammates.
+          Stable right now: WAR3, EV Offence, Goals, Points, ixG, GSAx. `Shooting WAR` reflects finishing impact relative to expected results, not raw scoring talent alone.
         </div>
       </div>
 
       <div style={{ paddingTop: 20, paddingBottom: 20, borderBottom: "1px solid #1b222a" }}>
         <div style={{ fontSize: 12, color: "#7a7f86", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 16 }}>
-          Offence vs Defence vs Finishing
+          Offence vs Defence vs Shooting WAR
         </div>
         <div style={{ display: "grid", gap: 14 }}>
           {summaryBars.map((bar) => (
@@ -714,7 +714,7 @@ function RadarViz({ percentiles, color, detailed = false }) {
     "EV Off": "EV Off",
     "EV Def": "EV Def",
     "PP": "PP",
-    "Shooting": "Shoot",
+    "Shooting": "Sht WAR",
     "Penalties": "Pens",
     "RAPM Off": "ROff",
     "RAPM Def": "RDef",
