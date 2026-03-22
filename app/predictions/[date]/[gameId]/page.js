@@ -269,7 +269,7 @@ export default async function GamePredictionDetailPage({ params }) {
             Back to predictions
           </Link>
           <div style={{ color: "#6f879f", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            Destination page · finished-game first
+            Game report · postgame first
           </div>
         </div>
 
@@ -281,6 +281,8 @@ export default async function GamePredictionDetailPage({ params }) {
           statusLabel={formatStatus(landingData, gameState)}
           metaLabel={`${formatHeadlineDate(date)} · ${formatStartTime(game.startTimeUTC)} ET`}
           arenaLabel={getArenaLabel(landingData)}
+          gameId={gameId}
+          reportLabel="Game report"
           awayColor={awayColor}
           homeColor={homeColor}
           statChips={heroStatChips}
@@ -307,4 +309,3 @@ export default async function GamePredictionDetailPage({ params }) {
     </div>
   );
 }
-

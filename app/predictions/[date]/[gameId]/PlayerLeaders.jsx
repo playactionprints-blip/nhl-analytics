@@ -1,5 +1,5 @@
 export default function PlayerLeaders({ leaders, awayColor, homeColor, awayAbbr, homeAbbr, compact = false }) {
-  const data = leaders ?? { points: [], toi: [], xg: [], goalieSummary: [] };
+  const data = leaders ?? { points: [], goals: [], toi: [], xg: [], goalieSummary: [] };
   const listCards = [
     {
       title: "Points leaders",
@@ -9,6 +9,16 @@ export default function PlayerLeaders({ leaders, awayColor, homeColor, awayAbbr,
         teamAbbr: item.teamAbbr,
         value: `${item.points} pts`,
         sub: `${item.goals}G · ${item.assists}A`,
+      })),
+    },
+    {
+      title: "Goal scorers",
+      rows: data.goals.map((item) => ({
+        key: `${item.teamAbbr}-${item.name}-goals`,
+        name: item.name,
+        teamAbbr: item.teamAbbr,
+        value: `${item.goals} G`,
+        sub: `${item.points} pts`,
       })),
     },
     {
@@ -109,7 +119,7 @@ export default function PlayerLeaders({ leaders, awayColor, homeColor, awayAbbr,
       <style>{`
         .player-leaders-grid {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 12px;
         }
         @media (max-width: 980px) {
@@ -121,4 +131,3 @@ export default function PlayerLeaders({ leaders, awayColor, homeColor, awayAbbr,
     </div>
   );
 }
-

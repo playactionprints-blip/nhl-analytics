@@ -227,6 +227,10 @@ export function buildPlayerLeaders(playerByGameStats, playerXG, homeAbbr, awayAb
     .sort((a, b) => (b.points - a.points) || (b.goals - a.goals) || (b.toiSeconds - a.toiSeconds))
     .slice(0, 5);
 
+  const goals = [...allSkaters]
+    .sort((a, b) => (b.goals - a.goals) || (b.points - a.points) || (b.toiSeconds - a.toiSeconds))
+    .slice(0, 5);
+
   const toi = [...allSkaters]
     .sort((a, b) => b.toiSeconds - a.toiSeconds)
     .slice(0, 5);
@@ -262,6 +266,5 @@ export function buildPlayerLeaders(playerByGameStats, playerXG, homeAbbr, awayAb
       };
     });
 
-  return { points, toi, xg, goalieSummary };
+  return { points, goals, toi, xg, goalieSummary };
 }
-

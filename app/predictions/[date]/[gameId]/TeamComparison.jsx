@@ -46,6 +46,7 @@ function mirroredRow({ label, awayValue, homeValue, awayDisplay, homeDisplay, aw
 export default function TeamComparison({
   teamGameStats = [],
   analytics = null,
+  playerByGameStats = null,
   awayAbbr,
   homeAbbr,
   awayColor,
@@ -62,6 +63,22 @@ export default function TeamComparison({
     : null;
   const faceoffAway = (Number(statMap.faceoffWinningPctg?.away) || 0) * 100;
   const faceoffHome = (Number(statMap.faceoffWinningPctg?.home) || 0) * 100;
+  const awayGoalie = [...(playerByGameStats?.awayTeam?.goalies || [])].sort((a, b) => {
+    const [am, as] = String(a.toi || "0:00").split(":").map(Number);
+    const [bm, bs] = String(b.toi || "0:00").split(":").map(Number);
+    return ((bm || 0) * 60 + (bs || 0)) - ((am || 0) * 60 + (as || 0));
+  })[0];
+  const homeGoalie = [...(playerByGameStats?.homeTeam?.goalies || [])].sort((a, b) => {
+    const [am, as] = String(a.toi || "0:00").split(":").map(Number);
+    const [bm, bs] = String(b.toi || "0:00").split(":").map(Number);
+    return ((bm || 0) * 60 + (bs || 0)) - ((am || 0) * 60 + (as || 0));
+  })[0];
+  const awaySavePct = awayGoalie?.savePctg != null
+    ? Number(awayGoalie.savePctg) * 100
+    : (awayGoalie?.shotsAgainst ? ((Number(awayGoalie.saves) || 0) / Number(awayGoalie.shotsAgainst)) * 100 : 0);
+  const homeSavePct = homeGoalie?.savePctg != null
+    ? Number(homeGoalie.savePctg) * 100
+    : (homeGoalie?.shotsAgainst ? ((Number(homeGoalie.saves) || 0) / Number(homeGoalie.shotsAgainst)) * 100 : 0);
   const rows = [
     statMap.sog
       ? {
@@ -101,6 +118,16 @@ export default function TeamComparison({
           maxValue: 100,
         }
       : null,
+    (awayGoalie || homeGoalie)
+      ? {
+          label: "Save %",
+          awayValue: awaySavePct,
+          homeValue: homeSavePct,
+          awayDisplay: awayGoalie ? `${awaySavePct.toFixed(1)}%` : "—",
+          homeDisplay: homeGoalie ? `${homeSavePct.toFixed(1)}%` : "—",
+          maxValue: 100,
+        }
+      : null,
     analytics
       ? {
           label: "High Danger",
@@ -108,6 +135,24 @@ export default function TeamComparison({
           homeValue: analytics.highDanger?.home ?? 0,
           awayDisplay: analytics.highDanger?.away ?? 0,
           homeDisplay: analytics.highDanger?.home ?? 0,
+        }
+      : null,
+    statMap.hit || statMap.hits
+      ? {
+          label: "Hits",
+          awayValue: Number((statMap.hit || statMap.hits).away) || 0,
+          homeValue: Number((statMap.hit || statMap.hits).home) || 0,
+          awayDisplay: (statMap.hit || statMap.hits).away ?? "—",
+          homeDisplay: (statMap.hit || statMap.hits).home ?? "—",
+        }
+      : null,
+    statMap.blockedShots || statMap.blocked
+      ? {
+          label: "Blocks",
+          awayValue: Number((statMap.blockedShots || statMap.blocked).away) || 0,
+          homeValue: Number((statMap.blockedShots || statMap.blocked).home) || 0,
+          awayDisplay: (statMap.blockedShots || statMap.blocked).away ?? "—",
+          homeDisplay: (statMap.blockedShots || statMap.blocked).home ?? "—",
         }
       : null,
   ].filter(Boolean);
@@ -158,4 +203,3 @@ export default function TeamComparison({
     </div>
   );
 }
-

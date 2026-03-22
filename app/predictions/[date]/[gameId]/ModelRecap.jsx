@@ -16,13 +16,18 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
           borderRadius: 24,
           border: "1px solid #16283a",
           background: "#0a121c",
-          padding: "22px",
-          color: "#6f879f",
-          fontFamily: "'DM Mono',monospace",
-          fontSize: 12,
+          padding: "20px 22px",
+          display: "grid",
+          gap: 10,
         }}
       >
-        Pregame model recap unavailable for this game.
+        <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          Model
+        </div>
+        <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900 }}>Pregame model recap not captured</div>
+        <div style={{ color: "#88a3bb", lineHeight: 1.6, fontSize: 14 }}>
+          This game doesn’t have a stored pregame snapshot in the model log, so market-vs-model review is unavailable here. The rest of the postgame report still reflects live gamecenter and play-by-play data.
+        </div>
       </div>
     );
   }
@@ -143,4 +148,3 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
     </div>
   );
 }
-

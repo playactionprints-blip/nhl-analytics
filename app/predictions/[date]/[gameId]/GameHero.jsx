@@ -12,6 +12,8 @@ export default function GameHero({
   statusLabel,
   metaLabel,
   arenaLabel,
+  gameId,
+  reportLabel = "Postgame report",
   awayColor,
   homeColor,
   statChips = [],
@@ -75,6 +77,9 @@ export default function GameHero({
         </div>
 
         <div style={{ display: "grid", gap: 10, justifyItems: "center", alignContent: "center", textAlign: "center" }}>
+          <div style={{ color: "#6c86a0", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700 }}>
+            {reportLabel}
+          </div>
           <div
             style={{
               borderRadius: 999,
@@ -91,10 +96,35 @@ export default function GameHero({
           >
             {statusLabel}
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 19, fontWeight: 800 }}>{metaLabel}</div>
-          {arenaLabel ? (
-            <div style={{ color: "#7994ad", fontSize: 13, fontFamily: "'DM Mono',monospace" }}>{arenaLabel}</div>
-          ) : null}
+          <div style={{ color: "#eff8ff", fontSize: 21, fontWeight: 800 }}>{metaLabel}</div>
+          <div className="postgame-meta-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+            {[
+              arenaLabel ? { label: arenaLabel } : null,
+              gameId ? { label: `Game ID ${gameId}` } : null,
+              statusLabel.includes("OT") ? { label: "Overtime" } : null,
+              statusLabel.includes("SO") ? { label: "Shootout" } : null,
+            ]
+              .filter(Boolean)
+              .map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    borderRadius: 999,
+                    border: "1px solid #1a3044",
+                    background: "#0c1520",
+                    color: "#88a5bf",
+                    padding: "6px 10px",
+                    fontSize: 10,
+                    fontFamily: "'DM Mono',monospace",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                  }}
+                >
+                  {item.label}
+                </div>
+              ))}
+          </div>
         </div>
 
         <div style={{ display: "grid", gap: 12, alignItems: "center", justifyItems: "end", textAlign: "right" }}>
@@ -137,7 +167,9 @@ export default function GameHero({
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
                 <div style={{ color: awayColor, fontWeight: 800, fontSize: 16 }}>{item.awayValue ?? "—"}</div>
-                <div style={{ color: "#49647f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>vs</div>
+                <div style={{ color: "#49647f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{awayTeam.abbr}</div>
+                <div style={{ color: "#49647f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>·</div>
+                <div style={{ color: "#49647f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{homeTeam.abbr}</div>
                 <div style={{ color: homeColor, fontWeight: 800, fontSize: 16 }}>{item.homeValue ?? "—"}</div>
               </div>
             </div>
@@ -174,19 +206,22 @@ export default function GameHero({
 
 export function buildHeroStatChips(statMap = {}) {
   const chips = [];
-  if (statMap.sog) chips.push(chip("Shots", statMap.sog.away, statMap.sog.home));
-  if (statMap.powerPlayConversions) chips.push(chip("Power Play", statMap.powerPlayConversions.away, statMap.powerPlayConversions.home));
+  const pushUnique = (label, awayValue, homeValue) => {
+    if (chips.some((entry) => entry.label === label)) return;
+    chips.push(chip(label, awayValue, homeValue));
+  };
+  if (statMap.sog) pushUnique("Shots", statMap.sog.away, statMap.sog.home);
+  if (statMap.powerPlayConversions) pushUnique("Power Play", statMap.powerPlayConversions.away, statMap.powerPlayConversions.home);
   if (statMap.faceoffWinningPctg) {
-    chips.push(
-      chip(
-        "Faceoff %",
-        `${(((Number(statMap.faceoffWinningPctg.away) || 0) * 100)).toFixed(1)}%`,
-        `${(((Number(statMap.faceoffWinningPctg.home) || 0) * 100)).toFixed(1)}%`
-      )
+    pushUnique(
+      "Faceoff %",
+      `${(((Number(statMap.faceoffWinningPctg.away) || 0) * 100)).toFixed(1)}%`,
+      `${(((Number(statMap.faceoffWinningPctg.home) || 0) * 100)).toFixed(1)}%`
     );
   }
-  if (statMap.hits) chips.push(chip("Hits", statMap.hits.away, statMap.hits.home));
-  if (statMap.blocked) chips.push(chip("Blocked", statMap.blocked.away, statMap.blocked.home));
+  if (statMap.hit) pushUnique("Hits", statMap.hit.away, statMap.hit.home);
+  if (statMap.hits) pushUnique("Hits", statMap.hits.away, statMap.hits.home);
+  if (statMap.blockedShots) pushUnique("Blocks", statMap.blockedShots.away, statMap.blockedShots.home);
+  if (statMap.blocked) pushUnique("Blocks", statMap.blocked.away, statMap.blocked.home);
   return chips;
 }
-
