@@ -417,8 +417,10 @@ function DeservedToWinMeter({ homeDeserve, awayDeserve, homeAbbr, awayAbbr, home
   const cy = 148;
   const R = 110;
 
-  const needleAngleDeg = 180 - homeDeserve * 180;
-  const needleAngleRad = (needleAngleDeg * Math.PI) / 180;
+  // The semicircle reads left-to-right from away to home, so the boundary
+  // position is driven by the away share, not the home share.
+  const boundaryAngleDeg = 180 - awayDeserve * 180;
+  const needleAngleRad = (boundaryAngleDeg * Math.PI) / 180;
   const needleX = cx + R * Math.cos(needleAngleRad);
   const needleY = cy - R * Math.sin(needleAngleRad);
 
@@ -439,8 +441,8 @@ function DeservedToWinMeter({ homeDeserve, awayDeserve, homeAbbr, awayAbbr, home
   }
 
   const bgArcPath = bgArc();
-  const awayArcPath = needleAngleDeg < 179.5 ? coloredArc(180, needleAngleDeg) : null;
-  const homeArcPath = needleAngleDeg > 0.5 ? coloredArc(needleAngleDeg, 0) : null;
+  const awayArcPath = boundaryAngleDeg < 179.5 ? coloredArc(180, boundaryAngleDeg) : null;
+  const homeArcPath = boundaryAngleDeg > 0.5 ? coloredArc(boundaryAngleDeg, 0) : null;
 
   const leader = homeDeserve >= awayDeserve ? homeAbbr : awayAbbr;
   const leaderPct = Math.max(homeDeserve, awayDeserve);
