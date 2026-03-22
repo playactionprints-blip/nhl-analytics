@@ -421,9 +421,47 @@ export default async function GamePredictionDetailPage({ params }) {
                 gridTemplateColumns: "1fr auto 1fr",
                 gap: 16,
                 alignItems: "center",
+                position: "relative",
+                overflow: "hidden",
               }}
             >
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Away team background watermark */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={logoUrl(game.awayTeam.abbr)}
+                alt=""
+                style={{
+                  position: "absolute",
+                  left: -20,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: 280,
+                  height: 280,
+                  objectFit: "contain",
+                  opacity: 0.08,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                }}
+              />
+              {/* Home team background watermark */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={logoUrl(game.homeTeam.abbr)}
+                alt=""
+                style={{
+                  position: "absolute",
+                  right: -20,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: 280,
+                  height: 280,
+                  objectFit: "contain",
+                  opacity: 0.08,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                }}
+              />
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, position: "relative", zIndex: 1 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={logoUrl(game.awayTeam.abbr)} alt={game.awayTeam.abbr} width={56} height={56} style={{ width: 56, height: 56, objectFit: "contain" }} />
                 <div style={{ color: awayColor, fontSize: 54, fontWeight: 900, lineHeight: 1 }}>
@@ -433,7 +471,7 @@ export default async function GamePredictionDetailPage({ params }) {
                   {game.awayTeam.abbr} · Away
                 </div>
               </div>
-              <div style={{ textAlign: "center", display: "grid", gap: 8, justifyItems: "center" }}>
+              <div style={{ textAlign: "center", display: "grid", gap: 8, justifyItems: "center", position: "relative", zIndex: 1 }}>
                 <div
                   style={{
                     color: gameState === "LIVE" || gameState === "CRIT" ? "#35e3a0" : "#8db9dc",
@@ -453,7 +491,7 @@ export default async function GamePredictionDetailPage({ params }) {
                 </div>
                 <div style={{ color: "#3a5a78", fontSize: 18, fontFamily: "'DM Mono',monospace" }}>vs</div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10, position: "relative", zIndex: 1 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={logoUrl(game.homeTeam.abbr)} alt={game.homeTeam.abbr} width={56} height={56} style={{ width: 56, height: 56, objectFit: "contain" }} />
                 <div style={{ color: homeColor, fontSize: 54, fontWeight: 900, lineHeight: 1 }}>

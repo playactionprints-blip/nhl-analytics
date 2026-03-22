@@ -100,7 +100,10 @@ function parsePBP(data, homeTeamId, awayTeamId) {
       xgByPeriod[pKey][isHome ? "home" : "away"] += xg;
     }
 
-    shotEvents.push({ x: xCoord, y: yCoord, xg, type: typeKey, isHome, period: periodNum });
+    shotEvents.push({
+      x: xCoord, y: yCoord, xg, type: typeKey, isHome, period: periodNum, timeInPeriod,
+      shooterName: nameMap[String(det.shootingPlayerId ?? det.scoringPlayerId ?? "")] ?? null,
+    });
 
     const shooterId = String(det.shootingPlayerId ?? det.playerId ?? "");
     if (shooterId && typeKey !== "blocked-shot") {
@@ -168,15 +171,21 @@ function SectionDivider({ label }) {
 }
 
 function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHomeXG, totalAwayXG }) {
+  const [hoveredShot, setHoveredShot] = useState(null);
   const homeShots = shotEvents.filter(e => e.isHome && (e.type === "shot-on-goal" || e.type === "goal")).length;
   const awayShots = shotEvents.filter(e => !e.isHome && (e.type === "shot-on-goal" || e.type === "goal")).length;
 
-  const goalLineLeft = 66;   // toSvgX(-78)
-  const goalLineRight = 534; // toSvgX(78)
-  const blueLineLeft = 180;  // toSvgX(-40)
-  const blueLineRight = 420; // toSvgX(40)
+  const goalLineLeft = 66;
+  const goalLineRight = 534;
+  const blueLineLeft = 180;
+  const blueLineRight = 420;
   const centerX = 300;
   const centerY = 127.5;
+
+  const handleShotEnter = (e, shot) => {
+    const rect = e.currentTarget.closest("svg").getBoundingClientRect();
+    setHoveredShot({ ...shot, tooltipX: e.clientX - rect.left, tooltipY: e.clientY - rect.top });
+  };
 
   return (
     <div>
@@ -188,67 +197,139 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
           {homeAbbr}: {homeShots} shots · {totalHomeXG.toFixed(2)} xG
         </span>
       </div>
-      <svg viewBox="0 0 600 255" style={{ width: "100%", maxWidth: 600, height: "auto", display: "block", margin: "0 auto" }}>
-        {/* Boards */}
-        <rect x={0} y={0} width={600} height={255} rx={28} fill="#071118" stroke="#1a3a5a" strokeWidth={2.5} />
-        {/* Center ice circle */}
-        <circle cx={centerX} cy={centerY} r={32} fill="none" stroke="rgba(200,50,50,0.25)" strokeWidth={1.5} />
-        {/* Center line */}
-        <line x1={centerX} y1={0} x2={centerX} y2={255} stroke="rgba(220,50,50,0.6)" strokeWidth={2} />
-        {/* Blue lines */}
-        <line x1={blueLineLeft} y1={0} x2={blueLineLeft} y2={255} stroke="rgba(50,100,220,0.6)" strokeWidth={2.5} />
-        <line x1={blueLineRight} y1={0} x2={blueLineRight} y2={255} stroke="rgba(50,100,220,0.6)" strokeWidth={2.5} />
-        {/* Goal lines */}
-        <line x1={goalLineLeft} y1={22} x2={goalLineLeft} y2={233} stroke="rgba(220,50,50,0.5)" strokeWidth={1.5} />
-        <line x1={goalLineRight} y1={22} x2={goalLineRight} y2={233} stroke="rgba(220,50,50,0.5)" strokeWidth={1.5} />
-        {/* Goal creases */}
-        <path
-          d={`M ${goalLineLeft},${centerY - 22} Q ${goalLineLeft + 24},${centerY} ${goalLineLeft},${centerY + 22}`}
-          fill="rgba(50,100,220,0.12)" stroke="rgba(50,100,220,0.3)" strokeWidth={1}
-        />
-        <path
-          d={`M ${goalLineRight},${centerY - 22} Q ${goalLineRight - 24},${centerY} ${goalLineRight},${centerY + 22}`}
-          fill="rgba(50,100,220,0.12)" stroke="rgba(50,100,220,0.3)" strokeWidth={1}
-        />
-        {/* Nets */}
-        <rect x={goalLineLeft - 9} y={centerY - 9} width={9} height={18} rx={2} fill="none" stroke="#aabbcc" strokeWidth={1} />
-        <rect x={goalLineRight} y={centerY - 9} width={9} height={18} rx={2} fill="none" stroke="#aabbcc" strokeWidth={1} />
-        {/* Team labels */}
-        <text x={goalLineLeft - 24} y={15} textAnchor="middle" fill={awayColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
-        <text x={goalLineRight + 24} y={15} textAnchor="middle" fill={homeColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
-        {/* Shot dots */}
-        {shotEvents.map((ev, i) => {
-          if (ev.x == null || ev.y == null) return null;
-          const cx = toSvgX(ev.x);
-          const cy = toSvgY(ev.y);
-          const baseR = Math.min(ev.xg * 10 + 5, 14);
-          const isGoal = ev.type === "goal";
-          const isMissed = ev.type === "missed-shot";
-          const isBlocked = ev.type === "blocked-shot";
-          const r = isGoal ? Math.min(baseR + 3, 17) : baseR;
-          const color = ev.isHome ? homeColor : awayColor;
+      <div style={{ position: "relative", width: "100%" }}>
+        <svg viewBox="0 0 600 255" style={{ width: "100%", maxWidth: 600, height: "auto", display: "block", margin: "0 auto" }}>
+          {/* Boards */}
+          <rect x={0} y={0} width={600} height={255} rx={28} fill="#071118" stroke="#1a3a5a" strokeWidth={2.5} />
+          {/* Ice surface */}
+          <rect x={42} y={5} width={516} height={245} rx={20} fill="#e8f4f8" stroke="#b0ccd8" strokeWidth={1.5} />
+          {/* Center ice circle */}
+          <circle cx={centerX} cy={centerY} r={32} fill="none" stroke="rgba(50,100,220,0.4)" strokeWidth={1.5} />
+          {/* Center line */}
+          <line x1={centerX} y1={0} x2={centerX} y2={255} stroke="rgba(220,50,50,0.7)" strokeWidth={2} />
+          {/* Blue lines */}
+          <line x1={blueLineLeft} y1={0} x2={blueLineLeft} y2={255} stroke="rgba(50,100,220,0.7)" strokeWidth={2.5} />
+          <line x1={blueLineRight} y1={0} x2={blueLineRight} y2={255} stroke="rgba(50,100,220,0.7)" strokeWidth={2.5} />
+          {/* Goal lines */}
+          <line x1={goalLineLeft} y1={22} x2={goalLineLeft} y2={233} stroke="rgba(220,50,50,0.5)" strokeWidth={1.5} />
+          <line x1={goalLineRight} y1={22} x2={goalLineRight} y2={233} stroke="rgba(220,50,50,0.5)" strokeWidth={1.5} />
+          {/* Goal creases */}
+          <path
+            d={`M ${goalLineLeft},${centerY - 22} Q ${goalLineLeft + 24},${centerY} ${goalLineLeft},${centerY + 22}`}
+            fill="rgba(50,100,220,0.15)" stroke="rgba(50,100,220,0.5)" strokeWidth={1}
+          />
+          <path
+            d={`M ${goalLineRight},${centerY - 22} Q ${goalLineRight - 24},${centerY} ${goalLineRight},${centerY + 22}`}
+            fill="rgba(50,100,220,0.15)" stroke="rgba(50,100,220,0.5)" strokeWidth={1}
+          />
+          {/* Nets */}
+          <rect x={goalLineLeft - 9} y={centerY - 9} width={9} height={18} rx={2} fill="none" stroke="#8899aa" strokeWidth={1} />
+          <rect x={goalLineRight} y={centerY - 9} width={9} height={18} rx={2} fill="none" stroke="#8899aa" strokeWidth={1} />
+          {/* Team labels */}
+          <text x={goalLineLeft - 24} y={15} textAnchor="middle" fill={awayColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
+          <text x={goalLineRight + 24} y={15} textAnchor="middle" fill={homeColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
+          {/* Shot dots */}
+          {shotEvents.map((ev, i) => {
+            if (ev.x == null || ev.y == null) return null;
+            const cx = toSvgX(ev.x);
+            const cy = toSvgY(ev.y);
+            const baseR = Math.min(ev.xg * 10 + 5, 14);
+            const isGoal = ev.type === "goal";
+            const isMissed = ev.type === "missed-shot";
+            const isBlocked = ev.type === "blocked-shot";
+            const r = isGoal ? Math.min(baseR + 3, 17) : baseR;
+            const color = ev.isHome ? homeColor : awayColor;
 
-          if (isGoal) {
+            if (isGoal) {
+              return (
+                <g key={i} style={{ cursor: "pointer" }}
+                  onMouseEnter={(e) => handleShotEnter(e, ev)}
+                  onMouseLeave={() => setHoveredShot(null)}>
+                  <circle cx={cx + 1} cy={cy + 1} r={r} fill={color} opacity={0.2} />
+                  <circle cx={cx} cy={cy} r={r + 4} fill={color} opacity={0.28} />
+                  <circle cx={cx} cy={cy} r={r} fill={color} opacity={1.0} stroke="#1a1a1a" strokeWidth={2} />
+                </g>
+              );
+            }
+            if (isMissed) {
+              return (
+                <g key={i} style={{ cursor: "pointer" }}
+                  onMouseEnter={(e) => handleShotEnter(e, ev)}
+                  onMouseLeave={() => setHoveredShot(null)}>
+                  <circle cx={cx + 1} cy={cy + 1} r={baseR} fill={color} opacity={0.2} />
+                  <circle cx={cx} cy={cy} r={baseR} fill="none" stroke={color} strokeWidth={1.5} opacity={0.5} />
+                </g>
+              );
+            }
+            if (isBlocked) {
+              return (
+                <g key={i} style={{ cursor: "pointer" }}
+                  onMouseEnter={(e) => handleShotEnter(e, ev)}
+                  onMouseLeave={() => setHoveredShot(null)}>
+                  <circle cx={cx + 1} cy={cy + 1} r={Math.max(baseR - 2, 3)} fill={color} opacity={0.2} />
+                  <circle cx={cx} cy={cy} r={Math.max(baseR - 2, 3)} fill={color} opacity={0.25} />
+                </g>
+              );
+            }
             return (
-              <g key={i}>
-                <circle cx={cx} cy={cy} r={r + 4} fill={color} opacity={0.28} />
-                <circle cx={cx} cy={cy} r={r} fill={color} opacity={1.0} stroke="#ffffff" strokeWidth={2} />
+              <g key={i} style={{ cursor: "pointer" }}
+                onMouseEnter={(e) => handleShotEnter(e, ev)}
+                onMouseLeave={() => setHoveredShot(null)}>
+                <circle cx={cx + 1} cy={cy + 1} r={baseR} fill={color} opacity={0.2} />
+                <circle cx={cx} cy={cy} r={baseR} fill={color} opacity={0.8} />
               </g>
             );
-          }
-          if (isMissed) {
-            return <circle key={i} cx={cx} cy={cy} r={baseR} fill="none" stroke={color} strokeWidth={1.5} opacity={0.5} />;
-          }
-          if (isBlocked) {
-            return <circle key={i} cx={cx} cy={cy} r={Math.max(baseR - 2, 3)} fill={color} opacity={0.25} />;
-          }
-          return <circle key={i} cx={cx} cy={cy} r={baseR} fill={color} opacity={0.8} />;
-        })}
-      </svg>
+          })}
+        </svg>
+        {hoveredShot && (
+          <div style={{
+            position: "absolute",
+            left: hoveredShot.tooltipX > 400
+              ? hoveredShot.tooltipX - 180
+              : hoveredShot.tooltipX + 12,
+            top: hoveredShot.tooltipY - 10,
+            background: "#0a1520",
+            border: "1px solid #1e3347",
+            borderRadius: 10,
+            padding: "10px 14px",
+            fontSize: 12,
+            fontFamily: "'DM Mono',monospace",
+            color: "#eff8ff",
+            pointerEvents: "none",
+            zIndex: 10,
+            minWidth: 160,
+            maxWidth: 220,
+            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+          }}>
+            <div style={{
+              color: hoveredShot.isHome ? homeColor : awayColor,
+              fontWeight: 900, fontSize: 11, textTransform: "uppercase",
+              letterSpacing: "0.08em", marginBottom: 6,
+            }}>
+              {hoveredShot.isHome ? homeAbbr : awayAbbr} · {hoveredShot.type === "goal" ? "⚽ GOAL" : hoveredShot.type === "shot-on-goal" ? "SHOT ON GOAL" : hoveredShot.type === "missed-shot" ? "MISSED" : "BLOCKED"}
+            </div>
+            {hoveredShot.shooterName && (
+              <div style={{ color: "#eff8ff", fontWeight: 700, marginBottom: 4 }}>
+                {hoveredShot.shooterName}
+              </div>
+            )}
+            <div style={{ color: "#5e7b98", fontSize: 11 }}>
+              Period {hoveredShot.period} · {hoveredShot.timeInPeriod}
+            </div>
+            <div style={{
+              marginTop: 6, paddingTop: 6,
+              borderTop: "1px solid #1e3347",
+              color: "#2fb4ff", fontWeight: 900, fontSize: 13,
+            }}>
+              xG: {hoveredShot.xg.toFixed(3)}
+            </div>
+          </div>
+        )}
+      </div>
       {/* Legend */}
       <div style={{ display: "flex", gap: 14, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
         {[
-          { label: "Goal", fillOpacity: 1.0, stroke: "#ffffff", sw: 1.5 },
+          { label: "Goal", fillOpacity: 1.0, stroke: "#1a1a1a", sw: 1.5 },
           { label: "Shot", fillOpacity: 0.8, stroke: "none", sw: 0 },
           { label: "Missed", fillOpacity: 0, stroke: "#8db9dc", sw: 1.5 },
           { label: "Blocked", fillOpacity: 0.25, stroke: "none", sw: 0 },
@@ -276,6 +357,9 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
 function PuckLuckMeter({ homeXG, awayXG, homeAbbr, awayAbbr, homeColor, awayColor }) {
   const total = homeXG + awayXG;
   const homeXGPct = total > 0 ? homeXG / total : 0.5;
+  const awayXGPct = total > 0 ? awayXG / total : 0.5;
+  const leader = homeXGPct >= 0.5 ? homeAbbr : awayAbbr;
+  const leaderPct = Math.max(homeXGPct, awayXGPct);
   const theta = Math.PI * homeXGPct;
   const cx = 160, cy = 148, r = 110;
   const nx = cx + r * Math.cos(Math.PI - theta);
@@ -287,11 +371,11 @@ function PuckLuckMeter({ homeXG, awayXG, homeAbbr, awayAbbr, homeColor, awayColo
         <path d="M 160,38 A 110,110 0 0,1 270,148" fill="none" stroke={homeColor} strokeWidth={18} strokeLinecap="round" opacity={0.4} />
         <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#eff8ff" strokeWidth={2.5} strokeLinecap="round" />
         <circle cx={cx} cy={cy} r={6} fill="#eff8ff" />
-        <text x={cx} y={cy - 18} textAnchor="middle" fill="#eff8ff" fontSize={22} fontWeight={900} fontFamily="'DM Mono',monospace">
-          {(homeXGPct * 100).toFixed(0)}%
+        <text x={cx} y={cy - 18} textAnchor="middle" fill="#eff8ff" fontSize={18} fontWeight={900} fontFamily="'DM Mono',monospace">
+          {leader} leads
         </text>
         <text x={cx} y={cy - 4} textAnchor="middle" fill="#5e7b98" fontSize={9} fontFamily="'DM Mono',monospace" letterSpacing="2">
-          HOME xG SHARE
+          {(leaderPct * 100).toFixed(1)}% xG share
         </text>
         <text x={38} y={170} textAnchor="middle" fill={awayColor} fontSize={11} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
         <text x={282} y={170} textAnchor="middle" fill={homeColor} fontSize={11} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
@@ -299,7 +383,7 @@ function PuckLuckMeter({ homeXG, awayXG, homeAbbr, awayAbbr, homeColor, awayColo
         <text x={282} y={155} textAnchor="middle" fill={homeColor} fontSize={10} fontFamily="'DM Mono',monospace">{homeXG.toFixed(2)}</text>
       </svg>
       <div style={{ color: "#5e7b98", fontSize: 9, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 2 }}>
-        xG share — shot quality control
+        {awayAbbr} {(awayXGPct * 100).toFixed(1)}% — {homeAbbr} {(homeXGPct * 100).toFixed(1)}%
       </div>
     </div>
   );
