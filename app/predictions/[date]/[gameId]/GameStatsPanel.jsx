@@ -132,6 +132,29 @@ function parsePBP(data, homeTeamId, awayTeamId) {
   return { shotEvents, winProbTimeline, xgByPeriod, playerXG, totalHomeXG, totalAwayXG };
 }
 
+function simulateDeservedWin(shotEvents, numSims = 5000) {
+  const scoringShots = shotEvents.filter(s => s.type !== "blocked-shot" && s.xg > 0);
+  if (scoringShots.length === 0) return { home: 0.5, away: 0.5, sims: 0 };
+
+  let homeWins = 0;
+  let awayWins = 0;
+
+  for (let sim = 0; sim < numSims; sim++) {
+    let homeGoals = 0;
+    let awayGoals = 0;
+    for (const shot of scoringShots) {
+      if (Math.random() < shot.xg) {
+        if (shot.isHome) homeGoals++; else awayGoals++;
+      }
+    }
+    if (homeGoals > awayGoals) homeWins++;
+    else if (awayGoals > homeGoals) awayWins++;
+    else { if (Math.random() < 0.5) homeWins++; else awayWins++; }
+  }
+
+  return { home: homeWins / numSims, away: awayWins / numSims, sims: numSims };
+}
+
 // ── SVG helpers ──────────────────────────────────────────────────────────────
 
 function toSvgX(x) { return (x + 100) * 3.0; }
@@ -354,37 +377,73 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
   );
 }
 
-function PuckLuckMeter({ homeXG, awayXG, homeAbbr, awayAbbr, homeColor, awayColor }) {
-  const total = homeXG + awayXG;
-  const homeXGPct = total > 0 ? homeXG / total : 0.5;
-  const awayXGPct = total > 0 ? awayXG / total : 0.5;
-  const leader = homeXGPct >= 0.5 ? homeAbbr : awayAbbr;
-  const leaderPct = Math.max(homeXGPct, awayXGPct);
-  const theta = Math.PI * homeXGPct;
-  const cx = 160, cy = 148, r = 110;
-  const nx = cx + r * Math.cos(Math.PI - theta);
-  const ny = cy - r * Math.sin(Math.PI - theta);
+function DeservedToWinMeter({ homeDeserve, awayDeserve, homeAbbr, awayAbbr, homeColor, awayColor, sims }) {
+  const W = 320;
+  const H = 175;
+  const cx = 160;
+  const cy = 148;
+  const R = 110;
+
+  const needleAngleDeg = 180 - homeDeserve * 180;
+  const needleAngleRad = (needleAngleDeg * Math.PI) / 180;
+  const needleX = cx + R * Math.cos(needleAngleRad);
+  const needleY = cy - R * Math.sin(needleAngleRad);
+
+  function arcPath(startDeg, endDeg, radius) {
+    const startRad = (startDeg * Math.PI) / 180;
+    const endRad = (endDeg * Math.PI) / 180;
+    const x1 = cx + radius * Math.cos(startRad);
+    const y1 = cy - radius * Math.sin(startRad);
+    const x2 = cx + radius * Math.cos(endRad);
+    const y2 = cy - radius * Math.sin(endRad);
+    const largeArc = Math.abs(endDeg - startDeg) > 180 ? 1 : 0;
+    return `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 0 ${x2} ${y2}`;
+  }
+
+  const bgArcPath = arcPath(180, 0, R);
+  const awayArcPath = needleAngleDeg < 180 ? arcPath(180, needleAngleDeg, R) : null;
+  const homeArcPath = needleAngleDeg > 0 ? arcPath(needleAngleDeg, 0, R) : null;
+
+  const leader = homeDeserve >= awayDeserve ? homeAbbr : awayAbbr;
+  const leaderPct = Math.max(homeDeserve, awayDeserve);
+
   return (
-    <div style={{ textAlign: "center" }}>
-      <svg viewBox="0 0 320 175" style={{ width: "100%", maxWidth: 320, height: "auto", display: "block", margin: "0 auto" }}>
-        <path d="M 50,148 A 110,110 0 0,1 160,38" fill="none" stroke={awayColor} strokeWidth={18} strokeLinecap="round" opacity={0.4} />
-        <path d="M 160,38 A 110,110 0 0,1 270,148" fill="none" stroke={homeColor} strokeWidth={18} strokeLinecap="round" opacity={0.4} />
-        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#eff8ff" strokeWidth={2.5} strokeLinecap="round" />
-        <circle cx={cx} cy={cy} r={6} fill="#eff8ff" />
-        <text x={cx} y={cy - 18} textAnchor="middle" fill="#eff8ff" fontSize={18} fontWeight={900} fontFamily="'DM Mono',monospace">
-          {leader} leads
+    <div style={{ display: "grid", gap: 8 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: W, height: "auto", display: "block", margin: "0 auto", overflow: "visible" }}>
+        {/* Background arc */}
+        <path d={bgArcPath} fill="none" stroke="#1a2d40" strokeWidth={18} strokeLinecap="round" />
+        {/* Away colored arc */}
+        {awayArcPath && (
+          <path d={awayArcPath} fill="none" stroke={awayColor} strokeWidth={18} strokeLinecap="round" opacity={0.85} />
+        )}
+        {/* Home colored arc */}
+        {homeArcPath && (
+          <path d={homeArcPath} fill="none" stroke={homeColor} strokeWidth={18} strokeLinecap="round" opacity={0.85} />
+        )}
+        {/* Needle */}
+        <line x1={cx} y1={cy} x2={needleX} y2={needleY} stroke="#ffffff" strokeWidth={2.5} strokeLinecap="round" />
+        <circle cx={cx} cy={cy} r={6} fill="#ffffff" opacity={0.9} />
+        {/* Center text */}
+        <text x={cx} y={cy - 18} fill="#eff8ff" fontSize={20} fontWeight={900} fontFamily="'DM Mono',monospace" textAnchor="middle">
+          {(leaderPct * 100).toFixed(1)}%
         </text>
-        <text x={cx} y={cy - 4} textAnchor="middle" fill="#5e7b98" fontSize={9} fontFamily="'DM Mono',monospace" letterSpacing="2">
-          {(leaderPct * 100).toFixed(1)}% xG share
+        <text x={cx} y={cy - 4} fill="#5e7b98" fontSize={9} fontFamily="'DM Mono',monospace" textAnchor="middle">
+          {leader} deserved
         </text>
-        <text x={38} y={170} textAnchor="middle" fill={awayColor} fontSize={11} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
-        <text x={282} y={170} textAnchor="middle" fill={homeColor} fontSize={11} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
-        <text x={38} y={155} textAnchor="middle" fill={awayColor} fontSize={10} fontFamily="'DM Mono',monospace">{awayXG.toFixed(2)}</text>
-        <text x={282} y={155} textAnchor="middle" fill={homeColor} fontSize={10} fontFamily="'DM Mono',monospace">{homeXG.toFixed(2)}</text>
+        {/* Away label — bottom left */}
+        <text x={20} y={H - 8} fill={awayColor} fontSize={11} fontWeight={700} fontFamily="'DM Mono',monospace">
+          {awayAbbr} {(awayDeserve * 100).toFixed(1)}%
+        </text>
+        {/* Home label — bottom right */}
+        <text x={W - 20} y={H - 8} fill={homeColor} fontSize={11} fontWeight={700} fontFamily="'DM Mono',monospace" textAnchor="end">
+          {homeAbbr} {(homeDeserve * 100).toFixed(1)}%
+        </text>
       </svg>
-      <div style={{ color: "#5e7b98", fontSize: 9, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 2 }}>
-        {awayAbbr} {(awayXGPct * 100).toFixed(1)}% — {homeAbbr} {(homeXGPct * 100).toFixed(1)}%
-      </div>
+      {sims > 0 && (
+        <div style={{ textAlign: "center", fontSize: 10, color: "#3a5570", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em" }}>
+          {sims.toLocaleString()} game simulations · each shot rolled independently
+        </div>
+      )}
     </div>
   );
 }
@@ -485,6 +544,7 @@ export default function GameStatsPanel({
   const { shotEvents, winProbTimeline, xgByPeriod, playerXG, totalHomeXG, totalAwayXG } =
     parsePBP(pbp, homeTeamId, awayTeamId);
   const totalXG = totalHomeXG + totalAwayXG;
+  const deserved = simulateDeservedWin(shotEvents);
 
   if (totalXG < 0.01) {
     return (
@@ -569,14 +629,15 @@ export default function GameStatsPanel({
           ...CARD,
           background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.08)} 0%, #091017 40%, #091017 60%, ${hexToRgba(homeColor, 0.08)} 100%)`,
         }}>
-          <div style={SECTION_LABEL}>Puck luck · xG share</div>
-          <PuckLuckMeter
-            homeXG={totalHomeXG}
-            awayXG={totalAwayXG}
+          <div style={SECTION_LABEL}>Deserved to win</div>
+          <DeservedToWinMeter
+            homeDeserve={deserved.home}
+            awayDeserve={deserved.away}
             homeAbbr={homeAbbr}
             awayAbbr={awayAbbr}
             homeColor={homeColor}
             awayColor={awayColor}
+            sims={deserved.sims}
           />
         </div>
 
