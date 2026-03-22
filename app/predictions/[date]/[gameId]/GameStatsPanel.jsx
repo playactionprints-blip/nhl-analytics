@@ -201,8 +201,9 @@ function SectionDivider({ label }) {
 
 function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHomeXG, totalAwayXG }) {
   const [hoveredShot, setHoveredShot] = useState(null);
-  const homeShots = shotEvents.filter(e => e.isHome && (e.type === "shot-on-goal" || e.type === "goal")).length;
-  const awayShots = shotEvents.filter(e => !e.isHome && (e.type === "shot-on-goal" || e.type === "goal")).length;
+  const displayShots = shotEvents.filter(s => s.type !== "blocked-shot");
+  const homeShots = displayShots.filter(s => s.isHome).length;
+  const awayShots = displayShots.filter(s => !s.isHome).length;
 
   const goalLineLeft = 66;
   const goalLineRight = 534;
@@ -258,7 +259,7 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
           <text x={goalLineLeft - 24} y={15} textAnchor="middle" fill={awayColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{awayAbbr}</text>
           <text x={goalLineRight + 24} y={15} textAnchor="middle" fill={homeColor} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight={700}>{homeAbbr}</text>
           {/* Shot dots */}
-          {shotEvents.map((ev, i) => {
+          {displayShots.map((ev, i) => {
             const px = ev.plotX ?? ev.x;
             const py = ev.plotY ?? ev.y;
             if (px == null || py == null) return null;
@@ -267,7 +268,6 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
             const baseR = Math.min(ev.xg * 10 + 5, 14);
             const isGoal = ev.type === "goal";
             const isMissed = ev.type === "missed-shot";
-            const isBlocked = ev.type === "blocked-shot";
             const r = isGoal ? Math.min(baseR + 3, 17) : baseR;
             const color = ev.isHome ? homeColor : awayColor;
 
@@ -289,16 +289,6 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
                   onMouseLeave={() => setHoveredShot(null)}>
                   <circle cx={cx + 1} cy={cy + 1} r={baseR} fill={color} opacity={0.2} />
                   <circle cx={cx} cy={cy} r={baseR} fill="none" stroke={color} strokeWidth={1.5} opacity={0.5} />
-                </g>
-              );
-            }
-            if (isBlocked) {
-              return (
-                <g key={i} style={{ cursor: "pointer" }}
-                  onMouseEnter={(e) => handleShotEnter(e, ev)}
-                  onMouseLeave={() => setHoveredShot(null)}>
-                  <circle cx={cx + 1} cy={cy + 1} r={Math.max(baseR - 2, 3)} fill={color} opacity={0.2} />
-                  <circle cx={cx} cy={cy} r={Math.max(baseR - 2, 3)} fill={color} opacity={0.25} />
                 </g>
               );
             }
@@ -363,7 +353,6 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
           { label: "Goal", fillOpacity: 1.0, stroke: "#1a1a1a", sw: 1.5 },
           { label: "Shot", fillOpacity: 0.8, stroke: "none", sw: 0 },
           { label: "Missed", fillOpacity: 0, stroke: "#8db9dc", sw: 1.5 },
-          { label: "Blocked", fillOpacity: 0.25, stroke: "none", sw: 0 },
         ].map(({ label, fillOpacity, stroke, sw }) => (
           <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <svg width={12} height={12}>
