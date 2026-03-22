@@ -240,6 +240,80 @@ function PercentileTile({ label, value, subtitle, big = false }) {
   );
 }
 
+function HomeSignalTile({ label, value, subvalue, tone = "blue" }) {
+  const tones = {
+    blue: {
+      border: "#1f3a57",
+      bg: "linear-gradient(180deg, rgba(15,27,42,0.96) 0%, rgba(10,17,27,0.92) 100%)",
+      value: "#eef8ff",
+      glow: "rgba(47,180,255,0.22)",
+    },
+    teal: {
+      border: "#1d4d4a",
+      bg: "linear-gradient(180deg, rgba(12,30,31,0.96) 0%, rgba(9,18,22,0.92) 100%)",
+      value: "#dffff3",
+      glow: "rgba(0,229,160,0.18)",
+    },
+    amber: {
+      border: "#584722",
+      bg: "linear-gradient(180deg, rgba(38,28,12,0.96) 0%, rgba(20,16,9,0.92) 100%)",
+      value: "#fff4d6",
+      glow: "rgba(240,192,64,0.14)",
+    },
+  };
+  const palette = tones[tone] || tones.blue;
+
+  return (
+    <div
+      style={{
+        padding: "16px 16px 14px",
+        borderRadius: 16,
+        border: `1px solid ${palette.border}`,
+        background: palette.bg,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 40px ${palette.glow}`,
+      }}
+    >
+      <div style={{ fontSize: 10, color: "#5e7b98", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 10 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 900, color: palette.value, lineHeight: 1 }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 12, color: "#8aa4bf", marginTop: 8 }}>
+        {subvalue}
+      </div>
+    </div>
+  );
+}
+
+function HomeDestinationCard({ href, eyebrow, title, description, accent }) {
+  return (
+    <Link
+      href={href}
+      style={{
+        display: "block",
+        padding: "18px 18px 16px",
+        borderRadius: 18,
+        border: `1px solid ${accent}55`,
+        background: `linear-gradient(180deg, ${accent}18 0%, rgba(11,18,28,0.96) 48%, rgba(8,13,20,0.98) 100%)`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 20px 40px rgba(0,0,0,0.24)`,
+        textDecoration: "none",
+        minHeight: 138,
+      }}
+    >
+      <div style={{ fontSize: 10, color: accent, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 10 }}>
+        {eyebrow}
+      </div>
+      <div style={{ fontSize: 24, fontWeight: 900, color: "#eef8ff", lineHeight: 1.02, marginBottom: 10 }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 13, color: "#7f97b0", lineHeight: 1.45 }}>
+        {description}
+      </div>
+    </Link>
+  );
+}
+
 function TrendPanel({ title, subtitle, data, lines, accent }) {
   const valid = (data || []).filter((row) => lines.some((line) => row[line.key] != null));
   if (valid.length < 2) return null;
@@ -938,15 +1012,35 @@ function PlayerCard({ player }) {
   // Fetch career stats on demand when the Career tab is first opened
   useEffect(() => {
     if (tab !== "career" || careerStats !== null || careerLoading) return;
-    setCareerLoading(true);
-    clientSupabase
-      .from("career_stats")
-      .select("season,team,gp,g,a,pts,toi_total,ixg,pts_per_82")
-      .eq("player_id", player.player_id)
-      .order("season", { ascending: true })
-      .then(({ data }) => { setCareerStats(data || []); setCareerLoading(false); })
-      .catch(() => { setCareerStats([]); setCareerLoading(false); });
-  }, [tab, player.player_id]);
+    let cancelled = false;
+
+    async function loadCareerStats() {
+      setCareerLoading(true);
+      try {
+        const { data } = await clientSupabase
+          .from("career_stats")
+          .select("season,team,gp,g,a,pts,toi_total,ixg,pts_per_82")
+          .eq("player_id", player.player_id)
+          .order("season", { ascending: true });
+        if (!cancelled) {
+          setCareerStats(data || []);
+        }
+      } catch {
+        if (!cancelled) {
+          setCareerStats([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setCareerLoading(false);
+        }
+      }
+    }
+
+    loadCareerStats();
+    return () => {
+      cancelled = true;
+    };
+  }, [careerLoading, careerStats, player.player_id, tab]);
 
   const toggleOnIceSection = (key) => {
     setOnIceSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1909,6 +2003,16 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
   }, [searchResults, filterPos, filterTeam, filterRatingMin, filterWarMin]);
 
   const visiblePlayers = browseMode === "search" ? filteredSearchResults : teamFilteredPlayers;
+  const totalTeams = useMemo(
+    () => new Set(allPlayers.map((player) => (player.team || "").toUpperCase()).filter(Boolean)).size,
+    [allPlayers]
+  );
+  const topLeader = defaultSearchPlayers[0] || null;
+  const elitePlayers = useMemo(
+    () => allPlayers.filter((player) => (player.war_total ?? -99) >= 2).length,
+    [allPlayers]
+  );
+  const searchHighlights = useMemo(() => defaultSearchPlayers.slice(0, 4), [defaultSearchPlayers]);
 
   return (
     <>
@@ -1927,6 +2031,10 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
         @media (max-width:639px) {
           .app-outer { padding:16px 10px 40px !important; }
           .app-h1 { font-size:28px !important; letter-spacing:-0.5px !important; }
+          .app-hero-shell { grid-template-columns: 1fr !important; padding: 18px !important; gap: 18px !important; }
+          .app-destination-grid { grid-template-columns: 1fr !important; }
+          .app-search-shell { grid-template-columns: 1fr !important; }
+          .app-signal-grid { grid-template-columns: 1fr 1fr !important; }
           .app-mode-btn { padding:8px 10px !important; font-size:11px !important; }
           .pc-card { width:calc(100vw - 24px) !important; }
           .pc-header-row { flex-direction:column !important; align-items:center !important; gap:8px !important; }
@@ -1943,15 +2051,106 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
           .pc-modal-close-btn { display:flex !important; align-items:center !important; justify-content:center !important; position:fixed !important; top:16px !important; right:16px !important; z-index:201 !important; min-width:44px !important; min-height:44px !important; width:44px !important; height:44px !important; border-radius:22px !important; background:#1a2535 !important; border:1px solid #2a3d55 !important; color:#e8f4ff !important; font-size:20px !important; cursor:pointer !important; line-height:1 !important; }
           .pc-modal-wrapper { position:fixed !important; inset:0 !important; z-index:200 !important; display:flex !important; flex-direction:column !important; align-items:center !important; padding:70px 12px 24px !important; overflow-y:auto !important; background:transparent !important; }
         }
+        @media (max-width:980px) {
+          .app-hero-shell { grid-template-columns: 1fr !important; }
+          .app-search-shell { grid-template-columns: 1fr !important; }
+        }
       `}</style>
 
       <div className="app-outer" style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)", display:"flex", flexDirection:"column", alignItems:"center", padding:"40px 20px", fontFamily:"'Barlow Condensed',sans-serif" }}>
 
         {/* Header */}
-        <div style={{ marginBottom:28, textAlign:"center" }}>
-          <div style={{ fontSize:11, color:"#2a5070", letterSpacing:"0.2em", textTransform:"uppercase", fontFamily:"'DM Mono',monospace", marginBottom:8 }}>NHL Analytics</div>
-          <h1 className="app-h1" style={{ fontSize:42, fontWeight:900, color:"#e8f4ff", letterSpacing:"-1px", lineHeight:1 }}>Player Cards</h1>
-          <div style={{ fontSize:12, color:"#2a4060", fontFamily:"'DM Mono',monospace", marginTop:6 }}>3-Year Weighted WAR · RAPM · On-Ice Shot Rates · Percentile Rankings</div>
+        <div className="app-hero-shell" style={{
+          width: "100%",
+          maxWidth: 1180,
+          marginBottom: 24,
+          display: "grid",
+          gridTemplateColumns: "1.2fr 0.8fr",
+          gap: 22,
+          padding: 24,
+          borderRadius: 26,
+          border: "1px solid #17304a",
+          background: "linear-gradient(135deg, rgba(16,34,53,0.94) 0%, rgba(10,17,27,0.96) 44%, rgba(7,11,17,0.98) 100%)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 28px 90px rgba(0,0,0,0.36)",
+          position: "relative",
+          overflow: "hidden",
+        }}>
+          <div style={{
+            position: "absolute",
+            inset: "auto -8% -55% auto",
+            width: 380,
+            height: 380,
+            borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(47,180,255,0.18) 0%, rgba(47,180,255,0.06) 36%, transparent 70%)",
+            pointerEvents: "none",
+          }} />
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 999, border: "1px solid #234869", background: "rgba(10,18,29,0.7)", marginBottom: 16 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#2fb4ff", boxShadow: "0 0 14px rgba(47,180,255,0.75)" }} />
+              <span style={{ fontSize: 10, color: "#91cfff", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: "'DM Mono',monospace" }}>
+                NHL Analytics Command Center
+              </span>
+            </div>
+            <h1 className="app-h1" style={{ fontSize: 54, fontWeight: 900, color: "#f3f9ff", letterSpacing: "-1.6px", lineHeight: 0.96, maxWidth: 620 }}>
+              Player cards with real model depth, not just a stat dump.
+            </h1>
+            <div style={{ fontSize: 15, color: "#8ca7c1", lineHeight: 1.65, marginTop: 16, maxWidth: 620 }}>
+              Search any player, compare impact across seasons, and move seamlessly into predictions, playoff odds, lottery simulations, and roster building from one place.
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
+              {["3Y weighted WAR", "RAPM + On-Ice", "Season trends", "Percentile cards"].map((tag) => (
+                <div
+                  key={tag}
+                  style={{
+                    padding: "8px 11px",
+                    borderRadius: 999,
+                    border: "1px solid #1d3854",
+                    background: "rgba(9,17,26,0.72)",
+                    color: "#9db8d2",
+                    fontSize: 11,
+                    fontFamily: "'DM Mono',monospace",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  {tag}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="app-signal-grid" style={{ position: "relative", zIndex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignSelf: "start" }}>
+            <HomeSignalTile
+              label="Player Universe"
+              value={allPlayers.length.toLocaleString()}
+              subvalue="Current skaters and goalies loaded"
+              tone="blue"
+            />
+            <HomeSignalTile
+              label="Teams Covered"
+              value={totalTeams}
+              subvalue="League-wide roster and card coverage"
+              tone="teal"
+            />
+            <HomeSignalTile
+              label="WAR Leaders"
+              value={elitePlayers}
+              subvalue="Players at 2.0+ current-season WAR"
+              tone="amber"
+            />
+            <HomeSignalTile
+              label="Current Top Card"
+              value={topLeader?.full_name || topLeader?.name || "—"}
+              subvalue={topLeader?.war_total != null ? `${topLeader.team} · ${Number(topLeader.war_total).toFixed(2)} WAR` : "Top current-season WAR leader"}
+              tone="blue"
+            />
+          </div>
+        </div>
+
+        <div className="app-destination-grid" style={{ width: "100%", maxWidth: 1180, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14, marginBottom: 24 }}>
+          <HomeDestinationCard href="/predictions" eyebrow="Game Models" title="Predictions" description="Tonight’s slate, fair odds, goalie context, and detailed matchup pages." accent="#2fb4ff" />
+          <HomeDestinationCard href="/playoff-odds" eyebrow="Simulation Hub" title="Playoff Odds" description="Division, conference, and round-by-round probabilities with scenario-driven standings context." accent="#00e5a0" />
+          <HomeDestinationCard href="/compare" eyebrow="Decision Tools" title="Compare + Build" description="Jump from player cards into comparisons, roster building, and draft-lottery scenarios." accent="#f0c040" />
         </div>
 
         {/* Mode toggle */}
@@ -1965,63 +2164,130 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
 
         {/* Search mode */}
         {browseMode === "search" && (
-          <div style={{ width:"100%", maxWidth:540, marginBottom:20 }}>
-            <input
-              type="text"
-              placeholder="Search any player..."
-              value={search}
-              onChange={e => { setSearch(e.target.value); setSelectedPlayer(null); }}
-              style={{ width:"100%", padding:"14px 20px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:12, color:"#e8f4ff", fontSize:16, fontFamily:"'Barlow Condensed',sans-serif", outline:"none", letterSpacing:"0.03em" }}
-            />
-            {/* Search filters */}
-            <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:8, padding:"12px 14px", background:"#080e17", border:"1px solid #1e2d40", borderRadius:10 }}>
-              {/* Position row */}
-              <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
-                <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginRight:4 }}>Pos</span>
-                {["All","C","LW","RW","D","G"].map(v => (
-                  <button key={v} onClick={() => setFilterPos(v)}
-                    style={{ padding:"4px 10px", background:filterPos===v?"#0080FF":"#0d1825", border:`1px solid ${filterPos===v?"#0080FF":"#1e2d40"}`, borderRadius:5, color:filterPos===v?"white":"#4a6a88", fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer" }}>
-                    {v}
+          <div className="app-search-shell" style={{ width:"100%", maxWidth:1180, marginBottom:20, display:"grid", gridTemplateColumns:"0.88fr 1.12fr", gap:18, alignItems:"start" }}>
+            <div style={{
+              padding: "22px 20px",
+              borderRadius: 22,
+              border: "1px solid #19314a",
+              background: "linear-gradient(180deg, rgba(11,18,28,0.96) 0%, rgba(7,11,17,0.98) 100%)",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 50px rgba(0,0,0,0.3)",
+            }}>
+              <div style={{ fontSize: 10, color: "#6daee4", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 12 }}>
+                Search Strategy
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: "#eef8ff", lineHeight: 1.02, marginBottom: 12 }}>
+                Start with the league’s most valuable players.
+              </div>
+              <div style={{ fontSize: 14, color: "#7f99b5", lineHeight: 1.6, marginBottom: 18 }}>
+                Live search updates instantly, while the homepage defaults to current-season WAR leaders so the first click already teaches the shape of your player model.
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {searchHighlights.map((player, index) => (
+                  <button
+                    key={player.player_id}
+                    onClick={() => openPlayer(playerLookup[player.player_id] || player)}
+                    style={{
+                      width: "100%",
+                      display: "grid",
+                      gridTemplateColumns: "34px 1fr auto",
+                      gap: 12,
+                      alignItems: "center",
+                      padding: "12px 12px 12px 10px",
+                      borderRadius: 14,
+                      border: `1px solid ${(TEAM_COLOR[player.team] || "#2fb4ff")}55`,
+                      background: "rgba(12,22,34,0.88)",
+                      color: "#eef8ff",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    <img src={logoUrl(player.team)} alt={player.team} width={26} height={26} style={{ objectFit: "contain" }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.05, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {index + 1}. {player.full_name || player.name}
+                      </div>
+                      <div style={{ marginTop: 3, fontSize: 10, color: "#6d87a1", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        {player.team} · {player.position || "—"} · {player.war_total != null ? `${Number(player.war_total).toFixed(2)} WAR` : "Profile"}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, color: "#9fd8ff", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      Open
+                    </div>
                   </button>
                 ))}
               </div>
-              {/* Team + Rating + WAR row */}
-              <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-                <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)}
-                  style={{ padding:"4px 8px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:5, color:filterTeam?"#c8dff0":"#3a5a78", fontSize:11, fontFamily:"'DM Mono',monospace", cursor:"pointer", outline:"none" }}>
-                  <option value="">All Teams</option>
-                  {ALL_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                  <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>OVR≥</span>
-                  <input type="number" min={0} max={100} value={filterRatingMin}
-                    onChange={e => setFilterRatingMin(Number(e.target.value))}
-                    style={{ width:48, padding:"4px 6px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:5, color:"#c8dff0", fontSize:11, fontFamily:"'DM Mono',monospace", outline:"none" }} />
-                </div>
-                <div style={{ display:"flex", gap:4, alignItems:"center" }}>
-                  <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>WAR</span>
-                  {[null, 0, 1, 2, 3].map(v => (
-                    <button key={v ?? "any"} onClick={() => setFilterWarMin(v)}
-                      style={{ padding:"4px 8px", background:filterWarMin===v?"#334466":"#0d1825", border:`1px solid ${filterWarMin===v?"#5577aa":"#1e2d40"}`, borderRadius:5, color:filterWarMin===v?"#c8dff0":"#4a6a88", fontSize:10, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer" }}>
-                      {v == null ? "Any" : `>${v}`}
-                    </button>
-                  ))}
-                </div>
-                {(filterPos !== "All" || filterTeam || filterRatingMin > 0 || filterWarMin != null) && (
-                  <button onClick={() => { setFilterPos("All"); setFilterTeam(""); setFilterRatingMin(0); setFilterWarMin(null); }}
-                    style={{ padding:"4px 10px", background:"#1a0a0a", border:"1px solid #e0505044", borderRadius:5, color:"#e05050", fontSize:10, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer" }}>
-                    Clear
-                  </button>
-                )}
-              </div>
-              <div style={{ fontSize:10, color:"#2a4060", fontFamily:"'DM Mono',monospace" }}>
-                Showing {filteredSearchResults.length} of {searchResults.length} players
-              </div>
             </div>
-            <div style={{ marginTop: 10, background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 14, overflow: "hidden", boxShadow: "0 14px 34px rgba(0,0,0,0.26)" }}>
+
+            <div>
+              <div style={{
+                padding: "18px 18px 16px",
+                borderRadius: 22,
+                border: "1px solid #1d344d",
+                background: "linear-gradient(180deg, rgba(10,20,31,0.98) 0%, rgba(9,15,24,0.98) 100%)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 22px 58px rgba(0,0,0,0.34)",
+              }}>
+                <div style={{ fontSize: 10, color: "#6daee4", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 12 }}>
+                  Player Search
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search any player..."
+                  value={search}
+                  onChange={e => { setSearch(e.target.value); setSelectedPlayer(null); }}
+                  style={{ width:"100%", padding:"14px 20px", background:"#0d1825", border:"1px solid #22374d", borderRadius:14, color:"#e8f4ff", fontSize:17, fontFamily:"'Barlow Condensed',sans-serif", outline:"none", letterSpacing:"0.03em", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.04)" }}
+                />
+                {/* Search filters */}
+                <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:8, padding:"12px 14px", background:"#080e17", border:"1px solid #1b2a3b", borderRadius:14 }}>
+                  {/* Position row */}
+                  <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
+                    <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginRight:4 }}>Pos</span>
+                    {["All","C","LW","RW","D","G"].map(v => (
+                      <button key={v} onClick={() => setFilterPos(v)}
+                        style={{ padding:"4px 10px", background:filterPos===v?"#0080FF":"#0d1825", border:`1px solid ${filterPos===v?"#0080FF":"#1e2d40"}`, borderRadius:999, color:filterPos===v?"white":"#4a6a88", fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer" }}>
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Team + Rating + WAR row */}
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+                    <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)}
+                      style={{ padding:"4px 8px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:999, color:filterTeam?"#c8dff0":"#3a5a78", fontSize:11, fontFamily:"'DM Mono',monospace", cursor:"pointer", outline:"none" }}>
+                      <option value="">All Teams</option>
+                      {ALL_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                      <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>OVR≥</span>
+                      <input type="number" min={0} max={100} value={filterRatingMin}
+                        onChange={e => setFilterRatingMin(Number(e.target.value))}
+                        style={{ width:48, padding:"4px 6px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:7, color:"#c8dff0", fontSize:11, fontFamily:"'DM Mono',monospace", outline:"none" }} />
+                    </div>
+                    <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+                      <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>WAR</span>
+                      {[null, 0, 1, 2, 3].map(v => (
+                        <button key={v ?? "any"} onClick={() => setFilterWarMin(v)}
+                          style={{ padding:"4px 8px", background:filterWarMin===v?"#334466":"#0d1825", border:`1px solid ${filterWarMin===v?"#5577aa":"#1e2d40"}`, borderRadius:999, color:filterWarMin===v?"#c8dff0":"#4a6a88", fontSize:10, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer" }}>
+                          {v == null ? "Any" : `>${v}`}
+                        </button>
+                      ))}
+                    </div>
+                    {(filterPos !== "All" || filterTeam || filterRatingMin > 0 || filterWarMin != null) && (
+                      <button onClick={() => { setFilterPos("All"); setFilterTeam(""); setFilterRatingMin(0); setFilterWarMin(null); }}
+                        style={{ padding:"4px 10px", background:"#1a0a0a", border:"1px solid #e0505044", borderRadius:999, color:"#e05050", fontSize:10, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer" }}>
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ fontSize:10, color:"#3f6282", fontFamily:"'DM Mono',monospace", display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap" }}>
+                    <span>{search.trim() ? "Live substring search across current-season players" : "Defaulting to the top 10 current-season WAR leaders"}</span>
+                    <span>Showing {filteredSearchResults.length} of {searchResults.length}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 10, background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 18, overflow: "hidden", boxShadow: "0 14px 34px rgba(0,0,0,0.26)" }}>
               {!searchLoading && (
                 <div style={{
-                  padding: "10px 14px",
+                  padding: "11px 14px",
                   borderBottom: visiblePlayers.length > 0 ? "1px solid #142231" : "none",
                   fontSize: 10,
                   color: "#5f7d99",
@@ -2078,6 +2344,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
                   No players found.
                 </div>
               )}
+              </div>
             </div>
           </div>
         )}
