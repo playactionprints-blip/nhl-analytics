@@ -55,7 +55,7 @@ export default async function PlayerPage({ params }) {
       <p>3Y WAR: {player.war?.war3yr != null ? player.war.war3yr.toFixed(2) : "—"}</p>
       <p>Overall rating: {player.ratings?.overall != null ? Math.round(player.ratings.overall) : "—"}</p>
       <p style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <Link href="/">Back to player cards</Link>
+        <Link href="/players">Back to player cards</Link>
         <ShareButton playerId={playerId} />
       </p>
     </main>
