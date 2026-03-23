@@ -5,36 +5,76 @@
  */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { logoUrl } from "@/app/lib/nhlTeams";
 import { buildRankedPlayers, formatFantasyValue } from "@/app/components/fantasy-hub/fantasyHubUtils";
 
-const SORTABLE_COLUMNS = {
-  fantasyValue: "Fantasy Value",
-  goals: "Goals",
-  assists: "Assists",
-  shots: "Shots",
-  hits: "Hits",
-  blocks: "Blocks",
-  saves: "Saves",
-  wins: "Wins",
-  gamesInSpan: "Games",
-};
+const SORTABLE_COLUMNS = [
+  { key: "projectedFantasyPoints", label: "Fantasy Value" },
+  { key: "projectedGoals", label: "Goals" },
+  { key: "projectedAssists", label: "Assists" },
+  { key: "projectedShots", label: "Shots" },
+  { key: "projectedHits", label: "Hits" },
+  { key: "projectedBlocks", label: "Blocks" },
+  { key: "projectedSaves", label: "Saves" },
+  { key: "projectedWins", label: "Wins" },
+  { key: "projectedGames", label: "Games" },
+];
+
+function formatProjectedCell(value, digits = 1) {
+  if (value == null || !Number.isFinite(Number(value))) return "—";
+  return Number(value).toFixed(digits);
+}
 
 export default function FantasyRankingsTable({ players, state, timeframe, filters, scheduleData }) {
-  const [sortKey, setSortKey] = useState("fantasyValue");
+  const [sortKey, setSortKey] = useState("projectedFantasyPoints");
   const [sortDir, setSortDir] = useState("desc");
 
   const ranked = useMemo(() => {
     const base = buildRankedPlayers(players, state, timeframe, filters, scheduleData);
     const direction = sortDir === "asc" ? 1 : -1;
     return [...base].sort((left, right) => {
-      const a = Number(left[sortKey] ?? left.fantasyValue ?? 0);
-      const b = Number(right[sortKey] ?? right.fantasyValue ?? 0);
+      const a = Number(left[sortKey] ?? left.projectedFantasyPoints ?? 0);
+      const b = Number(right[sortKey] ?? right.projectedFantasyPoints ?? 0);
       if (a === b) return String(left.player_name).localeCompare(String(right.player_name));
       return (a - b) * direction;
     });
   }, [filters, players, scheduleData, sortDir, sortKey, state, timeframe]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production" || !ranked.length) return;
+    const samples = ranked.slice(0, 3).map((projection) => {
+      const source = players.find((player) => String(player.player_id) === String(projection.player_id));
+      return {
+        player: projection.player_name,
+        timeframe,
+        rawSource: source,
+        normalizedProjection: {
+          projectedFantasyPoints: projection.projectedFantasyPoints,
+          projectedGames: projection.projectedGames,
+          projectedGoals: projection.projectedGoals,
+          projectedAssists: projection.projectedAssists,
+          projectedShots: projection.projectedShots,
+          projectedHits: projection.projectedHits,
+          projectedBlocks: projection.projectedBlocks,
+          projectedSaves: projection.projectedSaves,
+          projectedWins: projection.projectedWins,
+        },
+        renderedRow: {
+          projectedFantasyPoints: formatFantasyValue(projection.projectedFantasyPoints),
+          projectedGames: formatProjectedCell(projection.projectedGames, 0),
+          projectedGoals: formatProjectedCell(projection.projectedGoals),
+          projectedAssists: formatProjectedCell(projection.projectedAssists),
+          projectedShots: formatProjectedCell(projection.projectedShots),
+          projectedHits: formatProjectedCell(projection.projectedHits),
+          projectedBlocks: formatProjectedCell(projection.projectedBlocks),
+          projectedSaves: formatProjectedCell(projection.projectedSaves),
+          projectedWins: formatProjectedCell(projection.projectedWins),
+        },
+      };
+    });
+    console.debug("[FantasyRankingsTable] sample projection rows", samples);
+  }, [players, ranked, timeframe]);
 
   function toggleSort(nextKey) {
     if (sortKey === nextKey) {
@@ -67,8 +107,8 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
         <div className="fantasy-rankings-head" style={{ display: "grid", gridTemplateColumns: "56px minmax(220px, 1.3fr) 90px repeat(8, minmax(64px, 1fr))", gap: 10, padding: "12px 16px", borderBottom: "1px solid #142433", color: "#62809d", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
           <div>Rank</div>
           <div>Player</div>
-          <button type="button" onClick={() => toggleSort("fantasyValue")} style={{ all: "unset", cursor: "pointer" }}>{tableLabel}</button>
-          {Object.entries(SORTABLE_COLUMNS).filter(([key]) => key !== "fantasyValue").map(([key, label]) => (
+          <button type="button" onClick={() => toggleSort("projectedFantasyPoints")} style={{ all: "unset", cursor: "pointer" }}>{tableLabel}</button>
+          {SORTABLE_COLUMNS.filter((column) => column.key !== "projectedFantasyPoints").map(({ key, label }) => (
             <button key={key} type="button" onClick={() => toggleSort(key)} style={{ all: "unset", cursor: "pointer", textAlign: "right" }}>
               {label}
             </button>
@@ -106,15 +146,15 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
                   </div>
                 </div>
               </div>
-              <div style={{ color: "#8fd6ff", fontSize: 15, fontWeight: 900, textAlign: "right" }}>{formatFantasyValue(player.fantasyValue)}</div>
-              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{player.goals}</div>
-              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{player.assists}</div>
-              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{player.shots}</div>
-              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{player.hits}</div>
-              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{player.blocks}</div>
-              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{player.saves}</div>
-              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{player.wins}</div>
-              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{player.gamesInSpan}</div>
+              <div style={{ color: "#8fd6ff", fontSize: 15, fontWeight: 900, textAlign: "right" }}>{formatFantasyValue(player.projectedFantasyPoints)}</div>
+              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{formatProjectedCell(player.projectedGoals)}</div>
+              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{formatProjectedCell(player.projectedAssists)}</div>
+              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{formatProjectedCell(player.projectedShots)}</div>
+              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{formatProjectedCell(player.projectedHits)}</div>
+              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{formatProjectedCell(player.projectedBlocks)}</div>
+              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{formatProjectedCell(player.projectedSaves)}</div>
+              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{formatProjectedCell(player.projectedWins)}</div>
+              <div style={{ color: "#d4e5f3", fontSize: 13, textAlign: "right" }}>{formatProjectedCell(player.projectedGames, 0)}</div>
             </div>
           ))}
           {!ranked.length ? (

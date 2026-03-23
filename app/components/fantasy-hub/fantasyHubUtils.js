@@ -188,6 +188,10 @@ export function timeframeOffNightGamesForPlayer(player, timeframe, scheduleData)
   return toNumber(map?.[player.team], 0);
 }
 
+function hasStatSample(total, gp) {
+  return total != null && Number.isFinite(Number(total)) && Number(gp) > 0;
+}
+
 function safeRate(total, gp) {
   const games = Math.max(toNumber(gp, 0), 1);
   return toNumber(total, 0) / games;
@@ -271,7 +275,8 @@ function categoryScoreForPlayer(player, settings, gamesInSpan, categoryContext) 
   return categoryValuePerGame(player, settings, categoryContext) * Math.max(gamesInSpan, 1);
 }
 
-function projectedStat(total, gp, gamesInSpan) {
+function projectedStat(total, gp, gamesInSpan, { nullable = true } = {}) {
+  if (!hasStatSample(total, gp)) return nullable ? null : 0;
   return safeRate(total, gp) * gamesInSpan;
 }
 
@@ -301,25 +306,49 @@ export function buildFantasyProjection(player, state, timeframe, scheduleData, c
   const gamesInSpan = timeframeGamesForPlayer(player, timeframe, scheduleData);
   const offNightGames = timeframeOffNightGamesForPlayer(player, timeframe, scheduleData);
   const categoryRanges = categoryContext || buildCategoryContext([player]);
+  const isGoalie = String(player.position).toUpperCase() === "G";
   const fantasyValue =
     state.settings.leagueType === "categories"
       ? categoryScoreForPlayer(player, state.settings, gamesInSpan, categoryRanges)
       : fantasyPointsForPlayer(player, state.settings, gamesInSpan);
 
+  const projectedGoals = isGoalie ? null : projectedStat(player.goals, player.gp, gamesInSpan);
+  const projectedAssists = isGoalie ? null : projectedStat(player.assists, player.gp, gamesInSpan);
+  const projectedShots = isGoalie ? null : projectedStat(player.shots, player.gp, gamesInSpan);
+  const projectedHits = isGoalie ? null : projectedStat(player.hits, player.gp, gamesInSpan);
+  const projectedBlocks = isGoalie ? null : projectedStat(player.blocks, player.gp, gamesInSpan);
+  const projectedPPP = isGoalie ? null : projectedStat(player.ppp, player.gp, gamesInSpan);
+  const projectedPoints = isGoalie ? null : projectedStat(player.points, player.gp, gamesInSpan);
+  const projectedSaves = isGoalie ? projectedStat(player.saves, player.gp, gamesInSpan) : null;
+  const projectedWins = isGoalie ? projectedStat(player.wins, player.gp, gamesInSpan) : null;
+
   return {
     ...player,
+    projectionTimeframe: timeframe,
+    projectedFantasyPoints: fantasyValue,
+    projectedGames: gamesInSpan,
+    projectedOffNightGames: offNightGames,
+    projectedGoals,
+    projectedAssists,
+    projectedShots,
+    projectedHits,
+    projectedBlocks,
+    projectedPowerPlayPoints: projectedPPP,
+    projectedPoints,
+    projectedSaves,
+    projectedWins,
     gamesInSpan,
     offNightGames,
     fantasyValue,
-    pointsProjection: projectedStat(player.points, player.gp, gamesInSpan),
-    goalsProjection: projectedStat(player.goals, player.gp, gamesInSpan),
-    assistsProjection: projectedStat(player.assists, player.gp, gamesInSpan),
-    shotsProjection: projectedStat(player.shots, player.gp, gamesInSpan),
-    hitsProjection: projectedStat(player.hits, player.gp, gamesInSpan),
-    blocksProjection: projectedStat(player.blocks, player.gp, gamesInSpan),
-    pppProjection: projectedStat(player.ppp, player.gp, gamesInSpan),
-    savesProjection: projectedStat(player.saves, player.gp, gamesInSpan),
-    winsProjection: projectedStat(player.wins, player.gp, gamesInSpan),
+    pointsProjection: projectedPoints,
+    goalsProjection: projectedGoals,
+    assistsProjection: projectedAssists,
+    shotsProjection: projectedShots,
+    hitsProjection: projectedHits,
+    blocksProjection: projectedBlocks,
+    pppProjection: projectedPPP,
+    savesProjection: projectedSaves,
+    winsProjection: projectedWins,
     scheduleScore: gamesInSpan + offNightGames * 0.45,
     peripheralsValue: peripheralsForPlayer(player, gamesInSpan),
     scoringUpside: scoringUpsideForPlayer(player, gamesInSpan),
