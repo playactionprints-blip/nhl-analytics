@@ -165,9 +165,26 @@ export function timeframeGamesForPlayer(player, timeframe, scheduleData) {
     return Math.max(82 - toNumber(player.gp, 0), 0);
   }
   const map =
-    timeframe === "14d"
-      ? scheduleData?.spanCounts?.next14
-      : scheduleData?.spanCounts?.next7;
+    timeframe === "today"
+      ? scheduleData?.spanCounts?.today
+      : timeframe === "this-week"
+        ? scheduleData?.spanCounts?.thisWeek
+        : timeframe === "14d"
+          ? scheduleData?.spanCounts?.next14
+          : scheduleData?.spanCounts?.next7;
+  return toNumber(map?.[player.team], 0);
+}
+
+export function timeframeOffNightGamesForPlayer(player, timeframe, scheduleData) {
+  if (timeframe === "ros") return 0;
+  const map =
+    timeframe === "today"
+      ? scheduleData?.offNightCounts?.today
+      : timeframe === "this-week"
+        ? scheduleData?.offNightCounts?.thisWeek
+        : timeframe === "14d"
+          ? scheduleData?.offNightCounts?.next14
+          : scheduleData?.offNightCounts?.next7;
   return toNumber(map?.[player.team], 0);
 }
 
@@ -194,6 +211,33 @@ function fantasyPointsForPlayer(player, settings, gamesInSpan) {
     safeRate(player.blocks, player.gp) * toNumber(settings.skaterWeights.blocks, 0) +
     safeRate(player.ppp, player.gp) * toNumber(settings.skaterWeights.ppp, 0)
   );
+}
+
+function categoryValuePerGame(player, settings, categoryContext) {
+  if (String(player.position).toUpperCase() === "G") {
+    const fields = [
+      ["wins", false],
+      ["saves", false],
+      ["savePct", false],
+      ["gaa", true],
+    ].filter(([field]) => settings.categoryWeights[field]);
+    if (!fields.length) return 0;
+    const total = fields.reduce(
+      (sum, [field, invert]) => sum + normalizeToRange(player[field], categoryContext.goalies[field], invert),
+      0
+    );
+    return total / fields.length;
+  }
+
+  const fields = ["goals", "assists", "shots", "hits", "blocks", "ppp"].filter(
+    (field) => settings.categoryWeights[field]
+  );
+  if (!fields.length) return 0;
+  const total = fields.reduce(
+    (sum, field) => sum + normalizeToRange(player[field], categoryContext.skaters[field]),
+    0
+  );
+  return total / fields.length;
 }
 
 function buildCategoryContext(players) {
@@ -224,41 +268,72 @@ function normalizeToRange(value, range, invert = false) {
 }
 
 function categoryScoreForPlayer(player, settings, gamesInSpan, categoryContext) {
+  return categoryValuePerGame(player, settings, categoryContext) * Math.max(gamesInSpan, 1);
+}
+
+function projectedStat(total, gp, gamesInSpan) {
+  return safeRate(total, gp) * gamesInSpan;
+}
+
+function scoringUpsideForPlayer(player, gamesInSpan) {
   if (String(player.position).toUpperCase() === "G") {
-    const fields = [
-      ["wins", false],
-      ["saves", false],
-      ["savePct", false],
-      ["gaa", true],
-    ].filter(([field]) => settings.categoryWeights[field]);
-    if (!fields.length) return 0;
-    const total = fields.reduce((sum, [field, invert]) => sum + normalizeToRange(player[field], categoryContext.goalies[field], invert), 0);
-    return (total / fields.length) * Math.max(gamesInSpan, 1);
+    return projectedStat(player.wins, player.gp, gamesInSpan) * 2.5 +
+      projectedStat(player.savePct, 1, gamesInSpan) * 5;
   }
 
-  const fields = ["goals", "assists", "shots", "hits", "blocks", "ppp"].filter((field) => settings.categoryWeights[field]);
-  if (!fields.length) return 0;
-  const total = fields.reduce((sum, field) => sum + normalizeToRange(player[field], categoryContext.skaters[field]), 0);
-  return (total / fields.length) * Math.max(gamesInSpan, 1);
+  return projectedStat(player.goals, player.gp, gamesInSpan) * 3 +
+    projectedStat(player.assists, player.gp, gamesInSpan) * 2 +
+    projectedStat(player.ppp, player.gp, gamesInSpan) * 1.5;
+}
+
+function peripheralsForPlayer(player, gamesInSpan) {
+  if (String(player.position).toUpperCase() === "G") {
+    return projectedStat(player.saves, player.gp, gamesInSpan) +
+      projectedStat(player.shutouts, player.gp, gamesInSpan) * 25;
+  }
+
+  return projectedStat(player.shots, player.gp, gamesInSpan) +
+    projectedStat(player.hits, player.gp, gamesInSpan) +
+    projectedStat(player.blocks, player.gp, gamesInSpan);
+}
+
+export function buildFantasyProjection(player, state, timeframe, scheduleData, categoryContext = null) {
+  const gamesInSpan = timeframeGamesForPlayer(player, timeframe, scheduleData);
+  const offNightGames = timeframeOffNightGamesForPlayer(player, timeframe, scheduleData);
+  const categoryRanges = categoryContext || buildCategoryContext([player]);
+  const fantasyValue =
+    state.settings.leagueType === "categories"
+      ? categoryScoreForPlayer(player, state.settings, gamesInSpan, categoryRanges)
+      : fantasyPointsForPlayer(player, state.settings, gamesInSpan);
+
+  return {
+    ...player,
+    gamesInSpan,
+    offNightGames,
+    fantasyValue,
+    pointsProjection: projectedStat(player.points, player.gp, gamesInSpan),
+    goalsProjection: projectedStat(player.goals, player.gp, gamesInSpan),
+    assistsProjection: projectedStat(player.assists, player.gp, gamesInSpan),
+    shotsProjection: projectedStat(player.shots, player.gp, gamesInSpan),
+    hitsProjection: projectedStat(player.hits, player.gp, gamesInSpan),
+    blocksProjection: projectedStat(player.blocks, player.gp, gamesInSpan),
+    pppProjection: projectedStat(player.ppp, player.gp, gamesInSpan),
+    savesProjection: projectedStat(player.saves, player.gp, gamesInSpan),
+    winsProjection: projectedStat(player.wins, player.gp, gamesInSpan),
+    scheduleScore: gamesInSpan + offNightGames * 0.45,
+    peripheralsValue: peripheralsForPlayer(player, gamesInSpan),
+    scoringUpside: scoringUpsideForPlayer(player, gamesInSpan),
+  };
 }
 
 export function buildRankedPlayers(players, state, timeframe, filters, scheduleData) {
   const rosteredIds = getRosteredIds(state);
   const categoryContext = buildCategoryContext(players);
 
-  const projected = players.map((player) => {
-    const gamesInSpan = timeframeGamesForPlayer(player, timeframe, scheduleData);
-    const fantasyValue = state.settings.leagueType === "categories"
-      ? categoryScoreForPlayer(player, state.settings, gamesInSpan, categoryContext)
-      : fantasyPointsForPlayer(player, state.settings, gamesInSpan);
-
-    return {
-      ...player,
-      gamesInSpan,
-      fantasyValue,
-      isRostered: rosteredIds.has(String(player.player_id)),
-    };
-  });
+  const projected = players.map((player) => ({
+    ...buildFantasyProjection(player, state, timeframe, scheduleData, categoryContext),
+    isRostered: rosteredIds.has(String(player.player_id)),
+  }));
 
   return projected.filter((player) => {
     if (filters.position !== "ALL") {

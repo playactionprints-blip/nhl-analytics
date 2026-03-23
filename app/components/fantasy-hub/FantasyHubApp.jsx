@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { TEAM_OPTIONS } from "@/app/components/fantasy-hub/fantasyHubConfig";
 import FantasyHubLayout from "@/app/components/fantasy-hub/FantasyHubLayout";
+import FantasyComparePlayers from "@/app/components/fantasy-hub/FantasyComparePlayers";
 import FantasyLeagueSettings from "@/app/components/fantasy-hub/FantasyLeagueSettings";
 import FantasyRankingsTable from "@/app/components/fantasy-hub/FantasyRankingsTable";
 import FantasyRosterBuilder from "@/app/components/fantasy-hub/FantasyRosterBuilder";
@@ -261,6 +262,14 @@ export default function FantasyHubApp() {
           scheduleData={scheduleData}
         />
       </div>
+    );
+  } else if (activeTab === "compare") {
+    content = (
+      <FantasyComparePlayers
+        players={players}
+        state={state}
+        scheduleData={scheduleData}
+      />
     );
   } else {
     content = (

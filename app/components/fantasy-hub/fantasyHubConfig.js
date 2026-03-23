@@ -11,6 +11,7 @@ export const FANTASY_STORAGE_KEY = "nhl-analytics:fantasy-hub";
 export const FANTASY_TABS = [
   { key: "my-team", label: "My Team" },
   { key: "rankings", label: "Rankings" },
+  { key: "compare", label: "Compare Players" },
   { key: "schedule", label: "Schedule" },
 ];
 
@@ -18,6 +19,14 @@ export const TIMEFRAME_OPTIONS = [
   { key: "ros", label: "Rest of Season" },
   { key: "7d", label: "Next 7 Days" },
   { key: "14d", label: "Next 14 Days" },
+];
+
+export const COMPARE_TIMEFRAME_OPTIONS = [
+  { key: "today", label: "Today" },
+  { key: "this-week", label: "This Week" },
+  { key: "7d", label: "Next 7 Days" },
+  { key: "14d", label: "Next 14 Days" },
+  { key: "ros", label: "Rest of Season" },
 ];
 
 export const POSITION_OPTIONS = ["ALL", "F", "D", "G"];

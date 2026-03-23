@@ -4,10 +4,10 @@
  */
 import { TIMEFRAME_OPTIONS } from "@/app/components/fantasy-hub/fantasyHubConfig";
 
-export default function FantasyTimeframeSelector({ value, onChange }) {
+export default function FantasyTimeframeSelector({ value, onChange, options = TIMEFRAME_OPTIONS }) {
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      {TIMEFRAME_OPTIONS.map((option) => (
+      {options.map((option) => (
         <button
           key={option.key}
           type="button"
