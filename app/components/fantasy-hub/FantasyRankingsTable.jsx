@@ -68,6 +68,7 @@ function recomputeDisplayedFantasyPoints(projection, state) {
 export default function FantasyRankingsTable({ players, state, timeframe, filters, scheduleData }) {
   const [sortKey, setSortKey] = useState("projectedFantasyPoints");
   const [sortDir, setSortDir] = useState("desc");
+  const [debugMode, setDebugMode] = useState(false);
 
   const ranked = useMemo(() => {
     const base = buildRankedPlayers(players, state, timeframe, filters, scheduleData);
@@ -181,6 +182,23 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
         breakdown: matthew.projectedFantasyPointBreakdown,
       });
     }
+
+    // Laine validation — check for 0-goal / missing-gp issues
+    const laineRaw = players.find((player) => /laine/i.test(player.player_name));
+    const laineRanked = ranked.find((player) => /laine/i.test(player.player_name));
+    console.debug("[FantasyRankingsTable] Patrik Laine validation", {
+      timeframe,
+      rawSource: laineRaw ?? "not in player pool",
+      rankedEntry: laineRanked
+        ? {
+            projectedGoals: laineRanked.projectedGoals,
+            projectedGames: laineRanked.projectedGames,
+            projectedFantasyPoints: laineRanked.projectedFantasyPoints,
+            projectionValid: laineRanked.projectionValid,
+            projectionWarnings: laineRanked.projectionWarnings,
+          }
+        : "not in ranked list (filtered out)",
+    });
   }, [players, ranked, state, timeframe]);
 
   function toggleSort(nextKey) {
@@ -205,8 +223,28 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
             {ranked.length} players
           </div>
         </div>
-        <div style={{ color: "#7d95ab", fontSize: 12 }}>
-          Rankings update automatically from your scoring settings and selected timeframe.
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ color: "#7d95ab", fontSize: 12 }}>
+            Rankings update automatically from your scoring settings and selected timeframe.
+          </div>
+          <button
+            type="button"
+            onClick={() => setDebugMode((prev) => !prev)}
+            style={{
+              padding: "4px 10px",
+              borderRadius: 8,
+              border: `1px solid ${debugMode ? "#4a7fa5" : "#1e3448"}`,
+              background: debugMode ? "#0e2035" : "transparent",
+              color: debugMode ? "#6caede" : "#4a6478",
+              fontSize: 10,
+              fontFamily: "'DM Mono',monospace",
+              letterSpacing: "0.08em",
+              cursor: "pointer",
+              textTransform: "uppercase",
+            }}
+          >
+            {debugMode ? "debug on" : "debug"}
+          </button>
         </div>
       </div>
 
@@ -223,6 +261,40 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
         </div>
 
         <div style={{ display: "grid" }}>
+          {debugMode && ranked.length > 0 && (() => {
+            const top = ranked[0];
+            return (
+              <div
+                style={{
+                  padding: "10px 16px",
+                  background: "#071320",
+                  borderBottom: "1px solid #1a3a56",
+                  color: "#6caede",
+                  fontSize: 11,
+                  fontFamily: "'DM Mono',monospace",
+                  display: "grid",
+                  gridTemplateColumns: "auto repeat(5, 1fr)",
+                  gap: 12,
+                  alignItems: "center",
+                }}
+              >
+                <div style={{ color: "#4a7fa5", textTransform: "uppercase", letterSpacing: "0.08em" }}>debug · #{1}</div>
+                <div><span style={{ color: "#4a6478" }}>name </span>{top.player_name}</div>
+                <div><span style={{ color: "#4a6478" }}>raw goals </span>{top.goals ?? "—"}</div>
+                <div><span style={{ color: "#4a6478" }}>raw gp </span>{top.gp ?? "—"}</div>
+                <div><span style={{ color: "#4a6478" }}>proj games </span>{top.projectedGames ?? "—"}</div>
+                <div><span style={{ color: "#4a6478" }}>proj goals </span>{top.projectedGoals != null ? Number(top.projectedGoals).toFixed(1) : "—"}</div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <span style={{ color: "#4a6478" }}>proj FP </span>
+                  <span style={{ color: "#8fd6ff", fontWeight: 700 }}>{top.projectedFantasyPoints != null ? Number(top.projectedFantasyPoints).toFixed(1) : "—"}</span>
+                  <span style={{ color: "#4a6478", marginLeft: 16 }}>warnings </span>
+                  <span style={{ color: top.projectionWarnings?.length ? "#f0a060" : "#4a6478" }}>
+                    {top.projectionWarnings?.length ? top.projectionWarnings.join(", ") : "none"}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
           {ranked.slice(0, 200).map((player, index) => (
             <div
               key={player.player_id}

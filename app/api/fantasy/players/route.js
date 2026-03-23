@@ -21,8 +21,9 @@ function sanePpp(ppp, points, gp, playerGp) {
   const playerGames = toNumber(playerGp, null);
 
   if (pppValue == null) return null;
+  // A player CAN have more PP points than games played (e.g. 2-point PP nights),
+  // so the old pppValue > seasonGp guard was incorrect and has been removed.
   if (pointsValue != null && pppValue > pointsValue) return null;
-  if (seasonGp != null && pppValue > seasonGp) return null;
   if (playerGames != null && playerGames > 0 && seasonGp != null && Math.abs(playerGames - seasonGp) > 3) return null;
   return pppValue;
 }

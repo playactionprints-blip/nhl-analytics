@@ -285,7 +285,10 @@ function categoryScoreForPlayer(player, settings, gamesInSpan, categoryContext) 
 
 function projectedStat(total, gp, gamesInSpan, { nullable = true } = {}) {
   if (gamesInSpan == null || !Number.isFinite(Number(gamesInSpan))) return nullable ? null : 0;
-  if (!hasStatSample(total, gp)) return nullable ? null : 0;
+  // Treat zero-value totals as missing data — a season total of exactly 0 in a
+  // stat we're projecting usually means no sample (injured, not deployed), not
+  // a genuine zero-rate player worth projecting forward.
+  if (!total || !hasStatSample(total, gp)) return nullable ? null : 0;
   return safeRate(total, gp) * gamesInSpan;
 }
 
@@ -477,12 +480,14 @@ export function buildFantasyProjection(player, state, timeframe, scheduleData, c
     projectionWarnings.push("breakdown-mismatch");
   }
 
+  // ppp-exceeds-points and shp-exceeds-points are logged as warnings but do NOT
+  // invalidate the projection — ppp/shp and total points can come from different
+  // data sources with slightly different GP counts, so a narrow cross-source
+  // discrepancy should not suppress an otherwise valid ranking.
   const projectionValid =
     gamesInSpan != null &&
     !projectionWarnings.includes("missing-gp") &&
     !projectionWarnings.includes("fantasy-points-without-components") &&
-    !projectionWarnings.includes("ppp-exceeds-points") &&
-    !projectionWarnings.includes("shp-exceeds-points") &&
     !projectionWarnings.includes("breakdown-mismatch") &&
     projectedFantasyPoints != null;
 
