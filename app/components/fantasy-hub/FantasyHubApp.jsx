@@ -195,6 +195,20 @@ export default function FantasyHubApp() {
   } else if (activeTab === "my-team") {
     content = (
       <div style={{ display: "grid", gap: 18 }}>
+        <FantasyLeagueSettings state={state} onStateChange={setState} />
+        <section style={{ display: "grid", gap: 10 }}>
+          <div>
+            <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+              Step 2: Build My Team
+            </div>
+            <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>
+              Add players and shape your roster
+            </div>
+            <div style={{ color: "#7d95ab", fontSize: 14, lineHeight: 1.6, maxWidth: 760, marginTop: 6 }}>
+              Search the player pool, slot players into your fantasy roster, and let your league settings drive the player value context.
+            </div>
+          </div>
+        </section>
         <FantasyRosterBuilder
           players={players}
           playerMap={playerMap}
@@ -203,7 +217,6 @@ export default function FantasyHubApp() {
           search={teamSearch}
           onSearchChange={setTeamSearch}
         />
-        <FantasyLeagueSettings state={state} onStateChange={setState} />
       </div>
     );
   } else if (activeTab === "rankings") {

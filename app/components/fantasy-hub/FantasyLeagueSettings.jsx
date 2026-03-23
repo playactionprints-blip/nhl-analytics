@@ -3,6 +3,12 @@
  * Depends on the persisted fantasy state and updates scoring weights plus
  * roster-slot settings used by rankings and My Team.
  */
+"use client";
+
+import { useMemo, useState } from "react";
+
+const COLLAPSE_STORAGE_KEY = "nhl-analytics:fantasy-hub:settings-collapsed";
+
 const SECTION_STYLE = {
   borderRadius: 20,
   border: "1px solid #17283b",
@@ -72,6 +78,16 @@ function ToggleInput({ label, path, checked, onUpdate }) {
 }
 
 export default function FantasyLeagueSettings({ state, onStateChange }) {
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      if (typeof window === "undefined") return false;
+      const raw = window.localStorage.getItem(COLLAPSE_STORAGE_KEY);
+      return raw === "true";
+    } catch {
+      return false;
+    }
+  });
+
   function update(path, value) {
     onStateChange((current) => {
       const next = JSON.parse(JSON.stringify(current));
@@ -85,10 +101,93 @@ export default function FantasyLeagueSettings({ state, onStateChange }) {
   }
 
   const pointsMode = state.settings.leagueType === "points";
+  const rosterSlotSummary = useMemo(() => {
+    const slots = state.settings.rosterSlots;
+    return `F ${slots.forwards} · D ${slots.defense} · G ${slots.goalies} · BN ${slots.bench}${slots.ir ? ` · IR ${slots.ir}` : ""}`;
+  }, [state.settings.rosterSlots]);
+
+  function handleToggle() {
+    setCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(COLLAPSE_STORAGE_KEY, String(next));
+      } catch {
+        // Ignore localStorage write failures.
+      }
+      return next;
+    });
+  }
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <div style={SECTION_STYLE}>
+    <section
+      style={{
+        borderRadius: 24,
+        border: "1px solid #214361",
+        background: "linear-gradient(180deg, rgba(10,20,32,0.98) 0%, rgba(7,11,18,0.98) 100%)",
+        boxShadow: "0 0 0 1px rgba(47,180,255,0.08), 0 18px 42px rgba(0,0,0,0.22)",
+        padding: "18px 18px 16px",
+        display: "grid",
+        gap: 16,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "start", flexWrap: "wrap" }}>
+        <div style={{ display: "grid", gap: 8, maxWidth: 740 }}>
+          <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+            Step 1: Configure Your League
+          </div>
+          <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900, lineHeight: 1.05 }}>
+            League settings
+          </div>
+          <div style={{ color: "#86a5c0", fontSize: 14, lineHeight: 1.6 }}>
+            Your scoring settings determine rankings and player values. Set your format first so the rest of Fantasy Hub reflects your real league.
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleToggle}
+          style={{
+            borderRadius: 999,
+            border: `1px solid ${collapsed ? "#213547" : "#2fb4ff"}`,
+            background: collapsed ? "#0d1620" : "rgba(47,180,255,0.14)",
+            color: collapsed ? "#8ca8c1" : "#d6f0ff",
+            padding: "10px 14px",
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            fontFamily: "'DM Mono',monospace",
+            cursor: "pointer",
+          }}
+        >
+          {collapsed ? "Expand" : "Collapse"}
+        </button>
+      </div>
+
+      <div className="fantasy-league-overview-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+        <div style={{ borderRadius: 16, border: "1px solid #1b3347", background: "#0c141d", padding: "12px 12px 10px", display: "grid", gap: 6 }}>
+          <div style={LABEL_STYLE}>League Type</div>
+          <div style={{ color: "#eff8ff", fontSize: 18, fontWeight: 900 }}>
+            {pointsMode ? "Points League" : "Categories League"}
+          </div>
+        </div>
+        <div style={{ borderRadius: 16, border: "1px solid #1b3347", background: "#0c141d", padding: "12px 12px 10px", display: "grid", gap: 6 }}>
+          <div style={LABEL_STYLE}>Roster Slots</div>
+          <div style={{ color: "#eff8ff", fontSize: 16, fontWeight: 900 }}>
+            {rosterSlotSummary}
+          </div>
+        </div>
+        <div style={{ borderRadius: 16, border: "1px solid #1b3347", background: "#0c141d", padding: "12px 12px 10px", display: "grid", gap: 6 }}>
+          <div style={LABEL_STYLE}>Scoring Focus</div>
+          <div style={{ color: "#eff8ff", fontSize: 16, fontWeight: 900 }}>
+            {pointsMode ? "Weighted fantasy points" : "Category win volume"}
+          </div>
+        </div>
+      </div>
+
+      {!collapsed ? (
+        <div style={{ display: "grid", gap: 16 }}>
+          <div style={SECTION_STYLE}>
         <div style={{ display: "grid", gap: 10 }}>
           <div style={LABEL_STYLE}>Team Identity</div>
           <input
@@ -188,14 +287,31 @@ export default function FantasyLeagueSettings({ state, onStateChange }) {
           <WeightInput label="IR" path={["settings", "rosterSlots", "ir"]} value={state.settings.rosterSlots.ir} step="1" onUpdate={update} />
         </div>
       </div>
+        </div>
+      ) : (
+        <div
+          style={{
+            borderRadius: 18,
+            border: "1px dashed #29445b",
+            background: "rgba(13,22,32,0.78)",
+            padding: "14px 16px",
+            color: "#7d95ab",
+            fontSize: 13,
+            lineHeight: 1.6,
+          }}
+        >
+          League setup is collapsed. Expand it any time to update scoring weights, category toggles, or roster slots.
+        </div>
+      )}
 
       <style>{`
         @media (max-width: 640px) {
+          .fantasy-league-overview-grid,
           .fantasy-settings-grid {
             grid-template-columns: 1fr !important;
           }
         }
       `}</style>
-    </div>
+    </section>
   );
 }
