@@ -16,6 +16,14 @@ function formatPointPct(value) {
   return display;
 }
 
+function formatRecord(standings = {}) {
+  if (standings.record) return standings.record;
+  const wins = standings.wins ?? standings.w ?? 0;
+  const losses = standings.losses ?? standings.l ?? 0;
+  const ot = standings.otLosses ?? standings.ot ?? standings.sol ?? 0;
+  return `${wins}-${losses}-${ot}`;
+}
+
 function movementMeta(movement) {
   if (movement > 0) return { label: `Up ${movement}`, color: "#35e3a0", symbol: "▲" };
   if (movement < 0) return { label: `Down ${Math.abs(movement)}`, color: "#ff6f7b", symbol: "▼" };
@@ -394,6 +402,26 @@ function HistoryRow({ item, index }) {
   );
 }
 
+function SummaryStat({ label, value, accent = "#eff8ff" }) {
+  return (
+    <div
+      style={{
+        borderRadius: 14,
+        border: "1px solid #1a2b3d",
+        background: "#0d1620",
+        padding: "10px 12px",
+        display: "grid",
+        gap: 4,
+      }}
+    >
+      <div style={{ fontSize: 10, color: "#62809d", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        {label}
+      </div>
+      <div style={{ color: accent, fontSize: 17, fontWeight: 900 }}>{value}</div>
+    </div>
+  );
+}
+
 function buildPickTooltip(asset, resolvedPick) {
   if (!asset && !resolvedPick) return "";
   const descriptions = (asset?.conditions || [])
@@ -573,6 +601,10 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
   const normalResolvedRows = resolvedDraftOrder.filter((row) => row.originalTeam !== "OTT");
   const latestPickOneWinner = result?.winners.find((winner) => winner.wonPick === 1) || null;
   const latestPickTwoWinner = result?.winners.find((winner) => winner.wonPick === 2) || null;
+  const biggestJumpWinner = result?.finalOrder
+    ? [...result.finalOrder].sort((a, b) => b.movement - a.movement)[0]
+    : null;
+  const boardRows = boardVisible && result ? result.finalOrder : baseOrder;
 
   function skipReveal() {
     clearTimers();
@@ -587,13 +619,13 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
       style={{
         minHeight: "100vh",
         background: "radial-gradient(circle at top left, #0d2136 0%, #060a11 58%, #05090f 100%)",
-        padding: "36px 20px 64px",
+        padding: "28px 16px 52px",
       }}
     >
       <style>{`
         .lottery-grid {
           display: grid;
-          grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.9fr);
+          grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.72fr);
           gap: 18px;
         }
         .lottery-board-row {
@@ -623,23 +655,22 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
         }
         @media (max-width: 760px) {
           .lottery-page-shell {
-            padding: 18px 12px 36px !important;
+            padding: 16px 10px 32px !important;
           }
-          .lottery-hero-meta,
           .lottery-controls-row,
-          .lottery-results-grid,
+          .lottery-results-strip,
           .lottery-summary-grid {
             grid-template-columns: 1fr !important;
           }
           .lottery-hero-title {
-            font-size: 34px !important;
+            font-size: 30px !important;
           }
           .lottery-table-head {
             display: none !important;
           }
           .lottery-table-row {
             grid-template-columns: 1fr !important;
-            gap: 12px !important;
+            gap: 10px !important;
           }
         }
       `}</style>
@@ -653,201 +684,176 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
         onSkip={skipReveal}
       />
 
-      <div style={{ maxWidth: 1320, margin: "0 auto", display: "grid", gap: 18 }}>
+      <div style={{ maxWidth: 1320, margin: "0 auto", display: "grid", gap: 16 }}>
         <section
           style={{
             border: "1px solid #18304a",
-            borderRadius: 28,
+            borderRadius: 22,
             background: "linear-gradient(180deg, rgba(10,20,32,0.98) 0%, rgba(7,11,18,0.98) 100%)",
-            boxShadow: "0 24px 60px rgba(0,0,0,0.28)",
+            boxShadow: "0 18px 44px rgba(0,0,0,0.24)",
+            padding: "18px 18px 16px",
+            display: "grid",
+            gap: 12,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "end", flexWrap: "wrap" }}>
+            <div style={{ display: "grid", gap: 8 }}>
+              <h1 className="lottery-hero-title" style={{ margin: 0, color: "#eff8ff", fontSize: 34, lineHeight: 1, letterSpacing: "-0.04em", fontWeight: 900 }}>
+                2026 NHL Draft Lottery Simulator
+              </h1>
+              <div style={{ color: "#86a5c0", fontSize: 13, lineHeight: 1.45 }}>
+                Simple reveal mode for one lottery run, or analytics mode for landing-spot outcomes.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <LegendPill label={`${NHL_LOTTERY_RULES.drawCount} draws`} color="#8ed0ff" bg="rgba(74, 167, 255, 0.12)" />
+              <LegendPill label={`Max jump ${NHL_LOTTERY_RULES.maxJump}`} color="#9dc5e6" bg="rgba(157, 197, 230, 0.12)" />
+              <LegendPill label={`Generated ${generatedAt}`} color="#7f93a8" bg="rgba(127, 147, 168, 0.12)" />
+            </div>
+          </div>
+
+          <div className="lottery-controls-row" style={{ display: "grid", gridTemplateColumns: "auto auto auto minmax(0,1fr) auto", gap: 10, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={runSimulation}
+              className="lottery-button"
+              disabled={!hasEntries}
+              style={{
+                borderRadius: 14,
+                border: "1px solid #1bbcff",
+                background: "linear-gradient(180deg,#11bfff 0%,#0d8fe1 100%)",
+                color: "#04121d",
+                fontWeight: 800,
+                fontSize: 13,
+                padding: "12px 16px",
+                cursor: hasEntries ? "pointer" : "not-allowed",
+                opacity: hasEntries ? 1 : 0.45,
+                transition: "transform 0.16s ease, box-shadow 0.16s ease",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {result && mode === "reveal" ? "Reveal Again" : "Reveal Lottery"}
+            </button>
+            <button
+              type="button"
+              onClick={resetSimulation}
+              className="lottery-button"
+              style={{
+                borderRadius: 14,
+                border: "1px solid #20374d",
+                background: "#111a23",
+                color: "#e8f5ff",
+                fontWeight: 800,
+                fontSize: 13,
+                padding: "12px 14px",
+                cursor: "pointer",
+                transition: "transform 0.16s ease, box-shadow 0.16s ease",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={runSummaryMode}
+              className="lottery-button"
+              disabled={!hasEntries}
+              style={{
+                borderRadius: 14,
+                border: "1px solid #20374d",
+                background: mode === "summary" ? "rgba(47,180,255,0.12)" : "#111a23",
+                color: "#e8f5ff",
+                fontWeight: 800,
+                fontSize: 13,
+                padding: "12px 14px",
+                cursor: hasEntries ? "pointer" : "not-allowed",
+                opacity: hasEntries ? 1 : 0.45,
+                transition: "transform 0.16s ease, box-shadow 0.16s ease",
+                whiteSpace: "nowrap",
+              }}
+            >
+              100 Sims
+            </button>
+            <input
+              value={seedInput}
+              onChange={(event) => setSeedInput(event.target.value)}
+              placeholder="Optional seed"
+              style={{
+                background: "#0f1823",
+                border: "1px solid #1d3448",
+                borderRadius: 14,
+                color: "#e9f6ff",
+                padding: "12px 14px",
+                outline: "none",
+                fontSize: 14,
+                minWidth: 0,
+              }}
+            />
+            <details style={{ justifySelf: "end" }}>
+              <summary
+                style={{
+                  cursor: "pointer",
+                  color: "#9fc7e6",
+                  fontSize: 11,
+                  fontFamily: "'DM Mono',monospace",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  fontWeight: 700,
+                  listStyle: "none",
+                }}
+              >
+                Rules & Config
+              </summary>
+              <div
+                style={{
+                  marginTop: 10,
+                  width: "min(420px, 100vw - 52px)",
+                  borderRadius: 16,
+                  border: "1px solid #1a2b3d",
+                  background: "#0d1620",
+                  padding: 14,
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                {LOTTERY_ASSUMPTIONS.map((item) => (
+                  <div key={item} style={{ color: "#d6e9f7", fontSize: 13, lineHeight: 1.35 }}>
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
+
+          {overlayStage && mode === "reveal" ? (
+            <div style={{ fontSize: 11, color: "#7bcfff", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              Revealing results…
+            </div>
+          ) : null}
+        </section>
+
+        <section
+          style={{
+            border: "1px solid #17283b",
+            borderRadius: 24,
+            background: "#091017",
             overflow: "hidden",
           }}
         >
-          <div style={{ padding: "28px 28px 24px", display: "grid", gap: 18 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "start", flexWrap: "wrap" }}>
-              <div style={{ display: "grid", gap: 10 }}>
-                <div style={{ fontSize: 11, color: "#4d82af", fontFamily: "'DM Mono',monospace", letterSpacing: "0.16em", textTransform: "uppercase" }}>
-                  NHL Analytics · Draft Tools
-                </div>
-                <h1 className="lottery-hero-title" style={{ margin: 0, color: "#eff8ff", fontSize: 46, lineHeight: 0.95, letterSpacing: "-0.04em", fontWeight: 900 }}>
-                  NHL Draft Lottery Simulator
-                </h1>
-                <p style={{ margin: 0, maxWidth: 800, color: "#86a5c0", fontSize: 18, lineHeight: 1.35 }}>
-                  Run a dramatic reveal or switch to analytics mode for broader outcome distributions. The simulator keeps your current weighted odds, jump rules, and ownership logic intact.
-                </p>
-              </div>
-              <div
-                style={{
-                  border: "1px solid #1f5b85",
-                  borderRadius: 18,
-                  padding: "14px 18px",
-                  minWidth: 188,
-                  background: "rgba(10, 35, 56, 0.45)",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "#6cbef1", fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  Live order snapshot
-                </div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: "#eaf7ff", marginTop: 4 }}>
-                  {NHL_LOTTERY_RULES.lotteryTeamCount} lottery teams
-                </div>
-                <div style={{ fontSize: 12, color: "#6d859e", marginTop: 4 }}>
-                  Generated {generatedAt}
-                </div>
-              </div>
-            </div>
-
-            <div className="lottery-hero-meta" style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 16 }}>
-              <div style={{ border: "1px solid #172534", borderRadius: 18, background: "#0b1118", padding: 18 }}>
-                <div style={{ fontSize: 11, color: "#5c7a98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>
-                  Rules & assumptions
-                </div>
-                <details>
-                  <summary style={{ cursor: "pointer", color: "#d6e9f7", fontSize: 14, fontWeight: 700, listStyle: "none" }}>
-                    View current lottery assumptions
-                  </summary>
-                  <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-                    {LOTTERY_ASSUMPTIONS.map((item) => (
-                      <div key={item} style={{ color: "#d6e9f7", fontSize: 14, lineHeight: 1.35 }}>
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              </div>
-              <div style={{ border: "1px solid #172534", borderRadius: 18, background: "#0b1118", padding: 18 }}>
-                <div style={{ fontSize: 11, color: "#5c7a98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>
-                  Config
-                </div>
-                <div style={{ display: "grid", gap: 10 }}>
-                  {[
-                    ["Lottery draws", NHL_LOTTERY_RULES.drawCount],
-                    ["Max jump", `${NHL_LOTTERY_RULES.maxJump} spots`],
-                    ["Summary mode", `${NHL_LOTTERY_RULES.summarySimulationCount} sims`],
-                    ["Seeded RNG", "Optional"],
-                  ].map(([label, value]) => (
-                    <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, paddingBottom: 8, borderBottom: "1px solid #16202c" }}>
-                      <span style={{ color: "#839ab1", fontSize: 14 }}>{label}</span>
-                      <span style={{ color: "#f0f7fd", fontSize: 14, fontWeight: 700 }}>{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <div className="lottery-grid">
-          <section
-            style={{
-              border: "1px solid #17283b",
-              borderRadius: 24,
-              background: "#091017",
-              overflow: "hidden",
-            }}
-          >
-            <div style={{ padding: "18px 20px 12px", borderBottom: "1px solid #132131" }}>
-              <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                Lottery table
-              </div>
-              <div style={{ fontSize: 28, color: "#f0f8ff", fontWeight: 900, marginTop: 4 }}>
-                Current lottery-eligible order
-              </div>
-            </div>
-
-            <div className="lottery-table-head" style={{ display: "grid", gridTemplateColumns: "56px minmax(280px, 1.2fr) 92px 92px 92px 116px 92px", gap: 12, padding: "10px 20px", borderBottom: "1px solid #132131", color: "#4a6987", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-              <div>Rank</div>
-              <div>Original team</div>
-              <div>GP</div>
-              <div>P%</div>
-              <div>L10</div>
-              <div>Odds</div>
-              <div>Projection</div>
-            </div>
-
-            <div style={{ display: "grid" }}>
-              {baseOrder.length === 0 ? (
-                <div style={{ padding: "20px", color: "#86a5c0", fontSize: 14 }}>
-                  No live lottery teams available right now.
-                </div>
-              ) : baseOrder.map((entry) => {
-                const simRow = result?.finalOrder.find((row) => row.pickId === entry.pickId);
-                const projected = simRow?.finalPick ?? entry.projectedPick;
-                const meta = movementMeta(entry.baseRank - projected);
-                const resolvedPick = resolvedByOriginalTeam[entry.originalTeam];
-                const asset = assetByOriginalTeam[entry.originalTeam];
-                const conditionNote = buildPickTooltip(asset, resolvedPick);
-                return (
-                  <div
-                    key={entry.pickId}
-                    className="lottery-table-row"
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "56px minmax(280px, 1.2fr) 92px 92px 92px 116px 92px",
-                      gap: 12,
-                      alignItems: "center",
-                      padding: "14px 20px",
-                      borderBottom: "1px solid #111b28",
-                      transition: "background 0.16s ease",
-                    }}
-                    >
-                    <div style={{ fontSize: 14, color: "#9dc5e6", fontWeight: 700 }}>{entry.baseRank}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                      <PickOwnershipCluster
-                        originalTeam={entry.originalTeam}
-                        selectionOwner={resolvedPick?.selectionOwner || entry.originalTeam}
-                        isProtected={resolvedPick?.protectionTriggered}
-                        note={conditionNote}
-                      />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 16, color: "#ecf7ff", fontWeight: 800, lineHeight: 1.1 }}>
-                          {entry.standings.name}
-                        </div>
-                        <div style={{ fontSize: 11, color: "#5d7994", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
-                          {resolvedPick?.selectionOwner && resolvedPick.selectionOwner !== entry.originalTeam
-                            ? `${entry.originalTeam} · selects to ${resolvedPick.selectionOwner}`
-                            : entry.originalTeam}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 14, color: "#c9d8e5", fontWeight: 700 }}>{entry.standings.gamesPlayed}</div>
-                    <div style={{ fontSize: 14, color: "#c9d8e5", fontWeight: 700 }}>{formatPointPct(entry.standings.pointPct)}</div>
-                    <div style={{ fontSize: 14, color: "#90a6bc", fontWeight: 700 }}>{entry.standings.last10Record || "—"}</div>
-                    <div style={{ fontSize: 15, color: "#c9d8e5", fontWeight: 700 }}>{formatPercent(entry.odds)}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ color: "#edf7ff", fontSize: 15, fontWeight: 800 }}>#{projected}</span>
-                      <span style={{ color: meta.color, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{meta.symbol}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section style={{ display: "grid", gap: 18 }}>
-            <div
-              style={{
-                border: "1px solid #17283b",
-                borderRadius: 24,
-                background: "#091017",
-                padding: 20,
-                display: "grid",
-                gap: 14,
-              }}
-            >
+          <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid #132131", display: "grid", gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                  Controls
+                  Main board
                 </div>
-                <div style={{ fontSize: 24, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
-                  Choose a mode
+                <div style={{ fontSize: 26, color: "#f0f8ff", fontWeight: 900, marginTop: 4 }}>
+                  {mode === "summary" ? "Lottery board + analytics mode" : "Current lottery order"}
                 </div>
               </div>
-
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {[
-                  { key: "reveal", label: "Lottery Reveal Mode" },
-                  { key: "summary", label: "Summary Simulation Mode" },
+                  { key: "reveal", label: "Reveal Mode" },
+                  { key: "summary", label: "Summary Mode" },
                 ].map((item) => (
                   <button
                     key={item.key}
@@ -860,7 +866,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                       color: mode === item.key ? "#cfeeff" : "#8ca8c1",
                       fontWeight: 800,
                       fontSize: 12,
-                      padding: "9px 12px",
+                      padding: "8px 12px",
                       cursor: "pointer",
                       fontFamily: "'DM Mono',monospace",
                       textTransform: "uppercase",
@@ -871,307 +877,237 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                   </button>
                 ))}
               </div>
-
-              <div className="lottery-controls-row" style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 10 }}>
-                <input
-                  value={seedInput}
-                  onChange={(event) => setSeedInput(event.target.value)}
-                  placeholder="Optional seed for reproducibility"
-                  style={{
-                    background: "#0f1823",
-                    border: "1px solid #1d3448",
-                    borderRadius: 14,
-                    color: "#e9f6ff",
-                    padding: "13px 14px",
-                    outline: "none",
-                    fontSize: 14,
-                    minWidth: 0,
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={runSimulation}
-                  className="lottery-button"
-                  disabled={!hasEntries}
-                  style={{
-                    borderRadius: 14,
-                    border: "1px solid #1bbcff",
-                    background: "linear-gradient(180deg,#11bfff 0%,#0d8fe1 100%)",
-                    color: "#04121d",
-                    fontWeight: 800,
-                    fontSize: 13,
-                    padding: "12px 14px",
-                    cursor: hasEntries ? "pointer" : "not-allowed",
-                    opacity: hasEntries ? 1 : 0.45,
-                    transition: "transform 0.16s ease, box-shadow 0.16s ease",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {result && mode === "reveal" ? "Reveal Again" : "Reveal Lottery"}
-                </button>
-                <button
-                  type="button"
-                  onClick={runSummaryMode}
-                  className="lottery-button"
-                  disabled={!hasEntries}
-                  style={{
-                    borderRadius: 14,
-                    border: "1px solid #20374d",
-                    background: "#111a23",
-                    color: "#e8f5ff",
-                    fontWeight: 800,
-                    fontSize: 13,
-                    padding: "12px 14px",
-                    cursor: hasEntries ? "pointer" : "not-allowed",
-                    opacity: hasEntries ? 1 : 0.45,
-                    transition: "transform 0.16s ease, box-shadow 0.16s ease",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Analytics Mode · 100 Sims
-                </button>
-                <button
-                  type="button"
-                  onClick={resetSimulation}
-                  className="lottery-button"
-                  style={{
-                    borderRadius: 14,
-                    border: "1px solid #20374d",
-                    background: "#111a23",
-                    color: "#e8f5ff",
-                    fontWeight: 800,
-                    fontSize: 13,
-                    padding: "12px 14px",
-                    cursor: "pointer",
-                    transition: "transform 0.16s ease, box-shadow 0.16s ease",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Reset
-                </button>
-              </div>
-
-              <div style={{ fontSize: 12, color: "#6f879f", lineHeight: 1.45 }}>
-                Reveal mode is built for one dramatic run. Summary mode is for repeated simulations and aggregate landing spots. The engine underneath is the same in both cases.
-              </div>
-              {!hasEntries && (
-                <div style={{ fontSize: 13, color: "#ff9aa4" }}>
-                  Live standings were unavailable, so the simulator could not build the current lottery field.
-                </div>
-              )}
-              {overlayStage && mode === "reveal" && (
-                <div style={{ fontSize: 11, color: "#7bcfff", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                  Revealing results…
-                </div>
-              )}
             </div>
 
-            <div
-              style={{
-                border: "1px solid #17283b",
-                borderRadius: 24,
-                background: "#091017",
-                padding: 20,
-                display: "grid",
-                gap: 16,
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                  Results
+            {mode === "reveal" ? (
+              result ? (
+                <div className="lottery-results-strip" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+                  <SummaryStat label="Pick #1" value={latestPickOneWinner ? latestPickOneWinner.currentOwner : "—"} accent="#8ed0ff" />
+                  <SummaryStat label="Pick #2" value={latestPickTwoWinner ? latestPickTwoWinner.currentOwner : "—"} accent="#8ed0ff" />
+                  <SummaryStat label="Biggest jump" value={biggestJumpWinner ? `${biggestJumpWinner.currentOwner} +${biggestJumpWinner.movement}` : "—"} accent="#35e3a0" />
                 </div>
-                <div style={{ fontSize: 24, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
-                  {mode === "summary" ? "Summary simulation" : result ? "Latest lottery reveal" : "Waiting for first reveal"}
-                </div>
-              </div>
-
-              {mode === "summary" ? (
-                summary ? (
-                  <div className="lottery-summary-grid" style={{ display: "grid", gap: 10 }}>
-                    {summary.map((team) => {
-                      const commonSlot = mostCommonSlot(team.finishes);
-                      const topTwoRate = ((team.finishes.slice(0, 2).reduce((sum, value) => sum + value, 0) / NHL_LOTTERY_RULES.summarySimulationCount) * 100);
-                      return (
-                        <div
-                          key={team.pickId}
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "minmax(0, 1.2fr) repeat(4, minmax(72px, 96px))",
-                            gap: 12,
-                            alignItems: "center",
-                            padding: "12px 14px",
-                            borderRadius: 16,
-                            background: "#0e1620",
-                            border: "1px solid #182736",
-                          }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                            <TeamLogo abbr={team.currentOwner} size={28} />
-                            <div>
-                              <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{team.standings.name}</div>
-                              <div style={{ color: "#63839f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
-                                Base #{team.baseRank}
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{formatPercent(team.topPickRate)}</div>
-                            <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Pick #1</div>
-                          </div>
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{formatPercent(topTwoRate)}</div>
-                            <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Top 2</div>
-                          </div>
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{team.averagePick.toFixed(2)}</div>
-                            <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Avg slot</div>
-                          </div>
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{commonSlot ? `#${commonSlot}` : "—"}</div>
-                            <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Most common</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      borderRadius: 18,
-                      border: "1px dashed #244158",
-                      background: "#0d1620",
-                      padding: "22px 18px",
-                      color: "#7e98b1",
-                      fontSize: 14,
-                      lineHeight: 1.45,
-                    }}
-                  >
-                    Run summary mode to see each team&apos;s chance at Pick #1, top-two odds, average final slot, and most common landing spot.
-                  </div>
-                )
               ) : (
-                result ? (
-                <>
-                  <div className="lottery-results-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    {[latestPickTwoWinner, latestPickOneWinner].map((winner, index) => {
-                      const drawLabel = index === 0 ? "Pick #2 reveal" : "Pick #1 reveal";
-                      return (
-                        <div
-                          key={index}
-                          style={{
-                            border: "1px solid #183247",
-                            borderRadius: 16,
-                            background: winner ? "linear-gradient(180deg, rgba(16, 62, 98, 0.5) 0%, rgba(10, 18, 27, 0.9) 100%)" : "#0e1620",
-                            minHeight: 108,
-                            padding: 16,
-                            display: "grid",
-                            alignContent: "space-between",
-                            gap: 10,
-                          }}
-                        >
-                          <div style={{ fontSize: 11, color: "#66a9d9", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                            {drawLabel}
-                          </div>
-                          {winner ? (
-                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                              <TeamLogo abbr={winner.currentOwner} size={40} />
-                              <div>
-                                <div style={{ color: "#f1f9ff", fontSize: 19, fontWeight: 900 }}>
-                                  {winner.standings.name}
-                                </div>
-                                <div style={{ color: "#86c9f4", fontSize: 13 }}>
-                                  Wins pick #{winner.wonPick} · {winner.moved > 0 ? `+${winner.moved}` : "no jump"}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ color: "#65819e", fontSize: 14 }}>Waiting for reveal…</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div
+                  style={{
+                    borderRadius: 16,
+                    border: "1px dashed #244158",
+                    background: "#0d1620",
+                    padding: "16px 14px",
+                    color: "#7e98b1",
+                    fontSize: 14,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  Run the lottery to reveal the top two picks, then watch the board settle into its final order.
+                </div>
+              )
+            ) : (
+              <div style={{ color: "#7e98b1", fontSize: 13, lineHeight: 1.45 }}>
+                Summary mode uses the same lottery engine but reports team outcome distributions below the board.
+              </div>
+            )}
+          </div>
 
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <div style={{ fontSize: 12, color: "#7d95ab", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                      Final simulated order
-                    </div>
-                    {result.finalOrder.map((row, index) => (
-                      (() => {
-                        const resolvedPick = resolvedDraftOrder.find((pick) => pick.originalTeam === row.originalTeam);
-                        const selectionOwner = resolvedPick?.selectionOwner || row.currentOwner;
-                        const ownerChanged = selectionOwner !== row.originalTeam;
-                        const asset = assetByOriginalTeam[row.originalTeam];
-                        const conditionNote = buildPickTooltip(asset, resolvedPick);
-                        return (
-                          <div
-                            key={row.pickId}
-                            className={`lottery-board-row ${boardVisible ? "" : "lottery-ghost-row"}`}
+          <div className="lottery-table-head" style={{ display: "grid", gridTemplateColumns: "60px minmax(280px, 1.35fr) 72px 108px 72px 76px 88px 132px", gap: 12, padding: "10px 18px", borderBottom: "1px solid #132131", color: "#4a6987", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            <div>Pick</div>
+            <div>Team</div>
+            <div>GP</div>
+            <div>Record</div>
+            <div>Pts</div>
+            <div>L10</div>
+            <div>Odds</div>
+            <div>Movement</div>
+          </div>
+
+          <div style={{ display: "grid" }}>
+            {baseOrder.length === 0 ? (
+              <div style={{ padding: "18px", color: "#86a5c0", fontSize: 14 }}>
+                No live lottery teams available right now.
+              </div>
+            ) : boardRows.map((entry, index) => {
+              const finalPick = entry.finalPick ?? entry.projectedPick ?? entry.baseRank;
+              const resolvedPick = resolvedByOriginalTeam[entry.originalTeam];
+              const selectionOwner = resolvedPick?.selectionOwner || entry.originalTeam;
+              const asset = assetByOriginalTeam[entry.originalTeam];
+              const conditionNote = buildPickTooltip(asset, resolvedPick);
+              const movement = entry.movement ?? entry.baseRank - finalPick;
+              const meta = movementMeta(movement);
+              const ownerMeta = ownershipMeta(resolvedPick || {});
+              const isWinner = finalPick === 1 || finalPick === 2;
+              return (
+                <div
+                  key={entry.pickId}
+                  className={`lottery-table-row lottery-board-row ${boardVisible || !result ? "" : "lottery-ghost-row"}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "60px minmax(280px, 1.35fr) 72px 108px 72px 76px 88px 132px",
+                    gap: 12,
+                    alignItems: "center",
+                    padding: "14px 18px",
+                    borderBottom: "1px solid #111b28",
+                    background: isWinner ? "linear-gradient(90deg, rgba(21,54,82,0.5) 0%, rgba(9,16,23,0.98) 100%)" : "transparent",
+                    transform: boardVisible || !result ? "translateX(0)" : `translateX(${index % 2 === 0 ? -18 : 18}px)`,
+                    opacity: boardVisible || !result ? 1 : 0.45,
+                    transitionDelay: `${index * 40}ms`,
+                  }}
+                >
+                  <div style={{ display: "grid", gap: 5 }}>
+                    <div style={{ color: isWinner ? "#eef8ff" : "#9dc5e6", fontSize: 18, fontWeight: 900 }}>#{finalPick}</div>
+                    {isWinner ? (
+                      <span style={{ color: "#8ed0ff", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        Pick winner
+                      </span>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                    <PickOwnershipCluster
+                      originalTeam={entry.originalTeam}
+                      selectionOwner={selectionOwner}
+                      isProtected={resolvedPick?.protectionTriggered}
+                      note={conditionNote}
+                    />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 16, color: "#ecf7ff", fontWeight: 800, lineHeight: 1.1 }}>
+                        {entry.standings.name}
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 6 }}>
+                        <span style={{ fontSize: 11, color: "#5d7994", fontFamily: "'DM Mono',monospace" }}>
+                          {entry.originalTeam}
+                          {selectionOwner !== entry.originalTeam ? ` → ${selectionOwner}` : ""}
+                        </span>
+                        {(resolvedPick?.isTradedPick || resolvedPick?.protectionTriggered || resolvedPick?.isStaticSlot || resolvedPick?.requiresManualReview) ? (
+                          <span
                             style={{
-                              display: "grid",
-                              gridTemplateColumns: "48px minmax(0, 1fr) auto",
-                              gap: 12,
+                              display: "inline-flex",
                               alignItems: "center",
-                              padding: "12px 14px",
-                              borderRadius: 16,
-                              background: row.finalPick <= 2 ? "linear-gradient(180deg, rgba(16, 62, 98, 0.32) 0%, rgba(10, 18, 27, 0.9) 100%)" : "#0e1620",
-                              border: row.finalPick <= 2 ? "1px solid #2f6b98" : "1px solid #182736",
-                              transform: boardVisible ? "translateX(0)" : `translateX(${index % 2 === 0 ? -18 : 18}px)`,
-                              opacity: boardVisible ? 1 : 0.35,
-                              transitionDelay: `${index * 55}ms`,
+                              gap: 6,
+                              padding: "3px 8px",
+                              borderRadius: 999,
+                              background: ownerMeta.bg,
+                              color: ownerMeta.color,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              letterSpacing: "0.08em",
+                              textTransform: "uppercase",
+                              fontFamily: "'DM Mono',monospace",
                             }}
                           >
-                            <div style={{ color: "#b6d7f1", fontSize: 18, fontWeight: 900 }}>#{row.finalPick}</div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                              <PickOwnershipCluster
-                                originalTeam={row.originalTeam}
-                                selectionOwner={selectionOwner}
-                                isProtected={resolvedPick?.protectionTriggered}
-                                note={conditionNote}
-                              />
-                              <div style={{ minWidth: 0 }}>
-                                <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{row.standings.name}</div>
-                                <div style={{ color: "#63839f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
-                                  Original team · started #{row.baseRank}
-                                </div>
-                                <div style={{ color: ownerChanged ? "#35e3a0" : "#7d95ab", fontSize: 11, fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
-                                  Selection owner: {selectionOwner}
-                                  {resolvedPick?.protectionTriggered ? " · protection triggered" : ""}
-                                  {resolvedPick?.requiresManualReview ? " · manual review" : ""}
-                                </div>
-                              </div>
-                            </div>
-                            <ResultBadge row={row} />
-                          </div>
-                        );
-                      })()
-                    ))}
+                            {ownerMeta.label}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
-                </>
-                ) : (
-                  <div
-                    style={{
-                      borderRadius: 18,
-                      border: "1px dashed #244158",
-                      background: "#0d1620",
-                      padding: "22px 18px",
-                      color: "#7e98b1",
-                      fontSize: 14,
-                      lineHeight: 1.45,
-                    }}
-                  >
-                    Run the lottery to reveal Pick #2 first, then Pick #1, then watch the final draft board settle into place.
+                  <div style={{ fontSize: 14, color: "#c9d8e5", fontWeight: 700 }}>{entry.standings.gamesPlayed}</div>
+                  <div style={{ fontSize: 14, color: "#c9d8e5", fontWeight: 700 }}>{formatRecord(entry.standings)}</div>
+                  <div style={{ fontSize: 14, color: "#c9d8e5", fontWeight: 700 }}>{entry.standings.points ?? "—"}</div>
+                  <div style={{ fontSize: 14, color: "#90a6bc", fontWeight: 700 }}>{entry.standings.last10Record || "—"}</div>
+                  <div style={{ fontSize: 15, color: "#c9d8e5", fontWeight: 700 }}>{formatPercent(entry.odds)}</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <ResultBadge row={{ movement }} />
+                    <span style={{ color: "#7c98b3", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
+                      started #{entry.baseRank}
+                    </span>
                   </div>
-                )
-              )}
-            </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
+        {mode === "summary" && (
+          <section
+            style={{
+              border: "1px solid #17283b",
+              borderRadius: 24,
+              background: "#091017",
+              padding: 18,
+              display: "grid",
+              gap: 14,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Summary simulation
+              </div>
+              <div style={{ fontSize: 24, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+                Outcome distributions
+              </div>
+            </div>
+            {summary ? (
+              <div className="lottery-summary-grid" style={{ display: "grid", gap: 10 }}>
+                {summary.map((team) => {
+                  const commonSlot = mostCommonSlot(team.finishes);
+                  const topTwoRate = ((team.finishes.slice(0, 2).reduce((sum, value) => sum + value, 0) / NHL_LOTTERY_RULES.summarySimulationCount) * 100);
+                  return (
+                    <div
+                      key={team.pickId}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(0, 1.2fr) repeat(4, minmax(72px, 96px))",
+                        gap: 12,
+                        alignItems: "center",
+                        padding: "12px 14px",
+                        borderRadius: 16,
+                        background: "#0e1620",
+                        border: "1px solid #182736",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                        <TeamLogo abbr={team.currentOwner} size={28} />
+                        <div>
+                          <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{team.standings.name}</div>
+                          <div style={{ color: "#63839f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
+                            Base #{team.baseRank}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{formatPercent(team.topPickRate)}</div>
+                        <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Pick #1</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{formatPercent(topTwoRate)}</div>
+                        <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Top 2</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{team.averagePick.toFixed(2)}</div>
+                        <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Avg slot</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{commonSlot ? `#${commonSlot}` : "—"}</div>
+                        <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Most common</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div
+                style={{
+                  borderRadius: 18,
+                  border: "1px dashed #244158",
+                  background: "#0d1620",
+                  padding: "22px 18px",
+                  color: "#7e98b1",
+                  fontSize: 14,
+                  lineHeight: 1.45,
+                }}
+              >
+                Run 100 sims to see each team&apos;s chance at Pick #1, top-two odds, average final slot, and most common landing spot.
+              </div>
+            )}
+          </section>
+        )}
+
+        <div className="lottery-grid">
+          <section style={{ display: "grid", gap: 18 }}>
             <div
               style={{
                 border: "1px solid #17283b",
                 borderRadius: 24,
                 background: "#091017",
-                padding: 20,
+                padding: 18,
                 display: "grid",
                 gap: 16,
               }}
@@ -1180,7 +1116,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                 <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                   2026 Pick Ownership
                 </div>
-                <div style={{ fontSize: 24, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+                <div style={{ fontSize: 22, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
                   Ownership & protections
                 </div>
               </div>
@@ -1317,7 +1253,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                 border: "1px solid #17283b",
                 borderRadius: 24,
                 background: "#091017",
-                padding: 20,
+                padding: 18,
                 display: "grid",
                 gap: 12,
               }}
@@ -1334,6 +1270,36 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                   history.map((item, index) => <HistoryRow key={`${item.seed}-${index}`} item={item} index={index} />)
                 )}
               </div>
+            </div>
+          </section>
+
+          <section style={{ display: "grid", gap: 18 }}>
+            <div
+              style={{
+                border: "1px solid #17283b",
+                borderRadius: 24,
+                background: "#091017",
+                padding: 18,
+                display: "grid",
+                gap: 14,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                  Quick notes
+                </div>
+                <div style={{ fontSize: 22, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+                  How to read the board
+                </div>
+              </div>
+              <div style={{ color: "#86a5c0", fontSize: 14, lineHeight: 1.55 }}>
+                Reveal mode keeps the board central: Pick #2, then Pick #1, then the rest of the order settles into place. Ownership and protection badges stay inline so you can see who actually makes each selection.
+              </div>
+              {!hasEntries && (
+                <div style={{ fontSize: 13, color: "#ff9aa4" }}>
+                  Live standings were unavailable, so the simulator could not build the current lottery field.
+                </div>
+              )}
             </div>
           </section>
         </div>
