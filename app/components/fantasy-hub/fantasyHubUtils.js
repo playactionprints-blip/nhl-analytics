@@ -15,6 +15,10 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function isFiniteNumber(value) {
+  return Number.isFinite(Number(value));
+}
+
 export function createDefaultFantasyState() {
   return deepClone(DEFAULT_FANTASY_STATE);
 }
@@ -162,7 +166,8 @@ export function addDaysIso(dateString, days) {
 
 export function timeframeGamesForPlayer(player, timeframe, scheduleData) {
   if (timeframe === "ros") {
-    return Math.max(82 - toNumber(player.gp, 0), 0);
+    if (!isFiniteNumber(player.gp) || Number(player.gp) <= 0) return null;
+    return Math.max(82 - Number(player.gp), 0);
   }
   const map =
     timeframe === "today"
@@ -197,24 +202,9 @@ function safeRate(total, gp) {
   return toNumber(total, 0) / games;
 }
 
-function fantasyPointsForPlayer(player, settings, gamesInSpan) {
-  if (String(player.position).toUpperCase() === "G") {
-    return gamesInSpan * (
-      safeRate(player.wins, player.gp) * toNumber(settings.goalieWeights.wins, 0) +
-      safeRate(player.saves, player.gp) * toNumber(settings.goalieWeights.saves, 0) +
-      safeRate(player.goalsAgainst, player.gp) * toNumber(settings.goalieWeights.goalsAgainst, 0) +
-      safeRate(player.shutouts, player.gp) * toNumber(settings.goalieWeights.shutouts, 0)
-    );
-  }
-
-  return gamesInSpan * (
-    safeRate(player.goals, player.gp) * toNumber(settings.skaterWeights.goals, 0) +
-    safeRate(player.assists, player.gp) * toNumber(settings.skaterWeights.assists, 0) +
-    safeRate(player.shots, player.gp) * toNumber(settings.skaterWeights.shots, 0) +
-    safeRate(player.hits, player.gp) * toNumber(settings.skaterWeights.hits, 0) +
-    safeRate(player.blocks, player.gp) * toNumber(settings.skaterWeights.blocks, 0) +
-    safeRate(player.ppp, player.gp) * toNumber(settings.skaterWeights.ppp, 0)
-  );
+function statRate(total, gp) {
+  if (!hasStatSample(total, gp)) return null;
+  return safeRate(total, gp);
 }
 
 function categoryValuePerGame(player, settings, categoryContext) {
@@ -227,7 +217,7 @@ function categoryValuePerGame(player, settings, categoryContext) {
     ].filter(([field]) => settings.categoryWeights[field]);
     if (!fields.length) return 0;
     const total = fields.reduce(
-      (sum, [field, invert]) => sum + normalizeToRange(player[field], categoryContext.goalies[field], invert),
+      (sum, [field, invert]) => sum + normalizeToRange(field === "savePct" || field === "gaa" ? player[field] : statRate(player[field], player.gp), categoryContext.goalies[field], invert),
       0
     );
     return total / fields.length;
@@ -238,7 +228,7 @@ function categoryValuePerGame(player, settings, categoryContext) {
   );
   if (!fields.length) return 0;
   const total = fields.reduce(
-    (sum, field) => sum + normalizeToRange(player[field], categoryContext.skaters[field]),
+    (sum, field) => sum + normalizeToRange(statRate(player[field], player.gp), categoryContext.skaters[field]),
     0
   );
   return total / fields.length;
@@ -251,7 +241,9 @@ function buildCategoryContext(players) {
   function ranges(pool, fields) {
     return Object.fromEntries(
       fields.map((field) => {
-        const values = pool.map((item) => toNumber(item[field], 0));
+        const values = pool
+          .map((item) => (field === "savePct" || field === "gaa" ? item[field] : statRate(item[field], item.gp)))
+          .filter((value) => Number.isFinite(value));
         return [field, { min: Math.min(...values, 0), max: Math.max(...values, 1) }];
       })
     );
@@ -276,30 +268,43 @@ function categoryScoreForPlayer(player, settings, gamesInSpan, categoryContext) 
 }
 
 function projectedStat(total, gp, gamesInSpan, { nullable = true } = {}) {
+  if (gamesInSpan == null || !Number.isFinite(Number(gamesInSpan))) return nullable ? null : 0;
   if (!hasStatSample(total, gp)) return nullable ? null : 0;
   return safeRate(total, gp) * gamesInSpan;
 }
 
+function weightedProjection(entries) {
+  let hasAny = false;
+  let total = 0;
+  entries.forEach(([value, weight]) => {
+    if (!weight) return;
+    if (value == null || !Number.isFinite(Number(value))) return;
+    hasAny = true;
+    total += Number(value) * Number(weight);
+  });
+  return hasAny ? total : null;
+}
+
 function scoringUpsideForPlayer(player, gamesInSpan) {
   if (String(player.position).toUpperCase() === "G") {
-    return projectedStat(player.wins, player.gp, gamesInSpan) * 2.5 +
-      projectedStat(player.savePct, 1, gamesInSpan) * 5;
+    return (projectedStat(player.wins, player.gp, gamesInSpan, { nullable: false }) * 2.5) +
+      (projectedStat(player.savePct, 1, gamesInSpan, { nullable: false }) * 5);
   }
 
-  return projectedStat(player.goals, player.gp, gamesInSpan) * 3 +
-    projectedStat(player.assists, player.gp, gamesInSpan) * 2 +
-    projectedStat(player.ppp, player.gp, gamesInSpan) * 1.5;
+  return (projectedStat(player.goals, player.gp, gamesInSpan, { nullable: false }) * 3) +
+    (projectedStat(player.assists, player.gp, gamesInSpan, { nullable: false }) * 2) +
+    (projectedStat(player.ppp, player.gp, gamesInSpan, { nullable: false }) * 1.5);
 }
 
 function peripheralsForPlayer(player, gamesInSpan) {
   if (String(player.position).toUpperCase() === "G") {
-    return projectedStat(player.saves, player.gp, gamesInSpan) +
-      projectedStat(player.shutouts, player.gp, gamesInSpan) * 25;
+    return projectedStat(player.saves, player.gp, gamesInSpan, { nullable: false }) +
+      (projectedStat(player.shutouts, player.gp, gamesInSpan, { nullable: false }) * 25);
   }
 
-  return projectedStat(player.shots, player.gp, gamesInSpan) +
-    projectedStat(player.hits, player.gp, gamesInSpan) +
-    projectedStat(player.blocks, player.gp, gamesInSpan);
+  return projectedStat(player.shots, player.gp, gamesInSpan, { nullable: false }) +
+    projectedStat(player.hits, player.gp, gamesInSpan, { nullable: false }) +
+    projectedStat(player.blocks, player.gp, gamesInSpan, { nullable: false });
 }
 
 export function buildFantasyProjection(player, state, timeframe, scheduleData, categoryContext = null) {
@@ -307,10 +312,22 @@ export function buildFantasyProjection(player, state, timeframe, scheduleData, c
   const offNightGames = timeframeOffNightGamesForPlayer(player, timeframe, scheduleData);
   const categoryRanges = categoryContext || buildCategoryContext([player]);
   const isGoalie = String(player.position).toUpperCase() === "G";
-  const fantasyValue =
-    state.settings.leagueType === "categories"
-      ? categoryScoreForPlayer(player, state.settings, gamesInSpan, categoryRanges)
-      : fantasyPointsForPlayer(player, state.settings, gamesInSpan);
+  const projectionWarnings = [];
+
+  if (gamesInSpan == null) {
+    projectionWarnings.push("missing-games-window");
+  } else if (
+    (timeframe === "today" && gamesInSpan > 1) ||
+    ((timeframe === "this-week" || timeframe === "7d") && gamesInSpan > 7) ||
+    (timeframe === "14d" && gamesInSpan > 14) ||
+    (timeframe === "ros" && gamesInSpan > 82)
+  ) {
+    projectionWarnings.push("unreasonable-games-window");
+  }
+
+  if (!isFiniteNumber(player.gp) || Number(player.gp) <= 0) {
+    projectionWarnings.push("missing-gp");
+  }
 
   const projectedGoals = isGoalie ? null : projectedStat(player.goals, player.gp, gamesInSpan);
   const projectedAssists = isGoalie ? null : projectedStat(player.assists, player.gp, gamesInSpan);
@@ -321,11 +338,52 @@ export function buildFantasyProjection(player, state, timeframe, scheduleData, c
   const projectedPoints = isGoalie ? null : projectedStat(player.points, player.gp, gamesInSpan);
   const projectedSaves = isGoalie ? projectedStat(player.saves, player.gp, gamesInSpan) : null;
   const projectedWins = isGoalie ? projectedStat(player.wins, player.gp, gamesInSpan) : null;
+  const projectedGoalsAgainst = isGoalie ? projectedStat(player.goalsAgainst, player.gp, gamesInSpan) : null;
+  const projectedShutouts = isGoalie ? projectedStat(player.shutouts, player.gp, gamesInSpan) : null;
+
+  let projectedFantasyPoints =
+    state.settings.leagueType === "categories"
+      ? categoryScoreForPlayer(player, state.settings, gamesInSpan, categoryRanges)
+      : weightedProjection(
+          isGoalie
+            ? [
+                [projectedWins, state.settings.goalieWeights.wins],
+                [projectedSaves, state.settings.goalieWeights.saves],
+                [projectedGoalsAgainst, state.settings.goalieWeights.goalsAgainst],
+                [projectedShutouts, state.settings.goalieWeights.shutouts],
+              ]
+            : [
+                [projectedGoals, state.settings.skaterWeights.goals],
+                [projectedAssists, state.settings.skaterWeights.assists],
+                [projectedShots, state.settings.skaterWeights.shots],
+                [projectedHits, state.settings.skaterWeights.hits],
+                [projectedBlocks, state.settings.skaterWeights.blocks],
+                [projectedPPP, state.settings.skaterWeights.ppp],
+              ]
+        );
+
+  const allProjectedFields = isGoalie
+    ? [projectedSaves, projectedWins, projectedGoalsAgainst, projectedShutouts]
+    : [projectedGoals, projectedAssists, projectedShots, projectedHits, projectedBlocks, projectedPPP];
+
+  if (projectedFantasyPoints != null && allProjectedFields.every((value) => value == null)) {
+    projectionWarnings.push("fantasy-points-without-components");
+  }
+
+  const projectionValid =
+    gamesInSpan != null &&
+    !projectionWarnings.includes("missing-gp") &&
+    !projectionWarnings.includes("fantasy-points-without-components") &&
+    projectedFantasyPoints != null;
+
+  if (!projectionValid) {
+    projectedFantasyPoints = null;
+  }
 
   return {
     ...player,
     projectionTimeframe: timeframe,
-    projectedFantasyPoints: fantasyValue,
+    projectedFantasyPoints,
     projectedGames: gamesInSpan,
     projectedOffNightGames: offNightGames,
     projectedGoals,
@@ -337,9 +395,14 @@ export function buildFantasyProjection(player, state, timeframe, scheduleData, c
     projectedPoints,
     projectedSaves,
     projectedWins,
+    projectedGoalsAgainst,
+    projectedShutouts,
+    projectionValid,
+    projectionWarnings,
+    usedFallbackLogic: projectionWarnings.length > 0,
     gamesInSpan,
     offNightGames,
-    fantasyValue,
+    fantasyValue: projectedFantasyPoints,
     pointsProjection: projectedPoints,
     goalsProjection: projectedGoals,
     assistsProjection: projectedAssists,
@@ -349,7 +412,7 @@ export function buildFantasyProjection(player, state, timeframe, scheduleData, c
     pppProjection: projectedPPP,
     savesProjection: projectedSaves,
     winsProjection: projectedWins,
-    scheduleScore: gamesInSpan + offNightGames * 0.45,
+    scheduleScore: (gamesInSpan ?? 0) + (offNightGames ?? 0) * 0.45,
     peripheralsValue: peripheralsForPlayer(player, gamesInSpan),
     scoringUpside: scoringUpsideForPlayer(player, gamesInSpan),
   };
@@ -365,6 +428,7 @@ export function buildRankedPlayers(players, state, timeframe, filters, scheduleD
   }));
 
   return projected.filter((player) => {
+    if (!player.projectionValid) return false;
     if (filters.position !== "ALL") {
       const group = getPlayerGroup(player);
       if (filters.position === "F" && group !== "forwards") return false;
@@ -382,7 +446,16 @@ export function buildRosterContextSummary(state, playerMap, timeframe, scheduleD
   const sections = buildRosterSections(state, playerMap);
   const allPlayers = Object.values(sections).flat();
   const totalFantasyValue = allPlayers.reduce(
-    (sum, player) => sum + buildRankedPlayers([player], state, timeframe, { position: "ALL", team: "ALL", rosterState: "all" }, scheduleData)[0].fantasyValue,
+    (sum, player) => {
+      const projection = buildRankedPlayers(
+        [player],
+        state,
+        timeframe,
+        { position: "ALL", team: "ALL", rosterState: "all" },
+        scheduleData
+      )[0];
+      return sum + (projection?.fantasyValue || 0);
+    },
     0
   );
 

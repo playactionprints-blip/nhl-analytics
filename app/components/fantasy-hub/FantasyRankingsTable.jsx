@@ -11,14 +11,14 @@ import { buildRankedPlayers, formatFantasyValue } from "@/app/components/fantasy
 
 const SORTABLE_COLUMNS = [
   { key: "projectedFantasyPoints", label: "Fantasy Value" },
-  { key: "projectedGoals", label: "Goals" },
-  { key: "projectedAssists", label: "Assists" },
-  { key: "projectedShots", label: "Shots" },
-  { key: "projectedHits", label: "Hits" },
-  { key: "projectedBlocks", label: "Blocks" },
-  { key: "projectedSaves", label: "Saves" },
-  { key: "projectedWins", label: "Wins" },
-  { key: "projectedGames", label: "Games" },
+  { key: "projectedGoals", label: "Proj Goals" },
+  { key: "projectedAssists", label: "Proj Assists" },
+  { key: "projectedShots", label: "Proj Shots" },
+  { key: "projectedHits", label: "Proj Hits" },
+  { key: "projectedBlocks", label: "Proj Blocks" },
+  { key: "projectedSaves", label: "Proj Saves" },
+  { key: "projectedWins", label: "Proj Wins" },
+  { key: "projectedGames", label: "Proj Games" },
 ];
 
 function formatProjectedCell(value, digits = 1) {
@@ -43,7 +43,7 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
 
   useEffect(() => {
     if (process.env.NODE_ENV === "production" || !ranked.length) return;
-    const samples = ranked.slice(0, 3).map((projection) => {
+    const samples = ranked.slice(0, 10).map((projection) => {
       const source = players.find((player) => String(player.player_id) === String(projection.player_id));
       return {
         player: projection.player_name,
@@ -59,7 +59,26 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
           projectedBlocks: projection.projectedBlocks,
           projectedSaves: projection.projectedSaves,
           projectedWins: projection.projectedWins,
+          projectionValid: projection.projectionValid,
+          projectionWarnings: projection.projectionWarnings,
+          usedFallbackLogic: projection.usedFallbackLogic,
         },
+        projectedFantasyPointInputs:
+          String(projection.position).toUpperCase() === "G"
+            ? {
+                projectedWins: projection.projectedWins,
+                projectedSaves: projection.projectedSaves,
+                projectedGoalsAgainst: projection.projectedGoalsAgainst,
+                projectedShutouts: projection.projectedShutouts,
+              }
+            : {
+                projectedGoals: projection.projectedGoals,
+                projectedAssists: projection.projectedAssists,
+                projectedShots: projection.projectedShots,
+                projectedHits: projection.projectedHits,
+                projectedBlocks: projection.projectedBlocks,
+                projectedPowerPlayPoints: projection.projectedPowerPlayPoints,
+              },
         renderedRow: {
           projectedFantasyPoints: formatFantasyValue(projection.projectedFantasyPoints),
           projectedGames: formatProjectedCell(projection.projectedGames, 0),
@@ -73,7 +92,7 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
         },
       };
     });
-    console.debug("[FantasyRankingsTable] sample projection rows", samples);
+    console.debug("[FantasyRankingsTable] top 10 ranked projection rows", samples);
   }, [players, ranked, timeframe]);
 
   function toggleSort(nextKey) {
