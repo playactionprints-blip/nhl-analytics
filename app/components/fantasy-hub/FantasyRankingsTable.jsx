@@ -26,6 +26,24 @@ function formatProjectedCell(value, digits = 1) {
   return Number(value).toFixed(digits);
 }
 
+function recomputeDisplayedFantasyPoints(projection, state) {
+  if (state.settings.leagueType === "categories") return null;
+  if (String(projection.position).toUpperCase() === "G") {
+    const total =
+      (Number(projection.projectedWins) || 0) * Number(state.settings.goalieWeights.wins || 0) +
+      (Number(projection.projectedSaves) || 0) * Number(state.settings.goalieWeights.saves || 0);
+    return total || null;
+  }
+
+  const total =
+    (Number(projection.projectedGoals) || 0) * Number(state.settings.skaterWeights.goals || 0) +
+    (Number(projection.projectedAssists) || 0) * Number(state.settings.skaterWeights.assists || 0) +
+    (Number(projection.projectedShots) || 0) * Number(state.settings.skaterWeights.shots || 0) +
+    (Number(projection.projectedHits) || 0) * Number(state.settings.skaterWeights.hits || 0) +
+    (Number(projection.projectedBlocks) || 0) * Number(state.settings.skaterWeights.blocks || 0);
+  return total || null;
+}
+
 export default function FantasyRankingsTable({ players, state, timeframe, filters, scheduleData }) {
   const [sortKey, setSortKey] = useState("projectedFantasyPoints");
   const [sortDir, setSortDir] = useState("desc");
@@ -43,8 +61,9 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
 
   useEffect(() => {
     if (process.env.NODE_ENV === "production" || !ranked.length) return;
-    const samples = ranked.slice(0, 10).map((projection) => {
+    const samples = ranked.slice(0, 20).map((projection) => {
       const source = players.find((player) => String(player.player_id) === String(projection.player_id));
+      const recomputedDisplayed = recomputeDisplayedFantasyPoints(projection, state);
       return {
         player: projection.player_name,
         timeframe,
@@ -63,6 +82,8 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
           projectionWarnings: projection.projectionWarnings,
           usedFallbackLogic: projection.usedFallbackLogic,
         },
+        projectedFantasyPointsFromSource: projection.projectedFantasyPoints,
+        projectedFantasyPointsFromDisplayedCategories: recomputedDisplayed,
         projectedFantasyPointInputs:
           String(projection.position).toUpperCase() === "G"
             ? {
@@ -92,8 +113,8 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
         },
       };
     });
-    console.debug("[FantasyRankingsTable] top 10 ranked projection rows", samples);
-  }, [players, ranked, timeframe]);
+    console.debug("[FantasyRankingsTable] top 20 ranked projection rows", samples);
+  }, [players, ranked, state, timeframe]);
 
   function toggleSort(nextKey) {
     if (sortKey === nextKey) {

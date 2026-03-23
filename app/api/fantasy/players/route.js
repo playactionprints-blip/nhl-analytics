@@ -14,6 +14,19 @@ function toNumber(value, fallback = null) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function sanePpp(ppp, points, gp, playerGp) {
+  const pppValue = toNumber(ppp, null);
+  const pointsValue = toNumber(points, null);
+  const seasonGp = toNumber(gp, null);
+  const playerGames = toNumber(playerGp, null);
+
+  if (pppValue == null) return null;
+  if (pointsValue != null && pppValue > pointsValue) return null;
+  if (seasonGp != null && pppValue > seasonGp) return null;
+  if (playerGames != null && playerGames > 0 && seasonGp != null && Math.abs(playerGames - seasonGp) > 3) return null;
+  return pppValue;
+}
+
 export async function GET() {
   try {
     const supabase = createServerClient();
@@ -48,25 +61,37 @@ export async function GET() {
         const player = playerMap[String(row.player_id)];
         if (!player) return null;
 
+        const position = player.position || null;
+        const isGoalie = String(position).toUpperCase() === "G";
         const assists = (toNumber(row.a1, 0) || 0) + (toNumber(row.a2, 0) || 0);
-        const goals = toNumber(row.g, toNumber(player.g, 0) || 0) || 0;
-        const gp = toNumber(row.gp, toNumber(player.gp, 0) || 0) || 0;
-        const shots = toNumber(player.shots, toNumber(row.iff, toNumber(row.icf, 0) || 0));
-        const hits = toNumber(row.hits, toNumber(player.hits, 0));
-        const blocks = toNumber(row.blk, toNumber(player.blk, 0));
-        const ppp = toNumber(player.ppp, toNumber(player.ppg, 0) + toNumber(player.ppa, 0));
-        const saves = toNumber(player.saves, 0);
-        const wins = toNumber(player.wins, 0);
-        const goalsAgainst = toNumber(player.goals_against, 0);
-        const shutouts = toNumber(player.shutouts, 0);
-        const savePct = saves + goalsAgainst > 0 ? saves / (saves + goalsAgainst) : null;
-        const gaa = gp > 0 ? goalsAgainst / gp : null;
+        const goals = toNumber(row.g, toNumber(player.g, null));
+        const gp = toNumber(row.gp, toNumber(player.gp, null));
+        const points = toNumber(row.pts, null) ?? (
+          Number.isFinite(goals) && Number.isFinite(assists) ? goals + assists : null
+        );
+        const shots = toNumber(row.iff, toNumber(row.icf, toNumber(player.iff, toNumber(player.icf, null))));
+        const hits = toNumber(row.hits, toNumber(player.hits, null));
+        const blocks = toNumber(row.blk, toNumber(player.blk, null));
+        const ppp = !isGoalie
+          ? sanePpp(player.ppp, points ?? player.pts, gp, player.gp)
+          : null;
+        const wins = isGoalie ? toNumber(player.wins, null) : null;
+        const goalsAgainst = isGoalie ? toNumber(player.goals_against, null) : null;
+        const shotsAgainst = isGoalie ? toNumber(player.shots_against, null) : null;
+        const saves = isGoalie && shotsAgainst != null && goalsAgainst != null
+          ? Math.max(shotsAgainst - goalsAgainst, 0)
+          : null;
+        const shutouts = isGoalie ? toNumber(player.shutouts, null) : null;
+        const savePct = isGoalie
+          ? toNumber(player.save_pct, saves != null && goalsAgainst != null && saves + goalsAgainst > 0 ? saves / (saves + goalsAgainst) : null)
+          : null;
+        const gaa = isGoalie ? toNumber(player.gaa, gp > 0 && goalsAgainst != null ? goalsAgainst / gp : null) : null;
 
         return {
           player_id: String(row.player_id),
           player_name: player.full_name,
           team: row.team || player.team || null,
-          position: player.position || null,
+          position,
           cap_hit: toNumber(player.contract_info?.cap_hit ?? player.cap_hit, null),
           contract_expiry: toNumber(player.contract_info?.expiry ?? player.contract_expiry, null),
           war: toNumber(row.war_total, null),
@@ -76,12 +101,12 @@ export async function GET() {
           gp,
           goals,
           assists,
-          points: goals + assists,
-          shots: toNumber(shots, 0),
-          hits: toNumber(hits, 0),
-          blocks: toNumber(blocks, 0),
+          points,
+          shots,
+          hits,
+          blocks,
           ixg: toNumber(row.ixg, null),
-          ppp: toNumber(ppp, 0),
+          ppp,
           wins,
           saves,
           goalsAgainst,
