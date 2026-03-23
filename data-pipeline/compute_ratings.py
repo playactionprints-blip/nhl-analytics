@@ -280,12 +280,10 @@ def pct_rank(series):
 def compute_group(subdf, is_defense):
     subdf = subdf.copy()
 
-    # Offensive rating — ixG/60 28%, A1/60 20%, RAPM_off 20%, Pts/60 8%,
-    #                    iCF/60 8%, xGF% 8%, finishing_pct 8%
-    # RAPM_off included at 20%: TOI filter (≥200 min) removes small-sample noise,
-    # and the improved xG model (NHL API v1 coords) makes RAPM more accurate.
-    # Other weights scaled ×0.80 to make room for the 20% RAPM component.
-    OFF_WEIGHTS = {
+    # Offensive weights differ by position:
+    # Forwards: finishing_pct included (direct scoring impact)
+    # Defense: finishing_pct excluded (D-men not evaluated on finishing per industry standard)
+    OFF_WEIGHTS_FWD = {
         'ixg_60':        0.28,
         'a1_60':         0.20,
         'rapm_off_pct':  0.20,
@@ -294,6 +292,15 @@ def compute_group(subdf, is_defense):
         'xgf_pct':       0.08,
         'finishing_pct': 0.08,
     }
+    OFF_WEIGHTS_DEF = {
+        'ixg_60':        0.30,
+        'a1_60':         0.22,
+        'rapm_off_pct':  0.22,
+        'pts_60':        0.10,
+        'icf_60':        0.08,
+        'xgf_pct':       0.08,
+    }
+    OFF_WEIGHTS = OFF_WEIGHTS_DEF if is_defense else OFF_WEIGHTS_FWD
     for col in OFF_WEIGHTS:
         if col in subdf.columns:
             subdf[f'op_{col}'] = pct_rank(subdf[col])
@@ -309,21 +316,23 @@ def compute_group(subdf, is_defense):
 
     subdf['off_rating'] = subdf.apply(weighted_off, axis=1)
 
-    # Defensive rating — xGF% 27%, HDCF% 27%, RAPM_def 10%, TKA/60 14%,
-    #                    CF% PK 10%, GVA/60 inv 9%, CF% 5v5 3%
-    # rapm_def_pct added at 10% — a small individual-level signal to supplement
-    # the on-ice% metrics. Defensive RAPM is more reliable than offensive RAPM
-    # (Josi=91st, Raddysh=89th — both sensible). xgf_pct/hdcf_pct reduced from
-    # 31%→27% each to make room; cf_pct reduced 5%→3%.
+    # Defensive rating weights — updated based on hockey analytics literature.
+    # xGF%/HDCF% reduced (18% each): these are possession/linemate metrics,
+    # not purely individual defensive metrics.
+    # RAPM Def increased to 20%: only truly individual defensive metric,
+    # controls for teammates and opponents via ridge regression.
+    # cf_pct_pk increased to 15%: PK performance is more individually meaningful.
+    # tka_60 increased to 16%, gva_inv to 10%: individual defensive actions.
+    # All weights sum to 1.00.
     subdf['gva_inv'] = subdf['gva_60'] * -1
     DEF_WEIGHTS = {
-        'xgf_pct':      0.27,
-        'hdcf_pct':     0.27,
+        'xgf_pct':      0.18,
+        'hdcf_pct':     0.18,
         'cf_pct':       0.03,
-        'tka_60':       0.14,
-        'gva_inv':      0.09,
-        'cf_pct_pk':    0.10,
-        'rapm_def_pct': 0.10,
+        'tka_60':       0.16,
+        'gva_inv':      0.10,
+        'cf_pct_pk':    0.15,
+        'rapm_def_pct': 0.20,
     }
     for col in DEF_WEIGHTS:
         if col in subdf.columns:
@@ -429,18 +438,20 @@ for season_key in SEASONS:
 # Empirical RAPM replacement levels — computed from the qualified skater distribution
 # so WAR scales correctly regardless of which alpha build_rapm.py last selected.
 # EV Off replacement  = mean RAPM Off across all qualified skaters (avg player ≈ 0 WAR).
-# EV Def replacement  = 20th percentile RAPM Def per position group so that roughly
-# 80 % of players have positive EV Def WAR and the distribution is meaningful.
+# EV Def replacement = 35th percentile RAPM Def per position group.
+# Industry standard (HockeyStats.com) shows 0 WAR ≈ 37th percentile,
+# meaning ~35-37% of qualified players are below replacement level.
+# This is more defensible than 20th (too generous) or 50th (too harsh).
 _all_rapm_off   = df['rapm_off'].dropna()
 _fwd_rapm_def   = df[df['position'] != 'D']['rapm_def'].dropna()
 _def_rapm_def   = df[df['position'] == 'D']['rapm_def'].dropna()
 ev_off_replacement     = float(_all_rapm_off.mean())              if len(_all_rapm_off) > 0 else 0.0
-ev_def_replacement_fwd = float(np.percentile(_fwd_rapm_def, 20))  if len(_fwd_rapm_def) > 0 else 0.0
-ev_def_replacement_d   = float(np.percentile(_def_rapm_def, 20))  if len(_def_rapm_def) > 0 else 0.0
+ev_def_replacement_fwd = float(np.percentile(_fwd_rapm_def, 35))  if len(_fwd_rapm_def) > 0 else 0.0
+ev_def_replacement_d   = float(np.percentile(_def_rapm_def, 35))  if len(_def_rapm_def) > 0 else 0.0
 print(f"Empirical RAPM replacement levels:")
 print(f"  EV Off:       {ev_off_replacement:.4f} xG/60  (mean, all qualified skaters)")
-print(f"  EV Def (Fwd): {ev_def_replacement_fwd:.4f} xG/60  (20th pctile, forwards)")
-print(f"  EV Def (D):   {ev_def_replacement_d:.4f} xG/60  (20th pctile, defensemen)")
+print(f"  EV Def (Fwd): {ev_def_replacement_fwd:.4f} xG/60  (35th pctile, forwards)")
+print(f"  EV Def (D):   {ev_def_replacement_d:.4f} xG/60  (35th pctile, defensemen)")
 
 
 def compute_season_war_component(row, position, ev_off_replacement, ev_def_replacement_fwd, ev_def_replacement_d):
