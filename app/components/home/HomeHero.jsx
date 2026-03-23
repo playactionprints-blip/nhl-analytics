@@ -41,14 +41,14 @@ export default function HomeHero({ quickLinks = [] }) {
           <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.12em", textTransform: "uppercase" }}>
             NHL analytics platform
           </div>
-          <div style={{ color: "#f2fbff", fontSize: 64, lineHeight: 0.92, fontWeight: 900, maxWidth: 760 }}>
+          <div className="home-hero-title" style={{ color: "#f2fbff", fontSize: 64, lineHeight: 0.92, fontWeight: 900, maxWidth: 760 }}>
             NHL analytics, predictions, and player value in one place.
           </div>
-          <div style={{ color: "#95adc3", fontSize: 18, lineHeight: 1.6, maxWidth: 760 }}>
+          <div className="home-hero-subtitle" style={{ color: "#95adc3", fontSize: 18, lineHeight: 1.6, maxWidth: 760 }}>
             Explore model-driven game predictions, player WAR rankings, team insights, playoff tools, and comparison workflows built for serious hockey fans.
           </div>
 
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div className="home-hero-cta-row" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <Link
               href="/predictions"
               style={{
@@ -130,7 +130,23 @@ export default function HomeHero({ quickLinks = [] }) {
             grid-template-columns: 1fr;
           }
         }
+        @media (max-width: 860px) {
+          .home-hero-title {
+            font-size: 46px !important;
+          }
+          .home-hero-subtitle {
+            font-size: 16px !important;
+            line-height: 1.5 !important;
+          }
+        }
         @media (max-width: 640px) {
+          .home-hero-title {
+            font-size: 36px !important;
+          }
+          .home-hero-cta-row a {
+            width: 100%;
+            text-align: center;
+          }
           .home-quick-grid {
             grid-template-columns: 1fr;
           }
@@ -139,4 +155,3 @@ export default function HomeHero({ quickLinks = [] }) {
     </section>
   );
 }
-

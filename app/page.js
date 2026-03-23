@@ -185,6 +185,7 @@ export default async function HomePage() {
 
   return (
     <main
+      className="home-page-shell"
       style={{
         minHeight: "100vh",
         background:
@@ -193,6 +194,7 @@ export default async function HomePage() {
       }}
     >
       <div
+        className="home-page-inner"
         style={{
           width: "min(1360px, 100%)",
           margin: "0 auto",
@@ -210,6 +212,16 @@ export default async function HomePage() {
         <TrustSection />
         <HomeCTA />
       </div>
+      <style>{`
+        @media (max-width: 860px) {
+          .home-page-shell {
+            padding: 20px 14px 48px !important;
+          }
+          .home-page-inner {
+            gap: 20px !important;
+          }
+        }
+      `}</style>
     </main>
   );
 }

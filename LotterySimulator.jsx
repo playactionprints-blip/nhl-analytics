@@ -583,6 +583,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
 
   return (
     <div
+      className="lottery-page-shell"
       style={{
         minHeight: "100vh",
         background: "radial-gradient(circle at top left, #0d2136 0%, #060a11 58%, #05090f 100%)",
@@ -621,11 +622,17 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
           }
         }
         @media (max-width: 760px) {
+          .lottery-page-shell {
+            padding: 18px 12px 36px !important;
+          }
           .lottery-hero-meta,
           .lottery-controls-row,
           .lottery-results-grid,
           .lottery-summary-grid {
             grid-template-columns: 1fr !important;
+          }
+          .lottery-hero-title {
+            font-size: 34px !important;
           }
           .lottery-table-head {
             display: none !important;
@@ -662,7 +669,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                 <div style={{ fontSize: 11, color: "#4d82af", fontFamily: "'DM Mono',monospace", letterSpacing: "0.16em", textTransform: "uppercase" }}>
                   NHL Analytics · Draft Tools
                 </div>
-                <h1 style={{ margin: 0, color: "#eff8ff", fontSize: 46, lineHeight: 0.95, letterSpacing: "-0.04em", fontWeight: 900 }}>
+                <h1 className="lottery-hero-title" style={{ margin: 0, color: "#eff8ff", fontSize: 46, lineHeight: 0.95, letterSpacing: "-0.04em", fontWeight: 900 }}>
                   NHL Draft Lottery Simulator
                 </h1>
                 <p style={{ margin: 0, maxWidth: 800, color: "#86a5c0", fontSize: 18, lineHeight: 1.35 }}>

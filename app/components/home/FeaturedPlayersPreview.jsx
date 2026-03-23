@@ -43,6 +43,7 @@ export default function FeaturedPlayersPreview({ players = [] }) {
           <Link
             key={player.player_id}
             href={`/players/${player.player_id}`}
+            className="featured-player-row"
             style={{
               textDecoration: "none",
               display: "grid",
@@ -90,6 +91,14 @@ export default function FeaturedPlayersPreview({ players = [] }) {
           </div>
         )}
       </div>
+      <style>{`
+        @media (max-width: 640px) {
+          .featured-player-row {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+          }
+        }
+      `}</style>
     </section>
   );
 }

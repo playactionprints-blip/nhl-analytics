@@ -454,13 +454,13 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
           { href: `/team/${teamCode}`, label: teamName },
         ]}
       />
-      <div style={{
+      <div className="team-page-shell" style={{
         minHeight: "100vh",
         background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)",
         padding: "32px 20px 60px",
         fontFamily: "'Barlow Condensed',sans-serif",
       }}>
-        <div style={{ maxWidth: 960, margin: "0 auto" }}>
+        <div className="team-page-inner" style={{ maxWidth: 960, margin: "0 auto" }}>
 
           {/* Back link */}
           <Link href="/teams" style={{
@@ -629,8 +629,9 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
           </div>
 
           {/* ── Roster table ── */}
-          <div style={{ border: "1px solid #1e2d40", borderRadius: "0 10px 10px 10px",
+          <div className="team-roster-shell" style={{ border: "1px solid #1e2d40", borderRadius: "0 10px 10px 10px",
             overflow: "hidden", background: "#060b12" }}>
+            <div className="team-roster-min" style={{ minWidth: 760 }}>
 
             {/* Column header */}
             <div style={{ display: "flex", alignItems: "center", gap: 12,
@@ -675,6 +676,7 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
                 />
               ))
             )}
+            </div>
           </div>
 
           {/* Footer */}
@@ -689,9 +691,20 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
       <PlayerModal player={selectedPlayer} onClose={() => setSelectedPlayer(null)} />
 
       <style jsx>{`
+        @media (max-width: 860px) {
+          .team-page-shell {
+            padding: 20px 14px 40px !important;
+          }
+          .team-page-inner h1 {
+            font-size: 34px !important;
+          }
+        }
         @media (max-width: 640px) {
           .team-season-grid {
             grid-template-columns: 1fr !important;
+          }
+          .team-roster-shell {
+            overflow-x: auto !important;
           }
         }
       `}</style>

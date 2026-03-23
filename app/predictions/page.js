@@ -224,6 +224,7 @@ export default async function PredictionsPage({ searchParams }) {
 
   return (
     <div
+      className="predictions-page-shell"
       style={{
         minHeight: "100vh",
         background: "radial-gradient(circle at top left, #0d2136 0%, #060a11 58%, #05090f 100%)",
@@ -265,6 +266,46 @@ export default async function PredictionsPage({ searchParams }) {
             grid-template-columns: 1fr;
           }
         }
+        @media (max-width: 860px) {
+          .predictions-page-shell {
+            padding: 20px 14px 40px !important;
+          }
+          .predictions-hero-content {
+            padding: 22px 16px 18px !important;
+          }
+          .predictions-hero-headline {
+            font-size: 34px !important;
+          }
+          .predictions-date-controls {
+            padding: 14px !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .predictions-grid {
+            gap: 14px !important;
+          }
+          .predictions-date-controls {
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+          .predictions-date-controls > div,
+          .predictions-date-controls form {
+            width: 100%;
+          }
+          .predictions-hero-headline {
+            font-size: 28px !important;
+          }
+          .predictions-hero-copy {
+            font-size: 15px !important;
+          }
+          .predictions-date-controls,
+          .predictions-quick-jump {
+            gap: 8px !important;
+          }
+          .slate-scroll {
+            grid-auto-columns: minmax(216px, 1fr);
+          }
+        }
       `}</style>
       <div style={{ maxWidth: 1320, margin: "0 auto", display: "grid", gap: 18 }}>
         <section
@@ -276,16 +317,16 @@ export default async function PredictionsPage({ searchParams }) {
             overflow: "hidden",
           }}
         >
-          <div style={{ padding: "28px 28px 24px", display: "grid", gap: 16 }}>
+          <div className="predictions-hero-content" style={{ padding: "28px 28px 24px", display: "grid", gap: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "start", flexWrap: "wrap" }}>
               <div style={{ display: "grid", gap: 10 }}>
                 <div style={{ fontSize: 11, color: "#4d82af", fontFamily: "'DM Mono',monospace", letterSpacing: "0.16em", textTransform: "uppercase" }}>
                   NHL Analytics · Game Model
                 </div>
-                <h1 style={{ margin: 0, color: "#eff8ff", fontSize: 46, lineHeight: 0.95, letterSpacing: "-0.04em", fontWeight: 900 }}>
+                <h1 className="predictions-hero-headline" style={{ margin: 0, color: "#eff8ff", fontSize: 46, lineHeight: 0.95, letterSpacing: "-0.04em", fontWeight: 900 }}>
                   {formatHeadlineDate(selectedDateString)} Predictions
                 </h1>
-                <p style={{ margin: 0, maxWidth: 860, color: "#86a5c0", fontSize: 18, lineHeight: 1.35 }}>
+                <p className="predictions-hero-copy" style={{ margin: 0, maxWidth: 860, color: "#86a5c0", fontSize: 18, lineHeight: 1.35 }}>
                   A first-pass game model combining team scoring environment, shot quality proxies, finishing, goaltending, special teams, and 10,000-game Monte Carlo simulation.
                 </p>
               </div>
@@ -311,6 +352,7 @@ export default async function PredictionsPage({ searchParams }) {
             </div>
 
             <div
+              className="predictions-date-controls"
               style={{
                 display: "flex",
                 justifyContent: "space-between",
@@ -407,6 +449,7 @@ export default async function PredictionsPage({ searchParams }) {
             </div>
 
             <div
+              className="predictions-quick-jump"
               style={{
                 display: "flex",
                 gap: 10,

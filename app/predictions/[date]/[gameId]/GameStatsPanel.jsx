@@ -242,7 +242,7 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+      <div className="ice-rink-summary-row" style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
         <span style={{ color: awayColor, fontFamily: "'DM Mono',monospace", fontSize: 12, fontWeight: 700 }}>
           {awayAbbr}: {awayShots} shots · {totalAwayXG.toFixed(2)} xG
         </span>
@@ -406,6 +406,15 @@ function IceRink({ shotEvents, homeColor, awayColor, homeAbbr, awayAbbr, totalHo
           ))}
         </div>
       </div>
+      <style>{`
+        @media (max-width: 540px) {
+          .ice-rink-summary-row {
+            display: grid !important;
+            gap: 6px;
+            justify-content: stretch !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -627,12 +636,39 @@ export default function GameStatsPanel({
       <style>{`
         .gsp-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         @media (max-width: 700px) { .gsp-two-col { grid-template-columns: 1fr; } }
+        .gsp-xg-share-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .gsp-legend-row {
+          display: flex;
+          gap: 16px;
+          justify-content: center;
+        }
+        @media (max-width: 640px) {
+          .gsp-xg-share-row {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+          }
+          .gsp-legend-row {
+            flex-wrap: wrap;
+            gap: 10px;
+          }
+          .gsp-chart-card {
+            padding: 14px 14px !important;
+          }
+          .gsp-chart-height {
+            height: 170px !important;
+          }
+        }
       `}</style>
 
       {/* 1. xG Share bar */}
-      <div style={CARD}>
+      <div className="gsp-chart-card" style={CARD}>
         <div style={SECTION_LABEL}>xG Share</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="gsp-xg-share-row">
           <div style={{ textAlign: "left", minWidth: 64 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -672,6 +708,7 @@ export default function GameStatsPanel({
       <div className="gsp-two-col">
         <div style={{
           ...CARD,
+          padding: CARD.padding,
           background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.08)} 0%, #091017 40%, #091017 60%, ${hexToRgba(homeColor, 0.08)} 100%)`,
         }}>
           <div style={SECTION_LABEL}>Deserved to win</div>
@@ -687,9 +724,9 @@ export default function GameStatsPanel({
         </div>
 
         {hasWinProb ? (
-          <div style={CARD}>
+          <div className="gsp-chart-card" style={CARD}>
             <div style={SECTION_LABEL}>Win probability over time</div>
-            <div style={{ width: "100%", height: 200 }}>
+            <div className="gsp-chart-height" style={{ width: "100%", height: 200 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={winProbTimeline} margin={{ top: 4, right: 8, left: -14, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#141f2d" vertical={false} />
@@ -720,7 +757,7 @@ export default function GameStatsPanel({
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ display: "flex", gap: 16, justifyContent: "center" }}>
+            <div className="gsp-legend-row">
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <svg width={22} height={8}><line x1={0} y1={4} x2={22} y2={4} stroke={awayColor} strokeWidth={2} strokeDasharray="5 3" /></svg>
                 <span style={MUTED}>{awayAbbr}</span>
@@ -740,9 +777,9 @@ export default function GameStatsPanel({
 
       {/* 3. xG By Period */}
       {xgPeriodData.length > 0 && (
-        <div style={CARD}>
+        <div className="gsp-chart-card" style={CARD}>
           <div style={SECTION_LABEL}>xG by period</div>
-          <div style={{ width: "100%", height: 180 }}>
+          <div className="gsp-chart-height" style={{ width: "100%", height: 180 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={xgPeriodData} barGap={4} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#141f2d" vertical={false} />
@@ -755,7 +792,7 @@ export default function GameStatsPanel({
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div style={{ display: "flex", gap: 16, justifyContent: "center" }}>
+          <div className="gsp-legend-row">
             {[{ label: awayAbbr, color: awayColor }, { label: homeAbbr, color: homeColor }].map(({ label, color }) => (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <div style={{ width: 10, height: 10, borderRadius: 2, background: color, opacity: 0.9 }} />
@@ -768,7 +805,7 @@ export default function GameStatsPanel({
 
       {/* 4. Shot map */}
       {shotEvents.length > 0 && (
-        <div style={CARD}>
+        <div className="gsp-chart-card" style={CARD}>
           <div style={SECTION_LABEL}>Shot map</div>
           <IceRink
             shotEvents={shotEvents}
@@ -786,9 +823,9 @@ export default function GameStatsPanel({
       {(awayPlayers.length > 0 || homePlayers.length > 0) && (
         <div className="gsp-two-col">
           {awayPlayers.length > 0 && (
-            <div style={CARD}>
+            <div className="gsp-chart-card" style={CARD}>
               <div style={SECTION_LABEL}>{awayAbbr} xG Leaders</div>
-              <div style={{ width: "100%", height: playerBarHeight }}>
+              <div className="gsp-chart-height" style={{ width: "100%", height: playerBarHeight }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={awayPlayers} layout="vertical" margin={{ top: 0, right: 32, left: 0, bottom: 0 }}>
                     <XAxis type="number" tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />
@@ -804,9 +841,9 @@ export default function GameStatsPanel({
             </div>
           )}
           {homePlayers.length > 0 && (
-            <div style={CARD}>
+            <div className="gsp-chart-card" style={CARD}>
               <div style={SECTION_LABEL}>{homeAbbr} xG Leaders</div>
-              <div style={{ width: "100%", height: playerBarHeight }}>
+              <div className="gsp-chart-height" style={{ width: "100%", height: playerBarHeight }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={homePlayers} layout="vertical" margin={{ top: 0, right: 32, left: 0, bottom: 0 }}>
                     <XAxis type="number" tick={{ fill: "#5a7a96", fontSize: 10, fontFamily: "'DM Mono',monospace" }} axisLine={false} tickLine={false} />

@@ -20,6 +20,7 @@ function mirroredRow({ label, awayValue, homeValue, awayDisplay, homeDisplay, aw
 
   return (
     <div
+      className="team-comparison-row"
       key={label}
       style={{
         display: "grid",
@@ -159,6 +160,7 @@ export default function TeamComparison({
 
   return (
     <div
+      className="team-comparison-card"
       style={{
         borderRadius: 24,
         border: "1px solid #16283a",
@@ -200,6 +202,40 @@ export default function TeamComparison({
           Team stat comparison unavailable for this game.
         </div>
       )}
+
+      <style>{`
+        @media (max-width: 640px) {
+          .team-comparison-card {
+            padding: 18px 16px !important;
+          }
+          .team-comparison-row {
+            grid-template-columns: 56px minmax(0, 1fr) 92px minmax(0, 1fr) 56px !important;
+            gap: 8px !important;
+          }
+        }
+        @media (max-width: 460px) {
+          .team-comparison-row {
+            grid-template-columns: 1fr !important;
+            gap: 8px !important;
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(10, 20, 31, 0.72);
+            border: 1px solid #16283a;
+          }
+          .team-comparison-row > div:nth-child(1) {
+            font-size: 16px !important;
+          }
+          .team-comparison-row > div:nth-child(5) {
+            font-size: 16px !important;
+            text-align: left !important;
+          }
+          .team-comparison-row > div:nth-child(3) {
+            text-align: left !important;
+            padding-top: 2px;
+            padding-bottom: 2px;
+          }
+        }
+      `}</style>
     </div>
   );
 }

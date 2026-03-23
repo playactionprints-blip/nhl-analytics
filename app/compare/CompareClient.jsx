@@ -55,7 +55,7 @@ function PlayerPicker({ label, player, onSelect, accent = "#0080FF" }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!query.trim()) { setResults([]); return; }
+    if (!query.trim()) return undefined;
     const h = setTimeout(async () => {
       setLoading(true);
       const { data } = await supabase
@@ -79,7 +79,7 @@ function PlayerPicker({ label, player, onSelect, accent = "#0080FF" }) {
   }
 
   return (
-    <div style={{ flex: 1, minWidth: 240 }}>
+    <div className="compare-player-picker" style={{ flex: 1, minWidth: 240 }}>
       <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{label}</div>
       {player ? (
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${TEAM_COLOR[player.team] || "#4a6a88"}18`, border: `1px solid ${TEAM_COLOR[player.team] || "#4a6a88"}44`, borderRadius: 10 }}>
@@ -97,7 +97,15 @@ function PlayerPicker({ label, player, onSelect, accent = "#0080FF" }) {
             type="text"
             placeholder="Search player name..."
             value={query}
-            onChange={e => { setQuery(e.target.value); setOpen(true); }}
+            onChange={e => {
+              const nextValue = e.target.value;
+              setQuery(nextValue);
+              if (!nextValue.trim()) {
+                setResults([]);
+                setLoading(false);
+              }
+              setOpen(true);
+            }}
             onFocus={() => setOpen(true)}
             style={{ width: "100%", padding: "12px 16px", background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 10, color: "#e8f4ff", fontSize: 14, fontFamily: "'Barlow Condensed',sans-serif", outline: "none", boxSizing: "border-box" }}
           />
@@ -371,21 +379,49 @@ export default function CompareClient() {
         ::-webkit-scrollbar { width:4px; }
         ::-webkit-scrollbar-track { background:#0d1825; }
         ::-webkit-scrollbar-thumb { background:#1e2d40; border-radius:2px; }
+        @media (max-width: 860px) {
+          .compare-page-shell {
+            padding: 20px 14px 36px !important;
+          }
+          .compare-page-title {
+            font-size: 32px !important;
+          }
+          .compare-player-pickers,
+          .compare-header-cards,
+          .compare-radar-row {
+            grid-template-columns: 1fr !important;
+          }
+          .compare-player-pickers {
+            display: grid !important;
+          }
+          .compare-vs-chip {
+            justify-self: center;
+            padding-top: 0 !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .compare-page-title {
+            font-size: 28px !important;
+          }
+          .compare-player-picker {
+            min-width: 0 !important;
+          }
+        }
       `}</style>
 
-      <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)", padding: "40px 24px", fontFamily: "'Barlow Condensed',sans-serif" }}>
+      <div className="compare-page-shell" style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)", padding: "40px 24px", fontFamily: "'Barlow Condensed',sans-serif" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           {/* Page header */}
           <div style={{ marginBottom: 32 }}>
             <div style={{ fontSize: 11, color: "#2a5070", letterSpacing: "0.2em", textTransform: "uppercase", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>NHL Analytics</div>
-            <h1 style={{ fontSize: 38, fontWeight: 900, color: "#e8f4ff", letterSpacing: "-1px", lineHeight: 1 }}>Player Compare</h1>
+            <h1 className="compare-page-title" style={{ fontSize: 38, fontWeight: 900, color: "#e8f4ff", letterSpacing: "-1px", lineHeight: 1 }}>Player Compare</h1>
             <div style={{ fontSize: 12, color: "#2a4060", fontFamily: "'DM Mono',monospace", marginTop: 6 }}>Select two skaters to compare stats, ratings, and percentiles</div>
           </div>
 
           {/* Player pickers */}
-          <div style={{ display: "flex", gap: 16, marginBottom: 28, flexWrap: "wrap" }}>
+          <div className="compare-player-pickers" style={{ display: "flex", gap: 16, marginBottom: 28, flexWrap: "wrap" }}>
             <PlayerPicker label="Player 1" player={p1} onSelect={p => { setP1(p); }} />
-            <div style={{ display: "flex", alignItems: "center", fontSize: 22, fontWeight: 900, color: "#1e2d40", fontFamily: "'Barlow Condensed',sans-serif", paddingTop: 24 }}>vs</div>
+            <div className="compare-vs-chip" style={{ display: "flex", alignItems: "center", fontSize: 22, fontWeight: 900, color: "#1e2d40", fontFamily: "'Barlow Condensed',sans-serif", paddingTop: 24 }}>vs</div>
             <PlayerPicker label="Player 2" player={p2} onSelect={p => { setP2(p); }} />
           </div>
 
@@ -398,7 +434,7 @@ export default function CompareClient() {
           {ready && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               {/* Player headers */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div className="compare-header-cards" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 {[p1, p2].map((p, idx) => {
                   const accent = TEAM_COLOR[p.team] || "#4a6a88";
                   return (
@@ -427,7 +463,7 @@ export default function CompareClient() {
               <CompareTable p1={p1} p2={p2} />
 
               {/* Radar + WAR side by side */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div className="compare-radar-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <CompareRadar p1={p1} p2={p2} />
                 <WarBars p1={p1} p2={p2} />
               </div>

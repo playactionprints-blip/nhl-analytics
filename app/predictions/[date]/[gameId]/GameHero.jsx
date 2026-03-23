@@ -199,6 +199,16 @@ export default function GameHero({
             grid-template-columns: 1fr !important;
           }
         }
+        @media (max-width: 640px) {
+          .postgame-hero-grid img {
+            width: 62px !important;
+            height: 62px !important;
+          }
+          .postgame-hero-grid > div:nth-child(1) > div:last-child,
+          .postgame-hero-grid > div:nth-child(3) > div:last-child {
+            font-size: 58px !important;
+          }
+        }
       `}</style>
     </section>
   );

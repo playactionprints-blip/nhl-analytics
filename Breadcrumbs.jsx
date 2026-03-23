@@ -92,9 +92,10 @@ export function BreadcrumbBar() {
 
   return (
     <div
+      className="breadcrumb-bar"
       style={{
         position: "sticky",
-        top: 44,
+        top: "var(--top-nav-height)",
         zIndex: 95,
         background: "rgba(5,9,15,0.88)",
         backdropFilter: "blur(8px)",
@@ -103,6 +104,7 @@ export function BreadcrumbBar() {
       }}
     >
       <div
+        className="breadcrumb-mobile-wrap"
         style={{
           maxWidth: 1320,
           margin: "0 auto",
@@ -131,6 +133,20 @@ export function BreadcrumbBar() {
           </div>
         ))}
       </div>
+      <style>{`
+        @media (max-width: 860px) {
+          .breadcrumb-bar {
+            position: static !important;
+            padding: 8px 16px !important;
+          }
+          .breadcrumb-mobile-wrap {
+            overflow-x: auto;
+            scrollbar-width: none;
+            flex-wrap: nowrap !important;
+            white-space: nowrap;
+          }
+        }
+      `}</style>
     </div>
   );
 }

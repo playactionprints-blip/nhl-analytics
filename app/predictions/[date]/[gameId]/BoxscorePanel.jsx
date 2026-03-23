@@ -156,7 +156,7 @@ export default function BoxscorePanel({ homeAbbr, awayAbbr, homeColor, awayColor
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div className="boxscore-tab-row" style={{ display: "flex", gap: 8 }}>
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -183,7 +183,7 @@ export default function BoxscorePanel({ homeAbbr, awayAbbr, homeColor, awayColor
       {tab !== "goalies" && (
         <div style={{ display: "grid", gap: 16 }}>
           {away && (
-            <div style={{ borderRadius: 20, border: `1px solid ${hexToRgba(awayColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
+            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(awayColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
               <SkaterGrid
                 players={tab === "forwards" ? (away.forwards || []) : (away.defense || [])}
                 abbr={awayAbbr}
@@ -193,7 +193,7 @@ export default function BoxscorePanel({ homeAbbr, awayAbbr, homeColor, awayColor
             </div>
           )}
           {home && (
-            <div style={{ borderRadius: 20, border: `1px solid ${hexToRgba(homeColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
+            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(homeColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
               <SkaterGrid
                 players={tab === "forwards" ? (home.forwards || []) : (home.defense || [])}
                 abbr={homeAbbr}
@@ -208,17 +208,38 @@ export default function BoxscorePanel({ homeAbbr, awayAbbr, homeColor, awayColor
       {tab === "goalies" && (
         <div style={{ display: "grid", gap: 16 }}>
           {(away?.goalies?.length ?? 0) > 0 && (
-            <div style={{ borderRadius: 20, border: `1px solid ${hexToRgba(awayColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
+            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(awayColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
               <GoalieGrid goalies={away.goalies} abbr={awayAbbr} color={awayColor} />
             </div>
           )}
           {(home?.goalies?.length ?? 0) > 0 && (
-            <div style={{ borderRadius: 20, border: `1px solid ${hexToRgba(homeColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
+            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(homeColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
               <GoalieGrid goalies={home.goalies} abbr={homeAbbr} color={homeColor} />
             </div>
           )}
         </div>
       )}
+
+      <style>{`
+        .boxscore-tab-row {
+          flex-wrap: wrap;
+        }
+        .boxscore-team-card {
+          overflow-x: auto;
+        }
+        @media (max-width: 640px) {
+          .boxscore-team-card {
+            padding: 14px 14px !important;
+          }
+          .boxscore-tab-row {
+            gap: 6px;
+          }
+          .boxscore-tab-row button {
+            min-height: 40px;
+            padding: 8px 14px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -2256,6 +2256,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
           .app-outer { padding:16px 10px 40px !important; }
           .app-h1 { font-size:28px !important; letter-spacing:-0.5px !important; }
           .app-search-shell { grid-template-columns: 1fr !important; }
+          .app-mode-toggle { width:100% !important; overflow-x:auto !important; justify-content:flex-start !important; }
           .app-mode-btn { padding:8px 10px !important; font-size:11px !important; }
           .pc-card { width:calc(100vw - 24px) !important; }
           .pc-header-row { flex-direction:column !important; align-items:center !important; gap:8px !important; }
@@ -2280,7 +2281,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
       <div className="app-outer" style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)", display:"flex", flexDirection:"column", alignItems:"center", padding:"40px 20px", fontFamily:"'Barlow Condensed',sans-serif" }}>
 
         {/* Mode toggle */}
-        <div style={{ display:"flex", gap:0, marginBottom:20, background:"#0d1825", border:"1px solid #1e2d40", borderRadius:10, overflow:"hidden" }}>
+        <div className="app-mode-toggle" style={{ display:"flex", gap:0, marginBottom:20, background:"#0d1825", border:"1px solid #1e2d40", borderRadius:10, overflow:"hidden" }}>
           {[["search","🔍 Search Players"],["teams","🏒 Browse by Team"],["table","📊 Stats Table"]].map(([mode,label]) => (
             <button key={mode} onClick={() => setBrowseMode(mode)} className="app-mode-btn" style={{ padding:"10px 24px", background:browseMode===mode?"#0080FF":"transparent", border:"none", color:browseMode===mode?"white":"#4a6a88", fontSize:13, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer", transition:"all 0.2s", letterSpacing:"0.03em" }}>
               {label}

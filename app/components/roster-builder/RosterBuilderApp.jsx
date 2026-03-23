@@ -616,18 +616,37 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
           align-items: start;
         }
         @media (max-width: 767px) {
+          .rb-page-shell {
+            padding: 18px 12px 36px !important;
+          }
+          .rb-page-title {
+            font-size: 34px !important;
+          }
           .rb-grid {
             grid-template-columns: 1fr;
+          }
+          .rb-load-row,
+          .rb-filter-row {
+            grid-template-columns: 1fr !important;
+          }
+          .rb-forward-row,
+          .rb-defense-row,
+          .rb-goalie-row {
+            grid-template-columns: 1fr !important;
+          }
+          .rb-line-label {
+            justify-content: flex-start !important;
+            padding-left: 2px;
           }
         }
       `}</style>
 
-      <div style={{ maxWidth: 1440, margin: "0 auto" }}>
+      <div className="rb-page-shell" style={{ maxWidth: 1440, margin: "0 auto" }}>
         <div style={{ marginBottom: 28, textAlign: "center" }}>
           <div style={{ fontSize: 11, color: "#2a5070", letterSpacing: "0.2em", textTransform: "uppercase", fontFamily: "'DM Mono',monospace", marginBottom: 8 }}>
             NHL Analytics
           </div>
-          <h1 style={{ fontSize: 42, fontWeight: 900, color: "#e8f4ff", letterSpacing: "-0.5px", lineHeight: 1, margin: 0 }}>
+          <h1 className="rb-page-title" style={{ fontSize: 42, fontWeight: 900, color: "#e8f4ff", letterSpacing: "-0.5px", lineHeight: 1, margin: 0 }}>
             Armchair GM Roster Builder
           </h1>
           <div style={{ fontSize: 12, color: "#5c7894", fontFamily: "'DM Mono',monospace", marginTop: 8 }}>
@@ -676,7 +695,7 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
               <div style={{ fontSize: 10, color: "#5e7b98", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
                 Load Team Roster
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="rb-load-row" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 8 }}>
                 <select
                   value={loadTeamCode}
                   onChange={(e) => setLoadTeamCode(e.target.value)}
@@ -740,7 +759,8 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
                   }}
                 />
 
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                <div className="rb-filter-row" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginBottom: 10 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {POSITION_FILTERS.map((filter) => (
                     <button
                       key={filter}
@@ -759,29 +779,30 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
                       {filter}
                     </button>
                   ))}
-                </div>
+                  </div>
 
-                <select
-                  value={teamFilter}
-                  onChange={(event) => setTeamFilter(event.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid #213447",
-                    background: "#09111a",
-                    color: "#cfe7fb",
-                    fontSize: 14,
-                    marginBottom: 12,
-                  }}
-                >
-                  <option value="ALL">All Teams</option>
-                  {Object.entries(TEAM_FULL).map(([code, name]) => (
-                    <option key={code} value={code}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
+                  <select
+                    value={teamFilter}
+                    onChange={(event) => setTeamFilter(event.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      border: "1px solid #213447",
+                      background: "#09111a",
+                      color: "#cfe7fb",
+                      fontSize: 14,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <option value="ALL">All Teams</option>
+                    {Object.entries(TEAM_FULL).map(([code, name]) => (
+                      <option key={code} value={code}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 {loading ? (
                   <LoadingPool />
@@ -845,8 +866,8 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
               </div>
               <div style={{ display: "grid", gap: 12 }}>
                 {FORWARD_LINES.map((lineKey) => (
-                  <div key={lineKey} style={{ display: "grid", gridTemplateColumns: "50px repeat(3, minmax(0,1fr))", gap: 10, alignItems: "stretch" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "#8ca8c1", fontFamily: "'DM Mono',monospace", fontSize: 13 }}>{lineKey}</div>
+                  <div key={lineKey} className="rb-forward-row" style={{ display: "grid", gridTemplateColumns: "50px repeat(3, minmax(0,1fr))", gap: 10, alignItems: "stretch" }}>
+                    <div className="rb-line-label" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "#8ca8c1", fontFamily: "'DM Mono',monospace", fontSize: 13 }}>{lineKey}</div>
                     {FORWARD_POSITIONS.map((slotKey) => {
                       const playerId = getSlotValue(rosterState, lineKey, slotKey);
                       const player = playerId ? playerMap[String(playerId)] : null;
@@ -875,8 +896,8 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
               </div>
               <div style={{ display: "grid", gap: 12 }}>
                 {DEFENSE_PAIRS.map((lineKey) => (
-                  <div key={lineKey} style={{ display: "grid", gridTemplateColumns: "50px repeat(2, minmax(0,1fr))", gap: 10, alignItems: "stretch" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "#8ca8c1", fontFamily: "'DM Mono',monospace", fontSize: 13 }}>{lineKey}</div>
+                  <div key={lineKey} className="rb-defense-row" style={{ display: "grid", gridTemplateColumns: "50px repeat(2, minmax(0,1fr))", gap: 10, alignItems: "stretch" }}>
+                    <div className="rb-line-label" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "#8ca8c1", fontFamily: "'DM Mono',monospace", fontSize: 13 }}>{lineKey}</div>
                     {DEFENSE_POSITIONS.map((slotKey) => {
                       const playerId = getSlotValue(rosterState, lineKey, slotKey);
                       const player = playerId ? playerMap[String(playerId)] : null;
@@ -908,8 +929,8 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
                   const playerId = getSlotValue(rosterState, lineKey, GOALIE_POSITION);
                   const player = playerId ? playerMap[String(playerId)] : null;
                   return (
-                    <div key={lineKey} style={{ display: "grid", gridTemplateColumns: "50px minmax(0,1fr)", gap: 10, alignItems: "stretch" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "#8ca8c1", fontFamily: "'DM Mono',monospace", fontSize: 13 }}>{lineKey}</div>
+                    <div key={lineKey} className="rb-goalie-row" style={{ display: "grid", gridTemplateColumns: "50px minmax(0,1fr)", gap: 10, alignItems: "stretch" }}>
+                      <div className="rb-line-label" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "#8ca8c1", fontFamily: "'DM Mono',monospace", fontSize: 13 }}>{lineKey}</div>
                       <FilledSlot
                         slotKey="G"
                         player={player}

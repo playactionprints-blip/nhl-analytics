@@ -91,6 +91,7 @@ function ScoreCard({ game, dateString }) {
   return (
     <Link
       href={href}
+      className="live-score-card"
       style={{
         minWidth: 190,
         padding: "10px 14px",
@@ -206,11 +207,18 @@ export default function LiveScoresBanner() {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.35; }
         }
+        @media (max-width: 640px) {
+          .live-score-card {
+            min-width: 160px !important;
+            padding: 9px 11px !important;
+          }
+        }
       `}</style>
       <div
+        className="live-scores-banner"
         style={{
           position: "sticky",
-          top: 44,
+          top: "var(--top-nav-height)",
           zIndex: 99,
           width: "100%",
           background: "#101b29",
@@ -260,6 +268,18 @@ export default function LiveScoresBanner() {
           <ScoreCard key={game.id} game={game} dateString={dateString} />
         ))}
       </div>
+      <style>{`
+        @media (max-width: 860px) {
+          .live-scores-banner {
+            top: var(--top-nav-height);
+          }
+        }
+        @media (max-width: 640px) {
+          .live-scores-banner {
+            position: static !important;
+          }
+        }
+      `}</style>
     </>
   );
 }

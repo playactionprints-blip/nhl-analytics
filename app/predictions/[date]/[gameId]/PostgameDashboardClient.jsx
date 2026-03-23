@@ -172,6 +172,11 @@ export default function PostgameDashboardClient({
             grid-template-columns: 1fr;
           }
         }
+        @media (max-width: 640px) {
+          .postgame-layout-grid {
+            gap: 18px !important;
+          }
+        }
       `}</style>
     </div>
   );

@@ -104,7 +104,7 @@ function TeamRow({ team, simResults, cutlineAfter = false }) {
           : "1px solid #0c1520",
       }}
     >
-      <div className="team-grid" style={{ padding: "8px 14px" }}>
+      <div className="team-grid team-grid-desktop" style={{ padding: "8px 14px" }}>
         {/* Logo */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -214,6 +214,50 @@ function TeamRow({ team, simResults, cutlineAfter = false }) {
         {/* Cup */}
         <div style={{ ...STAT, color: oddsColor(sim.cupOdds ?? 0) }}>
           {fmtPct(sim.cupOdds ?? 0)}
+        </div>
+      </div>
+      <div
+        className="team-mobile-card"
+        style={{
+          display: "none",
+          padding: "12px 14px",
+          background: "#060d14",
+        }}
+      >
+        <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <img
+              src={logoUrl(abbr)}
+              alt={abbr}
+              width={26}
+              height={26}
+              style={{ width: 26, height: 26, objectFit: "contain" }}
+            />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {name}
+              </div>
+              <div style={{ color: "#6d89a3", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                {abbr} · {currentPts} pts · proj {projPts}
+              </div>
+            </div>
+            <div style={{ color: oddsColor(playoff), fontSize: 16, fontWeight: 900, fontFamily: "'DM Mono',monospace" }}>
+              {fmtPct(playoff)}
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+            {[
+              ["GP", team.gamesPlayed ?? "—"],
+              ["W", team.wins ?? "—"],
+              ["Proj", projPts],
+              ["Cup", fmtPct(sim.cupOdds ?? 0)],
+            ].map(([label, value]) => (
+              <div key={label} style={{ borderRadius: 12, border: "1px solid #162736", background: "#091017", padding: "8px 10px", textAlign: "center" }}>
+                <div style={{ color: "#5f7b95", fontSize: 9, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+                <div style={{ color: "#eef8ff", fontSize: 14, fontWeight: 800, marginTop: 4 }}>{value}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -501,7 +545,7 @@ export default function PlayoffOddsClient({ standings, simResults }) {
   }, [standings]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#05090f", padding: "28px 20px 64px" }}>
+    <div className="playoff-page-shell" style={{ minHeight: "100vh", background: "#05090f", padding: "28px 20px 64px" }}>
       <style>{`
         .team-grid {
           display: grid;
@@ -520,6 +564,19 @@ export default function PlayoffOddsClient({ standings, simResults }) {
         @media (max-width: 700px) {
           .team-grid { grid-template-columns: ${GRID_MOBILE}; }
           .hide-sm { display: none; }
+        }
+        @media (max-width: 640px) {
+          .playoff-page-shell {
+            padding: 18px 12px 36px !important;
+          }
+        }
+        @media (max-width: 560px) {
+          .team-grid-desktop {
+            display: none !important;
+          }
+          .team-mobile-card {
+            display: block !important;
+          }
         }
       `}</style>
 
