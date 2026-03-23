@@ -27,18 +27,38 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+const SCHEDULE_FETCH_TIMEOUT_MS = 6000;
+
 async function fetchScheduleDay(dateString) {
-  const response = await fetch(`https://api-web.nhle.com/v1/schedule/${dateString}`, {
-    next: { revalidate: 300 },
-  });
-  if (!response.ok) throw new Error(`Failed to fetch schedule for ${dateString}`);
-  const payload = await response.json();
-  const day = (payload.gameWeek || []).find((item) => item.date === dateString);
-  return {
-    date: dateString,
-    games: day?.games || [],
-    numberOfGames: day?.numberOfGames || 0,
-  };
+  // Abort the individual NHL API call after 6 s so a single slow date
+  // cannot hang the entire Promise.all and leave the frontend on "Loading…"
+  // forever. On any failure (timeout, non-2xx, parse error) we return an
+  // empty day rather than throwing, so callers always get a resolved value.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SCHEDULE_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(`https://api-web.nhle.com/v1/schedule/${dateString}`, {
+      signal: controller.signal,
+      next: { revalidate: 300 },
+    });
+    clearTimeout(timer);
+    if (!response.ok) {
+      console.warn(`[fantasy/schedule] NHL API ${response.status} for ${dateString}`);
+      return { date: dateString, games: [], numberOfGames: 0 };
+    }
+    const payload = await response.json();
+    const day = (payload.gameWeek || []).find((item) => item.date === dateString);
+    return {
+      date: dateString,
+      games: day?.games || [],
+      numberOfGames: day?.numberOfGames || 0,
+    };
+  } catch (fetchError) {
+    clearTimeout(timer);
+    const reason = fetchError?.name === "AbortError" ? "timeout" : (fetchError?.message || "unknown");
+    console.warn(`[fantasy/schedule] failed to fetch ${dateString}: ${reason}`);
+    return { date: dateString, games: [], numberOfGames: 0 };
+  }
 }
 
 function buildTeamCounts(days) {

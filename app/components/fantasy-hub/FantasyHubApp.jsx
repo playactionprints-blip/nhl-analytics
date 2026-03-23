@@ -120,6 +120,7 @@ export default function FantasyHubApp() {
           setLoading(false);
         }
       } catch (loadError) {
+        console.error("[FantasyHubApp] loadData failed:", loadError);
         if (!cancelled) {
           setError(loadError.message || "Could not load Fantasy Hub");
           setLoading(false);
