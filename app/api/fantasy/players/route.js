@@ -27,13 +27,21 @@ function sanePpp(ppp, points, gp, playerGp) {
   return pppValue;
 }
 
+function firstFinite(...values) {
+  for (const value of values) {
+    const numeric = toNumber(value, null);
+    if (numeric != null) return numeric;
+  }
+  return null;
+}
+
 export async function GET() {
   try {
     const supabase = createServerClient();
 
     const { data: seasonRows, error: seasonError } = await supabase
       .from("player_seasons")
-      .select("player_id,team,gp,g,a1,a2,ixg,hits,blk,icf,iff,toi,war_total")
+      .select("player_id,team,gp,g,a1,a2,ixg,hits,blk,icf,iff,toi,toi_pp,war_total,gva,tka,fow,fol")
       .eq("season", CURRENT_SEASON)
       .order("war_total", { ascending: false, nullsFirst: false });
 
@@ -72,6 +80,22 @@ export async function GET() {
         const shots = toNumber(row.iff, toNumber(row.icf, toNumber(player.iff, toNumber(player.icf, null))));
         const hits = toNumber(row.hits, toNumber(player.hits, null));
         const blocks = toNumber(row.blk, toNumber(player.blk, null));
+        const takeaways = toNumber(row.tka, firstFinite(player.tka, player.takeaways));
+        const giveaways = toNumber(row.gva, firstFinite(player.gva, player.giveaways));
+        const faceoffWins = toNumber(row.fow, firstFinite(player.fow, player.faceoff_wins, player.faceoffs_won));
+        const faceoffLosses = toNumber(row.fol, firstFinite(player.fol, player.faceoff_losses, player.faceoffs_lost));
+        const fwPct =
+          faceoffWins != null && faceoffLosses != null && faceoffWins + faceoffLosses > 0
+            ? faceoffWins / (faceoffWins + faceoffLosses)
+            : firstFinite(player.fw_pct, player.faceoff_win_pct, player.faceoff_pct);
+        const shp = !isGoalie
+          ? firstFinite(
+              row.shp,
+              player.shp,
+              player.short_handed_points,
+              player.shortHandedPoints
+            )
+          : null;
         const ppp = !isGoalie
           ? sanePpp(player.ppp, points ?? player.pts, gp, player.gp)
           : null;
@@ -82,6 +106,9 @@ export async function GET() {
           ? Math.max(shotsAgainst - goalsAgainst, 0)
           : null;
         const shutouts = isGoalie ? toNumber(player.shutouts, null) : null;
+        const qualityStarts = isGoalie
+          ? firstFinite(player.qs, player.quality_starts, player.qualityStarts)
+          : null;
         const savePct = isGoalie
           ? toNumber(player.save_pct, saves != null && goalsAgainst != null && saves + goalsAgainst > 0 ? saves / (saves + goalsAgainst) : null)
           : null;
@@ -105,12 +132,21 @@ export async function GET() {
           shots,
           hits,
           blocks,
+          shp,
+          takeaways,
+          giveaways,
+          faceoffWins,
+          faceoffLosses,
+          fwPct,
           ixg: toNumber(row.ixg, null),
           ppp,
+          ppToi: firstFinite(row.toi_pp, player.toi_pp, player.pp_toi),
           wins,
           saves,
           goalsAgainst,
+          shotsAgainst,
           shutouts,
+          qualityStarts,
           savePct,
           gaa,
           toi: row.toi ?? player.toi ?? null,

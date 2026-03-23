@@ -28,10 +28,23 @@ function formatProjectedCell(value, digits = 1) {
 
 function recomputeDisplayedFantasyPoints(projection, state) {
   if (state.settings.leagueType === "categories") return null;
+  if (Array.isArray(projection.projectedFantasyPointBreakdown)) {
+    const total = projection.projectedFantasyPointBreakdown.reduce((sum, item) => {
+      if (item?.contribution == null || !Number.isFinite(Number(item.contribution))) return sum;
+      return sum + Number(item.contribution);
+    }, 0);
+    return total || null;
+  }
   if (String(projection.position).toUpperCase() === "G") {
     const total =
       (Number(projection.projectedWins) || 0) * Number(state.settings.goalieWeights.wins || 0) +
-      (Number(projection.projectedSaves) || 0) * Number(state.settings.goalieWeights.saves || 0);
+      (Number(projection.projectedSaves) || 0) * Number(state.settings.goalieWeights.saves || 0) +
+      (Number(projection.projectedGoalsAgainst) || 0) * Number(state.settings.goalieWeights.goalsAgainst || 0) +
+      (Number(projection.projectedShutouts) || 0) * Number(state.settings.goalieWeights.shutouts || 0) +
+      (Number(projection.projectedSavePct) || 0) * Number(state.settings.goalieWeights.savePct || 0) +
+      (Number(projection.projectedGAA) || 0) * Number(state.settings.goalieWeights.gaa || 0) +
+      (Number(projection.projectedQualityStarts) || 0) * Number(state.settings.goalieWeights.qualityStarts || 0) +
+      (Number(projection.projectedShotsAgainst) || 0) * Number(state.settings.goalieWeights.shotsAgainst || 0);
     return total || null;
   }
 
@@ -40,7 +53,15 @@ function recomputeDisplayedFantasyPoints(projection, state) {
     (Number(projection.projectedAssists) || 0) * Number(state.settings.skaterWeights.assists || 0) +
     (Number(projection.projectedShots) || 0) * Number(state.settings.skaterWeights.shots || 0) +
     (Number(projection.projectedHits) || 0) * Number(state.settings.skaterWeights.hits || 0) +
-    (Number(projection.projectedBlocks) || 0) * Number(state.settings.skaterWeights.blocks || 0);
+    (Number(projection.projectedBlocks) || 0) * Number(state.settings.skaterWeights.blocks || 0) +
+    (Number(projection.projectedPowerPlayPoints) || 0) * Number(state.settings.skaterWeights.ppp || 0) +
+    (Number(projection.projectedShortHandedPoints) || 0) * Number(state.settings.skaterWeights.shp || 0) +
+    (Number(projection.projectedTakeaways) || 0) * Number(state.settings.skaterWeights.takeaways || 0) +
+    (Number(projection.projectedGiveaways) || 0) * Number(state.settings.skaterWeights.giveaways || 0) +
+    (Number(projection.projectedFaceoffLosses) || 0) * Number(state.settings.skaterWeights.fol || 0) +
+    (Number(projection.projectedFaceoffWinPct) || 0) * Number(state.settings.skaterWeights.fwPct || 0) +
+    (Number(projection.projectedTOI) || 0) * Number(state.settings.skaterWeights.toi || 0) +
+    (Number(projection.projectedPPTOI) || 0) * Number(state.settings.skaterWeights.ppToi || 0);
   return total || null;
 }
 
@@ -71,6 +92,7 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
         normalizedProjection: {
           projectedFantasyPoints: projection.projectedFantasyPoints,
           projectedGames: projection.projectedGames,
+          projectedPoints: projection.projectedPoints,
           projectedGoals: projection.projectedGoals,
           projectedAssists: projection.projectedAssists,
           projectedShots: projection.projectedShots,
@@ -78,12 +100,27 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
           projectedBlocks: projection.projectedBlocks,
           projectedSaves: projection.projectedSaves,
           projectedWins: projection.projectedWins,
+          projectedPowerPlayPoints: projection.projectedPowerPlayPoints,
+          projectedShortHandedPoints: projection.projectedShortHandedPoints,
+          projectedTakeaways: projection.projectedTakeaways,
+          projectedGiveaways: projection.projectedGiveaways,
+          projectedFaceoffLosses: projection.projectedFaceoffLosses,
+          projectedFaceoffWinPct: projection.projectedFaceoffWinPct,
+          projectedTOI: projection.projectedTOI,
+          projectedPPTOI: projection.projectedPPTOI,
+          projectedGoalsAgainst: projection.projectedGoalsAgainst,
+          projectedShutouts: projection.projectedShutouts,
+          projectedSavePct: projection.projectedSavePct,
+          projectedGAA: projection.projectedGAA,
+          projectedQualityStarts: projection.projectedQualityStarts,
+          projectedShotsAgainst: projection.projectedShotsAgainst,
           projectionValid: projection.projectionValid,
           projectionWarnings: projection.projectionWarnings,
           usedFallbackLogic: projection.usedFallbackLogic,
         },
         projectedFantasyPointsFromSource: projection.projectedFantasyPoints,
         projectedFantasyPointsFromDisplayedCategories: recomputedDisplayed,
+        projectedFantasyPointBreakdown: projection.projectedFantasyPointBreakdown,
         projectedFantasyPointInputs:
           String(projection.position).toUpperCase() === "G"
             ? {
@@ -99,6 +136,13 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
                 projectedHits: projection.projectedHits,
                 projectedBlocks: projection.projectedBlocks,
                 projectedPowerPlayPoints: projection.projectedPowerPlayPoints,
+                projectedShortHandedPoints: projection.projectedShortHandedPoints,
+                projectedTakeaways: projection.projectedTakeaways,
+                projectedGiveaways: projection.projectedGiveaways,
+                projectedFaceoffLosses: projection.projectedFaceoffLosses,
+                projectedFaceoffWinPct: projection.projectedFaceoffWinPct,
+                projectedTOI: projection.projectedTOI,
+                projectedPPTOI: projection.projectedPPTOI,
               },
         renderedRow: {
           projectedFantasyPoints: formatFantasyValue(projection.projectedFantasyPoints),
@@ -114,6 +158,29 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
       };
     });
     console.debug("[FantasyRankingsTable] top 20 ranked projection rows", samples);
+
+    const matthew = ranked.find((player) => player.player_name === "Matthew Tkachuk");
+    if (matthew) {
+      console.debug("[FantasyRankingsTable] Matthew Tkachuk manual validation", {
+        timeframe,
+        gamesBasis: matthew.projectedGames,
+        rawSource: players.find((player) => String(player.player_id) === String(matthew.player_id)),
+        normalizedProjection: {
+          projectedFantasyPoints: matthew.projectedFantasyPoints,
+          projectedFantasyPointsRecomputed: matthew.projectedFantasyPointsRecomputed,
+          projectedGoals: matthew.projectedGoals,
+          projectedAssists: matthew.projectedAssists,
+          projectedShots: matthew.projectedShots,
+          projectedHits: matthew.projectedHits,
+          projectedBlocks: matthew.projectedBlocks,
+          projectedPowerPlayPoints: matthew.projectedPowerPlayPoints,
+          projectedShortHandedPoints: matthew.projectedShortHandedPoints,
+          projectedSaves: matthew.projectedSaves,
+          projectedWins: matthew.projectedWins,
+        },
+        breakdown: matthew.projectedFantasyPointBreakdown,
+      });
+    }
   }, [players, ranked, state, timeframe]);
 
   function toggleSort(nextKey) {

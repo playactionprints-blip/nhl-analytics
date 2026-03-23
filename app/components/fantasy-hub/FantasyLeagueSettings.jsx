@@ -37,6 +37,110 @@ const INPUT_STYLE = {
   outline: "none",
 };
 
+const POINTS_SECTION_CONFIG = [
+  {
+    title: "Skater Scoring",
+    fields: [
+      { label: "Goals", path: ["settings", "skaterWeights", "goals"] },
+      { label: "Assists", path: ["settings", "skaterWeights", "assists"] },
+      { label: "PPP", path: ["settings", "skaterWeights", "ppp"] },
+      { label: "SHP", path: ["settings", "skaterWeights", "shp"] },
+    ],
+  },
+  {
+    title: "Shots & Efficiency",
+    fields: [{ label: "Shots", path: ["settings", "skaterWeights", "shots"] }],
+  },
+  {
+    title: "Physical Stats",
+    fields: [
+      { label: "Hits", path: ["settings", "skaterWeights", "hits"] },
+      { label: "Blocks", path: ["settings", "skaterWeights", "blocks"] },
+      { label: "Takeaways", path: ["settings", "skaterWeights", "takeaways"] },
+      { label: "Giveaways", path: ["settings", "skaterWeights", "giveaways"] },
+    ],
+  },
+  {
+    title: "Faceoffs",
+    fields: [
+      { label: "FOL", path: ["settings", "skaterWeights", "fol"] },
+      { label: "FW%", path: ["settings", "skaterWeights", "fwPct"], step: "0.01" },
+    ],
+  },
+  {
+    title: "Advanced",
+    collapsible: true,
+    fields: [
+      { label: "TOI", path: ["settings", "skaterWeights", "toi"] },
+      { label: "PP TOI", path: ["settings", "skaterWeights", "ppToi"] },
+    ],
+  },
+  {
+    title: "Goalie Stats",
+    fields: [
+      { label: "Wins", path: ["settings", "goalieWeights", "wins"] },
+      { label: "Saves", path: ["settings", "goalieWeights", "saves"] },
+      { label: "Goals Against", path: ["settings", "goalieWeights", "goalsAgainst"] },
+      { label: "Shutouts", path: ["settings", "goalieWeights", "shutouts"] },
+      { label: "SV%", path: ["settings", "goalieWeights", "savePct"], step: "0.01" },
+      { label: "GAA", path: ["settings", "goalieWeights", "gaa"], step: "0.01" },
+      { label: "Quality Starts", path: ["settings", "goalieWeights", "qualityStarts"] },
+      { label: "Shots Against", path: ["settings", "goalieWeights", "shotsAgainst"] },
+    ],
+  },
+];
+
+const CATEGORY_SECTION_CONFIG = [
+  {
+    title: "Skater Scoring",
+    fields: [
+      { label: "Goals", path: ["settings", "categoryWeights", "goals"] },
+      { label: "Assists", path: ["settings", "categoryWeights", "assists"] },
+      { label: "PPP", path: ["settings", "categoryWeights", "ppp"] },
+      { label: "SHP", path: ["settings", "categoryWeights", "shp"] },
+    ],
+  },
+  {
+    title: "Shots & Efficiency",
+    fields: [{ label: "Shots", path: ["settings", "categoryWeights", "shots"] }],
+  },
+  {
+    title: "Physical Stats",
+    fields: [
+      { label: "Hits", path: ["settings", "categoryWeights", "hits"] },
+      { label: "Blocks", path: ["settings", "categoryWeights", "blocks"] },
+      { label: "Takeaways", path: ["settings", "categoryWeights", "takeaways"] },
+      { label: "Giveaways", path: ["settings", "categoryWeights", "giveaways"] },
+    ],
+  },
+  {
+    title: "Faceoffs",
+    fields: [
+      { label: "FOL", path: ["settings", "categoryWeights", "fol"] },
+      { label: "FW%", path: ["settings", "categoryWeights", "fwPct"] },
+    ],
+  },
+  {
+    title: "Advanced",
+    collapsible: true,
+    fields: [
+      { label: "TOI", path: ["settings", "categoryWeights", "toi"] },
+      { label: "PP TOI", path: ["settings", "categoryWeights", "ppToi"] },
+    ],
+  },
+  {
+    title: "Goalie Stats",
+    fields: [
+      { label: "Wins", path: ["settings", "categoryWeights", "wins"] },
+      { label: "Saves", path: ["settings", "categoryWeights", "saves"] },
+      { label: "Save %", path: ["settings", "categoryWeights", "savePct"] },
+      { label: "GAA", path: ["settings", "categoryWeights", "gaa"] },
+      { label: "Quality Starts", path: ["settings", "categoryWeights", "qualityStarts"] },
+      { label: "Shots Against", path: ["settings", "categoryWeights", "shotsAgainst"] },
+    ],
+  },
+];
+
 function WeightInput({ label, path, value, onUpdate, step = "0.1" }) {
   return (
     <div style={{ display: "grid", gap: 6 }}>
@@ -78,6 +182,7 @@ function ToggleInput({ label, path, checked, onUpdate }) {
 }
 
 export default function FantasyLeagueSettings({ state, onStateChange }) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     try {
       if (typeof window === "undefined") return false;
@@ -105,6 +210,82 @@ export default function FantasyLeagueSettings({ state, onStateChange }) {
     const slots = state.settings.rosterSlots;
     return `F ${slots.forwards} · D ${slots.defense} · G ${slots.goalies} · BN ${slots.bench}${slots.ir ? ` · IR ${slots.ir}` : ""}`;
   }, [state.settings.rosterSlots]);
+
+  function renderField(field, type = "weight") {
+    if (type === "toggle") {
+      return (
+        <ToggleInput
+          key={field.path.join(".")}
+          label={field.label}
+          path={field.path}
+          checked={state.settings.categoryWeights[field.path[field.path.length - 1]]}
+          onUpdate={update}
+        />
+      );
+    }
+
+    return (
+      <WeightInput
+        key={field.path.join(".")}
+        label={field.label}
+        path={field.path}
+        value={state.settings[field.path[1]][field.path[2]]}
+        onUpdate={update}
+        step={field.step || "0.1"}
+      />
+    );
+  }
+
+  function renderSettingsSection(section, type = "weight") {
+    const isCollapsedSection = section.collapsible && !advancedOpen;
+    return (
+      <div key={section.title} style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={LABEL_STYLE}>{section.title}</div>
+          {section.collapsible ? (
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((current) => !current)}
+              style={{
+                borderRadius: 999,
+                border: `1px solid ${advancedOpen ? "#2fb4ff" : "#213547"}`,
+                background: advancedOpen ? "rgba(47,180,255,0.14)" : "#0d1620",
+                color: advancedOpen ? "#d6f0ff" : "#8ca8c1",
+                padding: "7px 10px",
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                fontFamily: "'DM Mono',monospace",
+                cursor: "pointer",
+              }}
+            >
+              {advancedOpen ? "Hide" : "Show"}
+            </button>
+          ) : null}
+        </div>
+        {!isCollapsedSection ? (
+          <div className="fantasy-settings-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+            {section.fields.map((field) => renderField(field, type))}
+          </div>
+        ) : (
+          <div
+            style={{
+              borderRadius: 14,
+              border: "1px dashed #29445b",
+              background: "rgba(13,22,32,0.6)",
+              padding: "10px 12px",
+              color: "#7d95ab",
+              fontSize: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            Expand this section for advanced usage and efficiency weights.
+          </div>
+        )}
+      </div>
+    );
+  }
 
   function handleToggle() {
     setCollapsed((current) => {
@@ -236,44 +417,10 @@ export default function FantasyLeagueSettings({ state, onStateChange }) {
 
         {pointsMode ? (
           <>
-            <div style={{ display: "grid", gap: 10 }}>
-              <div style={LABEL_STYLE}>Skater scoring</div>
-              <div className="fantasy-settings-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-                <WeightInput label="Goals" path={["settings", "skaterWeights", "goals"]} value={state.settings.skaterWeights.goals} onUpdate={update} />
-                <WeightInput label="Assists" path={["settings", "skaterWeights", "assists"]} value={state.settings.skaterWeights.assists} onUpdate={update} />
-                <WeightInput label="Shots" path={["settings", "skaterWeights", "shots"]} value={state.settings.skaterWeights.shots} onUpdate={update} />
-                <WeightInput label="Hits" path={["settings", "skaterWeights", "hits"]} value={state.settings.skaterWeights.hits} onUpdate={update} />
-                <WeightInput label="Blocks" path={["settings", "skaterWeights", "blocks"]} value={state.settings.skaterWeights.blocks} onUpdate={update} />
-                <WeightInput label="PPP" path={["settings", "skaterWeights", "ppp"]} value={state.settings.skaterWeights.ppp} onUpdate={update} />
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gap: 10 }}>
-              <div style={LABEL_STYLE}>Goalie scoring</div>
-              <div className="fantasy-settings-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-                <WeightInput label="Wins" path={["settings", "goalieWeights", "wins"]} value={state.settings.goalieWeights.wins} onUpdate={update} />
-                <WeightInput label="Saves" path={["settings", "goalieWeights", "saves"]} value={state.settings.goalieWeights.saves} onUpdate={update} />
-                <WeightInput label="Goals Against" path={["settings", "goalieWeights", "goalsAgainst"]} value={state.settings.goalieWeights.goalsAgainst} onUpdate={update} />
-                <WeightInput label="Shutouts" path={["settings", "goalieWeights", "shutouts"]} value={state.settings.goalieWeights.shutouts} onUpdate={update} />
-              </div>
-            </div>
+            {POINTS_SECTION_CONFIG.map((section) => renderSettingsSection(section, "weight"))}
           </>
         ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            <div style={LABEL_STYLE}>Tracked Categories</div>
-            <div className="fantasy-settings-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-              <ToggleInput label="Goals" path={["settings", "categoryWeights", "goals"]} checked={state.settings.categoryWeights.goals} onUpdate={update} />
-              <ToggleInput label="Assists" path={["settings", "categoryWeights", "assists"]} checked={state.settings.categoryWeights.assists} onUpdate={update} />
-              <ToggleInput label="Shots" path={["settings", "categoryWeights", "shots"]} checked={state.settings.categoryWeights.shots} onUpdate={update} />
-              <ToggleInput label="Hits" path={["settings", "categoryWeights", "hits"]} checked={state.settings.categoryWeights.hits} onUpdate={update} />
-              <ToggleInput label="Blocks" path={["settings", "categoryWeights", "blocks"]} checked={state.settings.categoryWeights.blocks} onUpdate={update} />
-              <ToggleInput label="PPP" path={["settings", "categoryWeights", "ppp"]} checked={state.settings.categoryWeights.ppp} onUpdate={update} />
-              <ToggleInput label="Wins" path={["settings", "categoryWeights", "wins"]} checked={state.settings.categoryWeights.wins} onUpdate={update} />
-              <ToggleInput label="Saves" path={["settings", "categoryWeights", "saves"]} checked={state.settings.categoryWeights.saves} onUpdate={update} />
-              <ToggleInput label="Save %" path={["settings", "categoryWeights", "savePct"]} checked={state.settings.categoryWeights.savePct} onUpdate={update} />
-              <ToggleInput label="GAA" path={["settings", "categoryWeights", "gaa"]} checked={state.settings.categoryWeights.gaa} onUpdate={update} />
-            </div>
-          </div>
+          CATEGORY_SECTION_CONFIG.map((section) => renderSettingsSection(section, "toggle"))
         )}
       </div>
 

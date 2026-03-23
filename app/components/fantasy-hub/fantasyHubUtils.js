@@ -6,6 +6,9 @@
  */
 import { DEFAULT_FANTASY_STATE, FANTASY_STORAGE_KEY } from "@/app/components/fantasy-hub/fantasyHubConfig";
 
+const DIRECT_RATE_FIELDS = new Set(["savePct", "gaa", "fwPct"]);
+const INVERTED_CATEGORY_FIELDS = new Set(["gaa", "giveaways", "fol"]);
+
 function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -207,6 +210,11 @@ function statRate(total, gp) {
   return safeRate(total, gp);
 }
 
+function categoryFieldValue(player, field) {
+  if (DIRECT_RATE_FIELDS.has(field)) return player[field];
+  return statRate(player[field], player.gp);
+}
+
 function categoryValuePerGame(player, settings, categoryContext) {
   if (String(player.position).toUpperCase() === "G") {
     const fields = [
@@ -214,24 +222,30 @@ function categoryValuePerGame(player, settings, categoryContext) {
       ["saves", false],
       ["savePct", false],
       ["gaa", true],
+      ["qualityStarts", false],
+      ["shotsAgainst", false],
     ].filter(([field]) => settings.categoryWeights[field]);
-    if (!fields.length) return 0;
-    const total = fields.reduce(
-      (sum, [field, invert]) => sum + normalizeToRange(field === "savePct" || field === "gaa" ? player[field] : statRate(player[field], player.gp), categoryContext.goalies[field], invert),
-      0
-    );
-    return total / fields.length;
+    let counted = 0;
+    const total = fields.reduce((sum, [field, invert]) => {
+      const value = categoryFieldValue(player, field);
+      if (!Number.isFinite(value)) return sum;
+      counted += 1;
+      return sum + normalizeToRange(value, categoryContext.goalies[field], invert);
+    }, 0);
+    return counted ? total / counted : null;
   }
 
-  const fields = ["goals", "assists", "shots", "hits", "blocks", "ppp"].filter(
+  const fields = ["goals", "assists", "shots", "hits", "blocks", "ppp", "shp", "takeaways", "giveaways", "fol", "fwPct", "toi", "ppToi"].filter(
     (field) => settings.categoryWeights[field]
   );
-  if (!fields.length) return 0;
-  const total = fields.reduce(
-    (sum, field) => sum + normalizeToRange(statRate(player[field], player.gp), categoryContext.skaters[field]),
-    0
-  );
-  return total / fields.length;
+  let counted = 0;
+  const total = fields.reduce((sum, field) => {
+    const value = categoryFieldValue(player, field);
+    if (!Number.isFinite(value)) return sum;
+    counted += 1;
+    return sum + normalizeToRange(value, categoryContext.skaters[field], INVERTED_CATEGORY_FIELDS.has(field));
+  }, 0);
+  return counted ? total / counted : null;
 }
 
 function buildCategoryContext(players) {
@@ -242,7 +256,7 @@ function buildCategoryContext(players) {
     return Object.fromEntries(
       fields.map((field) => {
         const values = pool
-          .map((item) => (field === "savePct" || field === "gaa" ? item[field] : statRate(item[field], item.gp)))
+          .map((item) => categoryFieldValue(item, field))
           .filter((value) => Number.isFinite(value));
         return [field, { min: Math.min(...values, 0), max: Math.max(...values, 1) }];
       })
@@ -250,8 +264,8 @@ function buildCategoryContext(players) {
   }
 
   return {
-    skaters: ranges(skaters, ["goals", "assists", "shots", "hits", "blocks", "ppp"]),
-    goalies: ranges(goalies, ["wins", "saves", "savePct", "gaa"]),
+    skaters: ranges(skaters, ["goals", "assists", "shots", "hits", "blocks", "ppp", "shp", "takeaways", "giveaways", "fol", "fwPct", "toi", "ppToi"]),
+    goalies: ranges(goalies, ["wins", "saves", "savePct", "gaa", "qualityStarts", "shotsAgainst"]),
   };
 }
 
@@ -264,7 +278,9 @@ function normalizeToRange(value, range, invert = false) {
 }
 
 function categoryScoreForPlayer(player, settings, gamesInSpan, categoryContext) {
-  return categoryValuePerGame(player, settings, categoryContext) * Math.max(gamesInSpan, 1);
+  const perGameValue = categoryValuePerGame(player, settings, categoryContext);
+  if (perGameValue == null || gamesInSpan == null) return null;
+  return perGameValue * Math.max(gamesInSpan, 1);
 }
 
 function projectedStat(total, gp, gamesInSpan, { nullable = true } = {}) {
@@ -273,16 +289,44 @@ function projectedStat(total, gp, gamesInSpan, { nullable = true } = {}) {
   return safeRate(total, gp) * gamesInSpan;
 }
 
-function weightedProjection(entries) {
+function projectedRate(value, gamesInSpan, { nullable = true } = {}) {
+  if (gamesInSpan == null || !Number.isFinite(Number(gamesInSpan))) return nullable ? null : 0;
+  if (!Number.isFinite(Number(value))) return nullable ? null : 0;
+  return Number(value);
+}
+
+function buildContributionEntries(entries) {
   let hasAny = false;
-  let total = 0;
-  entries.forEach(([value, weight]) => {
-    if (!weight) return;
-    if (value == null || !Number.isFinite(Number(value))) return;
-    hasAny = true;
-    total += Number(value) * Number(weight);
+  const breakdown = entries.map(({ key, label, value, weight, sourceKey, notes = [] }) => {
+    const numericWeight = Number(weight || 0);
+    const numericValue = value == null || !Number.isFinite(Number(value)) ? null : Number(value);
+    const contribution =
+      !numericWeight || numericValue == null
+        ? null
+        : numericValue * numericWeight;
+
+    if (contribution != null) hasAny = true;
+
+    return {
+      key,
+      label,
+      sourceKey,
+      value: numericValue,
+      weight: numericWeight,
+      contribution,
+      notes,
+    };
   });
-  return hasAny ? total : null;
+
+  const total = breakdown.reduce((sum, entry) => {
+    if (entry.contribution == null) return sum;
+    return sum + entry.contribution;
+  }, 0);
+
+  return {
+    breakdown,
+    total: hasAny ? total : null,
+  };
 }
 
 function scoringUpsideForPlayer(player, gamesInSpan) {
@@ -335,45 +379,111 @@ export function buildFantasyProjection(player, state, timeframe, scheduleData, c
   const projectedHits = isGoalie ? null : projectedStat(player.hits, player.gp, gamesInSpan);
   const projectedBlocks = isGoalie ? null : projectedStat(player.blocks, player.gp, gamesInSpan);
   const projectedPPP = isGoalie ? null : projectedStat(player.ppp, player.gp, gamesInSpan);
+  const projectedSHP = isGoalie ? null : projectedStat(player.shp, player.gp, gamesInSpan);
+  const projectedTakeaways = isGoalie ? null : projectedStat(player.takeaways, player.gp, gamesInSpan);
+  const projectedGiveaways = isGoalie ? null : projectedStat(player.giveaways, player.gp, gamesInSpan);
+  const projectedFOL = isGoalie ? null : projectedStat(player.faceoffLosses, player.gp, gamesInSpan);
+  const projectedFWPct = isGoalie ? null : projectedRate(player.fwPct, gamesInSpan);
+  const projectedTOI = isGoalie ? null : projectedStat(player.toi, player.gp, gamesInSpan);
+  const projectedPPTOI = isGoalie ? null : projectedStat(player.ppToi, player.gp, gamesInSpan);
   const projectedPoints = isGoalie ? null : projectedStat(player.points, player.gp, gamesInSpan);
   const projectedSaves = isGoalie ? projectedStat(player.saves, player.gp, gamesInSpan) : null;
   const projectedWins = isGoalie ? projectedStat(player.wins, player.gp, gamesInSpan) : null;
   const projectedGoalsAgainst = isGoalie ? projectedStat(player.goalsAgainst, player.gp, gamesInSpan) : null;
   const projectedShutouts = isGoalie ? projectedStat(player.shutouts, player.gp, gamesInSpan) : null;
+  const projectedSavePct = isGoalie ? projectedRate(player.savePct, gamesInSpan) : null;
+  const projectedGAA = isGoalie ? projectedRate(player.gaa, gamesInSpan) : null;
+  const projectedQualityStarts = isGoalie ? projectedStat(player.qualityStarts, player.gp, gamesInSpan) : null;
+  const projectedShotsAgainst = isGoalie ? projectedStat(player.shotsAgainst, player.gp, gamesInSpan) : null;
+
+  const pointsBreakdown = isGoalie
+    ? buildContributionEntries([
+        { key: "wins", label: "Wins", value: projectedWins, weight: state.settings.goalieWeights.wins, sourceKey: "player.wins" },
+        { key: "saves", label: "Saves", value: projectedSaves, weight: state.settings.goalieWeights.saves, sourceKey: "player.saves" },
+        { key: "goalsAgainst", label: "Goals Against", value: projectedGoalsAgainst, weight: state.settings.goalieWeights.goalsAgainst, sourceKey: "player.goalsAgainst" },
+        { key: "shutouts", label: "Shutouts", value: projectedShutouts, weight: state.settings.goalieWeights.shutouts, sourceKey: "player.shutouts" },
+        { key: "savePct", label: "Save %", value: projectedSavePct, weight: state.settings.goalieWeights.savePct, sourceKey: "player.savePct", notes: ["rate-stat"] },
+        { key: "gaa", label: "GAA", value: projectedGAA, weight: state.settings.goalieWeights.gaa, sourceKey: "player.gaa", notes: ["rate-stat"] },
+        { key: "qualityStarts", label: "Quality Starts", value: projectedQualityStarts, weight: state.settings.goalieWeights.qualityStarts, sourceKey: "player.qualityStarts" },
+        { key: "shotsAgainst", label: "Shots Against", value: projectedShotsAgainst, weight: state.settings.goalieWeights.shotsAgainst, sourceKey: "player.shotsAgainst" },
+      ])
+    : buildContributionEntries([
+        { key: "goals", label: "Goals", value: projectedGoals, weight: state.settings.skaterWeights.goals, sourceKey: "player.goals" },
+        { key: "assists", label: "Assists", value: projectedAssists, weight: state.settings.skaterWeights.assists, sourceKey: "player.assists" },
+        { key: "shots", label: "Shots", value: projectedShots, weight: state.settings.skaterWeights.shots, sourceKey: "player.shots" },
+        { key: "hits", label: "Hits", value: projectedHits, weight: state.settings.skaterWeights.hits, sourceKey: "player.hits" },
+        { key: "blocks", label: "Blocks", value: projectedBlocks, weight: state.settings.skaterWeights.blocks, sourceKey: "player.blocks" },
+        {
+          key: "ppp",
+          label: "PPP",
+          value: projectedPPP,
+          weight: state.settings.skaterWeights.ppp,
+          sourceKey: "player.ppp",
+          notes: ["standalone-special-teams-bonus", "does-not-recount-goals-or-assists"],
+        },
+        {
+          key: "shp",
+          label: "SHP",
+          value: projectedSHP,
+          weight: state.settings.skaterWeights.shp,
+          sourceKey: "player.shp",
+          notes: ["standalone-short-handed-bonus", "does-not-recount-goals-or-assists"],
+        },
+        { key: "takeaways", label: "Takeaways", value: projectedTakeaways, weight: state.settings.skaterWeights.takeaways, sourceKey: "player.takeaways" },
+        { key: "giveaways", label: "Giveaways", value: projectedGiveaways, weight: state.settings.skaterWeights.giveaways, sourceKey: "player.giveaways" },
+        { key: "fol", label: "Faceoff Losses", value: projectedFOL, weight: state.settings.skaterWeights.fol, sourceKey: "player.faceoffLosses" },
+        { key: "fwPct", label: "FW%", value: projectedFWPct, weight: state.settings.skaterWeights.fwPct, sourceKey: "player.fwPct", notes: ["rate-stat"] },
+        { key: "toi", label: "TOI", value: projectedTOI, weight: state.settings.skaterWeights.toi, sourceKey: "player.toi" },
+        { key: "ppToi", label: "PP TOI", value: projectedPPTOI, weight: state.settings.skaterWeights.ppToi, sourceKey: "player.ppToi" },
+      ]);
 
   let projectedFantasyPoints =
     state.settings.leagueType === "categories"
       ? categoryScoreForPlayer(player, state.settings, gamesInSpan, categoryRanges)
-      : weightedProjection(
-          isGoalie
-            ? [
-                [projectedWins, state.settings.goalieWeights.wins],
-                [projectedSaves, state.settings.goalieWeights.saves],
-                [projectedGoalsAgainst, state.settings.goalieWeights.goalsAgainst],
-                [projectedShutouts, state.settings.goalieWeights.shutouts],
-              ]
-            : [
-                [projectedGoals, state.settings.skaterWeights.goals],
-                [projectedAssists, state.settings.skaterWeights.assists],
-                [projectedShots, state.settings.skaterWeights.shots],
-                [projectedHits, state.settings.skaterWeights.hits],
-                [projectedBlocks, state.settings.skaterWeights.blocks],
-                [projectedPPP, state.settings.skaterWeights.ppp],
-              ]
-        );
+      : pointsBreakdown.total;
+
+  const projectedFantasyPointBreakdown = pointsBreakdown.breakdown;
 
   const allProjectedFields = isGoalie
-    ? [projectedSaves, projectedWins, projectedGoalsAgainst, projectedShutouts]
-    : [projectedGoals, projectedAssists, projectedShots, projectedHits, projectedBlocks, projectedPPP];
+    ? [projectedSaves, projectedWins, projectedGoalsAgainst, projectedShutouts, projectedSavePct, projectedGAA, projectedQualityStarts, projectedShotsAgainst]
+    : [projectedGoals, projectedAssists, projectedShots, projectedHits, projectedBlocks, projectedPPP, projectedSHP, projectedTakeaways, projectedGiveaways, projectedFOL, projectedFWPct, projectedTOI, projectedPPTOI];
 
   if (projectedFantasyPoints != null && allProjectedFields.every((value) => value == null)) {
     projectionWarnings.push("fantasy-points-without-components");
+  }
+
+  if (!isGoalie) {
+    if (projectedPPP != null && projectedPoints != null && projectedPPP > projectedPoints) {
+      projectionWarnings.push("ppp-exceeds-points");
+    }
+    if (projectedSHP != null && projectedPoints != null && projectedSHP > projectedPoints) {
+      projectionWarnings.push("shp-exceeds-points");
+    }
+  }
+
+  const recomputedFromBreakdown = state.settings.leagueType === "categories"
+    ? null
+    : projectedFantasyPointBreakdown.reduce((sum, item) => {
+        if (item.contribution == null) return sum;
+        return sum + item.contribution;
+      }, 0);
+
+  if (
+    state.settings.leagueType !== "categories" &&
+    projectedFantasyPoints != null &&
+    recomputedFromBreakdown != null &&
+    Math.abs(projectedFantasyPoints - recomputedFromBreakdown) > 0.001
+  ) {
+    projectionWarnings.push("breakdown-mismatch");
   }
 
   const projectionValid =
     gamesInSpan != null &&
     !projectionWarnings.includes("missing-gp") &&
     !projectionWarnings.includes("fantasy-points-without-components") &&
+    !projectionWarnings.includes("ppp-exceeds-points") &&
+    !projectionWarnings.includes("shp-exceeds-points") &&
+    !projectionWarnings.includes("breakdown-mismatch") &&
     projectedFantasyPoints != null;
 
   if (!projectionValid) {
@@ -392,11 +502,24 @@ export function buildFantasyProjection(player, state, timeframe, scheduleData, c
     projectedHits,
     projectedBlocks,
     projectedPowerPlayPoints: projectedPPP,
+    projectedShortHandedPoints: projectedSHP,
+    projectedTakeaways,
+    projectedGiveaways,
+    projectedFaceoffLosses: projectedFOL,
+    projectedFaceoffWinPct: projectedFWPct,
+    projectedTOI,
+    projectedPPTOI,
     projectedPoints,
     projectedSaves,
     projectedWins,
     projectedGoalsAgainst,
     projectedShutouts,
+    projectedSavePct,
+    projectedGAA,
+    projectedQualityStarts,
+    projectedShotsAgainst,
+    projectedFantasyPointBreakdown,
+    projectedFantasyPointsRecomputed: recomputedFromBreakdown,
     projectionValid,
     projectionWarnings,
     usedFallbackLogic: projectionWarnings.length > 0,
@@ -410,6 +533,13 @@ export function buildFantasyProjection(player, state, timeframe, scheduleData, c
     hitsProjection: projectedHits,
     blocksProjection: projectedBlocks,
     pppProjection: projectedPPP,
+    shpProjection: projectedSHP,
+    takeawaysProjection: projectedTakeaways,
+    giveawaysProjection: projectedGiveaways,
+    folProjection: projectedFOL,
+    fwPctProjection: projectedFWPct,
+    toiProjection: projectedTOI,
+    ppToiProjection: projectedPPTOI,
     savesProjection: projectedSaves,
     winsProjection: projectedWins,
     scheduleScore: (gamesInSpan ?? 0) + (offNightGames ?? 0) * 0.45,
