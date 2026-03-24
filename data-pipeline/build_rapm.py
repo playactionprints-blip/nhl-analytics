@@ -257,19 +257,20 @@ def compute_xg_from_model(ev, prev_ev, score_state=0, period=1, is_home=False,
                           game_strength='5v5'):
     """
     Estimate xG using the trained XGBoost model.
-    ev / prev_ev are dict-like rows from hockey-scraper PBP.
-    Falls back to compute_xg_xy if model is unavailable or coordinates are missing.
+    ev is a dict with keys: xC, yC, shot_type (or Type), t.
+    prev_ev is a dict with keys: xC, yC, event_type, t (or None).
+    Falls back to compute_xg_xy when model unavailable or coordinates missing.
     """
+    xc = ev.get('xC')
+    yc = ev.get('yC')
+    shot_type = str(ev.get('shot_type', ev.get('Type', ''))).lower().strip()
+
     if XG_MODEL_5V5 is None:
-        xc = ev.get('xC')
-        yc = ev.get('yC')
         if pd.notna(xc) and pd.notna(yc):
-            return compute_xg_xy(float(xc), float(yc), str(ev.get('Type', '')))
+            return compute_xg_xy(float(xc), float(yc), shot_type)
         return None
 
     try:
-        xc = ev.get('xC')
-        yc = ev.get('yC')
         if pd.isna(xc) or pd.isna(yc):
             return None
 
@@ -277,7 +278,7 @@ def compute_xg_from_model(ev, prev_ev, score_state=0, period=1, is_home=False,
         y = float(yc)
 
         # Normalise so the shooter always attacks the positive-x net.
-        # Home team attacks +x in odd periods, away team attacks +x in even periods.
+        # Home attacks +x in odd periods; away attacks +x in even periods.
         if (is_home and period % 2 == 0) or (not is_home and period % 2 == 1):
             x = -x
             y = -y
@@ -288,11 +289,8 @@ def compute_xg_from_model(ev, prev_ev, score_state=0, period=1, is_home=False,
         angle = abs(math.degrees(math.atan2(abs(y), max(abs(dx), 0.1))))
         is_behind_net = int(abs(x) > 89.0)
 
-        # Shot-type encoding (DEFLECTED → TIP-IN during training)
-        shot_label = str(ev.get('Type', '')).lower().strip()
-        shot_enc = SHOT_TYPE_MAP.get(shot_label, 9)   # 9 = '' fallback index
+        shot_enc = SHOT_TYPE_MAP.get(shot_type, 9)  # 9 = '' fallback index
 
-        # Prior-event features
         prior_event_label = ''
         seconds_since_prior = 1200.0
         pre_shot_lateral_movement = 0.0
@@ -304,11 +302,11 @@ def compute_xg_from_model(ev, prev_ev, score_state=0, period=1, is_home=False,
         is_rebound = 0
 
         if prev_ev is not None:
-            prior_event_label = str(prev_ev.get('Event', 'NONE')).upper().strip()
-            prev_secs = prev_ev.get('Seconds_Elapsed', 0)
-            cur_secs = ev.get('Seconds_Elapsed', 0)
+            prior_event_label = str(prev_ev.get('event_type', prev_ev.get('Event', 'NONE'))).upper().strip()
+            prev_t = prev_ev.get('t', 0)
+            cur_t = ev.get('t', 0)
             try:
-                dt = float(cur_secs) - float(prev_secs)
+                dt = float(cur_t) - float(prev_t)
             except (TypeError, ValueError):
                 dt = 1200.0
             seconds_since_prior = max(0.0, dt)
@@ -355,12 +353,9 @@ def compute_xg_from_model(ev, prev_ev, score_state=0, period=1, is_home=False,
         raw = float(XG_MODEL_5V5.predict(dmat)[0])
         return round(max(0.005, min(0.95, raw)), 4)
 
-    except Exception as xg_err:
-        # Fall back gracefully rather than crashing the entire game
-        xc = ev.get('xC')
-        yc = ev.get('yC')
+    except Exception:
         if pd.notna(xc) and pd.notna(yc):
-            return compute_xg_xy(float(xc), float(yc), str(ev.get('Type', '')))
+            return compute_xg_xy(float(xc), float(yc), shot_type)
         return None
 
 
@@ -1012,8 +1007,29 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
         change_pts.add(p * 1200)
 
     # xG events from PBP
-    # Build full event list first (needed for prior-event context in xG model)
+    # xC/yC used when available; fall back to distance parsed from Description
+    XG_TYPES = {'SHOT', 'GOAL', 'MISS'}
+    xg_events = []
+    goal_events = []
+
+    # Build prior event lookup for rush/rebound context
     all_events_list = []
+    for _, ev in pbp_df.iterrows():
+        try:
+            p = int(ev.get('Period', 0))
+            s = ev.get('Seconds_Elapsed', 0)
+            if pd.isna(s) or p not in (1, 2, 3):
+                continue
+            all_events_list.append({
+                't':          (p - 1) * 1200 + int(float(s)),
+                'xC':         ev.get('xC'),
+                'yC':         ev.get('yC'),
+                'event_type': str(ev.get('Event', '')).upper(),
+            })
+        except Exception:
+            continue
+    all_events_list.sort(key=lambda x: x['t'])
+
     for _, ev in pbp_df.iterrows():
         try:
             period = int(ev.get('Period', 0))
@@ -1024,38 +1040,33 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
         secs = ev.get('Seconds_Elapsed', 0)
         if pd.isna(secs):
             continue
-        all_events_list.append(ev)
+        t         = (period - 1) * 1200 + int(float(secs))
+        xc        = ev.get('xC')
+        yc        = ev.get('yC')
+        shot_type = str(ev.get('Type', ''))
+        is_home   = (str(ev.get('Ev_Team', '')).upper().strip() == home_team)
 
-    XG_TYPES = {'SHOT', 'GOAL', 'MISS'}
-    xg_events = []
-    goal_events = []
-    for ev_idx, ev in enumerate(all_events_list):
-        if str(ev.get('Event', '')).upper() not in XG_TYPES:
-            continue
-        try:
-            period = int(ev.get('Period', 0))
-        except (ValueError, TypeError):
-            continue
-        secs = ev.get('Seconds_Elapsed', 0)
-        t = (period - 1) * 1200 + int(float(secs))
+        # Find most recent prior event for rush/rebound context
+        prev_ev = None
+        for ev_item in reversed(all_events_list):
+            if ev_item['t'] < t:
+                prev_ev = ev_item
+                break
 
-        is_home = (str(ev.get('Ev_Team', '')).upper().strip() == home_team)
-        prev_ev = all_events_list[ev_idx - 1] if ev_idx > 0 else None
-
-        xc = ev.get('xC')
-        yc = ev.get('yC')
         if pd.notna(xc) and pd.notna(yc):
-            xg = compute_xg_from_model(ev, prev_ev, score_state=0,
-                                       period=period, is_home=is_home,
-                                       game_strength='5v5')
-            if xg is None:
-                xg = compute_xg_xy(float(xc), float(yc), str(ev.get('Type', '')))
+            shot_row_dict = {'xC': xc, 'yC': yc, 'shot_type': shot_type, 't': t}
+            xg = compute_xg_from_model(
+                shot_row_dict, prev_ev,
+                score_state=0,
+                period=period,
+                is_home=is_home,
+                game_strength='5v5'
+            )
         else:
             dist = _parse_dist(ev.get('Description', ''))
             if dist is None:
                 continue
-            # Straight-on approximation (angle_factor = 1.0) for description fallback
-            xg = compute_xg_xy(89.0 - dist, 0.0, str(ev.get('Type', '')))
+            xg = compute_xg_xy(89.0 - dist, 0.0, shot_type)
 
         xg_events.append((t, xg, is_home))
         if str(ev.get('Event', '')).upper() == 'GOAL':

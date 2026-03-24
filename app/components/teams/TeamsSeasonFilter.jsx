@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 const LABEL_STYLE = {
   color: "#5a7a99",
@@ -23,16 +22,9 @@ function getClosedLabel(selectedSeasons, seasonOptions) {
   return `${selectedSeasons.length} seasons selected`;
 }
 
-export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons }) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons, onToggleSeason }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
-
-  const closedLabel = useMemo(
-    () => getClosedLabel(selectedSeasons, seasonOptions),
-    [selectedSeasons, seasonOptions]
-  );
 
   useEffect(() => {
     function handlePointerDown(event) {
@@ -54,31 +46,6 @@ export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons }) {
     };
   }, []);
 
-  function persistSelections(nextSeasons) {
-    const normalized = seasonOptions
-      .map((option) => option.value)
-      .filter((season) => nextSeasons.includes(season));
-
-    if (!normalized.length) return;
-
-    const params = new URLSearchParams(searchParams?.toString() || "");
-    params.delete("season");
-    params.delete("war");
-    params.set("seasons", normalized.join(","));
-
-    const query = params.toString();
-    router.replace(query ? `/teams?${query}` : "/teams");
-  }
-
-  function toggleSeason(season) {
-    const next = selectedSeasons.includes(season)
-      ? selectedSeasons.filter((value) => value !== season)
-      : [...selectedSeasons, season];
-
-    if (!next.length) return;
-    persistSelections(next);
-  }
-
   return (
     <div
       ref={rootRef}
@@ -89,7 +56,7 @@ export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons }) {
         position: "relative",
       }}
     >
-      <div style={LABEL_STYLE}>Included Seasons</div>
+      <div style={LABEL_STYLE}>Select Year(s)</div>
 
       <button
         type="button"
@@ -113,7 +80,7 @@ export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons }) {
           textAlign: "left",
         }}
       >
-        <span>{closedLabel}</span>
+        <span>{getClosedLabel(selectedSeasons, seasonOptions)}</span>
         <span style={{ color: "#6d8ba8", fontSize: 12 }}>{open ? "▲" : "▼"}</span>
       </button>
 
@@ -145,7 +112,7 @@ export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons }) {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => !disabled && toggleSeason(option.value)}
+                onClick={() => !disabled && onToggleSeason(option.value)}
                 disabled={disabled}
                 role="option"
                 aria-selected={checked}
