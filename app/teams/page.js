@@ -10,7 +10,6 @@ export const metadata = {
 };
 
 const CURRENT_SEASON = "25-26";
-const SEASON_OPTIONS = ["25-26", "24-25", "23-24"];
 
 const TEAM_FULL = {
   ANA: "Anaheim Ducks", BOS: "Boston Bruins", BUF: "Buffalo Sabres",
@@ -24,6 +23,13 @@ const TEAM_FULL = {
   STL: "St. Louis Blues", TBL: "Tampa Bay Lightning", TOR: "Toronto Maple Leafs",
   UTA: "Utah Hockey Club", VAN: "Vancouver Canucks", VGK: "Vegas Golden Knights",
   WPG: "Winnipeg Jets", WSH: "Washington Capitals",
+};
+
+const TEAM_ALIAS_MAP = {
+  "L.A": "LAK",
+  "N.J": "NJD",
+  "S.J": "SJS",
+  "T.B": "TBL",
 };
 
 const TEAM_COLOR = {
@@ -55,19 +61,36 @@ function formatSeasonLabel(season) {
   return `20${season.slice(0, 2)}-${season.slice(3)}`;
 }
 
-function parseSelectedSeasons(searchParams) {
+function formatSeasonShortLabel(season) {
+  return season.replace("-", "/");
+}
+
+function normalizeTeamCode(teamCode) {
+  const raw = typeof teamCode === "object" ? teamCode?.default : teamCode;
+  return TEAM_ALIAS_MAP[raw] || raw || null;
+}
+
+function parseSelectedSeasons(searchParams, availableSeasons) {
   const raw = searchParams?.seasons;
   const value = Array.isArray(raw) ? raw[0] : raw;
 
-  if (!value) return [CURRENT_SEASON];
+  if (!value) {
+    return availableSeasons.includes(CURRENT_SEASON)
+      ? [CURRENT_SEASON]
+      : availableSeasons.slice(0, 1);
+  }
 
   const parsed = value
     .split(",")
     .map((part) => part.trim())
-    .filter((season) => SEASON_OPTIONS.includes(season));
+    .filter((season) => availableSeasons.includes(season));
 
-  const normalized = SEASON_OPTIONS.filter((season) => parsed.includes(season));
-  return normalized.length ? normalized : [CURRENT_SEASON];
+  const normalized = availableSeasons.filter((season) => parsed.includes(season));
+  return normalized.length
+    ? normalized
+    : availableSeasons.includes(CURRENT_SEASON)
+      ? [CURRENT_SEASON]
+      : availableSeasons.slice(0, 1);
 }
 
 function computeSeasonWar(player) {
@@ -98,7 +121,12 @@ function seasonToId(season) {
 }
 
 function buildSelectedSeasonSummary(selectedSeasons) {
-  return selectedSeasons.map(formatSeasonLabel).join(" + ");
+  return selectedSeasons.map(formatSeasonLabel).reverse().join(" + ");
+}
+
+function buildWarLabel(selectedSeasons) {
+  const count = selectedSeasons.length;
+  return `${count}-Year WAR`;
 }
 
 function TeamsSeasonFilterFallback({ seasonSummary }) {
@@ -112,7 +140,7 @@ function TeamsSeasonFilterFallback({ seasonSummary }) {
 
   return (
     <div style={{ display: "grid", gap: 6, minWidth: 260 }}>
-      <div style={labelStyle}>Included Seasons</div>
+      <div style={labelStyle}>Select Year(s)</div>
       <div
         style={{
           width: "100%",
@@ -141,7 +169,7 @@ async function fetchStandingsForSeason(season) {
       const data = await res.json();
       const map = {};
       for (const t of data.standings || []) {
-        const abbr = typeof t.teamAbbrev === "object" ? t.teamAbbrev.default : t.teamAbbrev;
+        const abbr = normalizeTeamCode(t.teamAbbrev);
         if (!abbr) continue;
         map[abbr] = {
           wins: t.wins || 0,
@@ -167,9 +195,8 @@ async function fetchStandingsForSeason(season) {
     const map = {};
     for (const row of rows) {
       const abbr =
-        row.teamAbbrevDefault ||
-        row.teamAbbrev ||
-        (typeof row.teamAbbrev === "object" ? row.teamAbbrev.default : null) ||
+        normalizeTeamCode(row.teamAbbrevDefault) ||
+        normalizeTeamCode(row.teamAbbrev) ||
         TEAM_BY_FULLNAME[row.teamFullName];
       if (!abbr) continue;
       map[abbr] = {
@@ -186,9 +213,18 @@ async function fetchStandingsForSeason(season) {
 }
 
 export default async function TeamsPage({ searchParams }) {
-  const selectedSeasons = parseSelectedSeasons(searchParams);
-  const mostRecentSeason = selectedSeasons[0] || CURRENT_SEASON;
   const supabase = createServerClient();
+  const { data: availableSeasonRows } = await supabase
+    .from("player_seasons")
+    .select("season")
+    .not("season", "is", null)
+    .limit(5000);
+
+  const availableSeasons = [...new Set((availableSeasonRows || []).map((row) => row.season).filter(Boolean))]
+    .sort((a, b) => String(b).localeCompare(String(a)));
+
+  const selectedSeasons = parseSelectedSeasons(searchParams, availableSeasons);
+  const mostRecentSeason = selectedSeasons[0] || availableSeasons[0] || CURRENT_SEASON;
 
   const [{ data: seasonPlayers }, { data: currentPlayers }, standings] = await Promise.all([
     supabase
@@ -205,12 +241,16 @@ export default async function TeamsPage({ searchParams }) {
   const currentRatingData = {};
 
   for (const abbr of Object.keys(TEAM_FULL)) {
-    seasonTeamData[abbr] = { war: 0, playerCount: 0, inputs: [] };
+    seasonTeamData[abbr] = {
+      war: 0,
+      playerCount: 0,
+      debugBySeason: {},
+    };
     currentRatingData[abbr] = { ratingSum: 0, ratingCount: 0 };
   }
 
   for (const player of seasonPlayers || []) {
-    const abbr = player.team;
+    const abbr = normalizeTeamCode(player.team);
     if (!abbr || !seasonTeamData[abbr]) continue;
 
     if (player.season === mostRecentSeason) {
@@ -220,18 +260,16 @@ export default async function TeamsPage({ searchParams }) {
     const seasonWar = computeSeasonWar(player);
     if (seasonWar != null) {
       seasonTeamData[abbr].war += seasonWar;
-      if (process.env.NODE_ENV !== "production" && ["TOR", "FLA", "EDM"].includes(abbr)) {
-        seasonTeamData[abbr].inputs.push({
-          season: player.season,
-          war_total: player.war_total,
-          computedWar: Number(seasonWar.toFixed(2)),
-        });
+
+      if (!seasonTeamData[abbr].debugBySeason[player.season]) {
+        seasonTeamData[abbr].debugBySeason[player.season] = 0;
       }
+      seasonTeamData[abbr].debugBySeason[player.season] += seasonWar;
     }
   }
 
   for (const player of currentPlayers || []) {
-    const abbr = player.team;
+    const abbr = normalizeTeamCode(player.team);
     if (!abbr || !currentRatingData[abbr]) continue;
     if (player.overall_rating != null && player.position !== "G") {
       currentRatingData[abbr].ratingSum += Number(player.overall_rating);
@@ -261,24 +299,38 @@ export default async function TeamsPage({ searchParams }) {
     .sort((a, b) => b.war - a.war || b.playerCount - a.playerCount || a.name.localeCompare(b.name));
 
   if (process.env.NODE_ENV !== "production") {
-    const debugTeams = ["TOR", "FLA", "EDM"].map((abbr) => ({
+    const debugTeams = ["FLA", "COL", "EDM"].map((abbr) => ({
       team: abbr,
       selectedSeasons,
-      playerWarInputs: seasonTeamData[abbr]?.inputs || [],
-      aggregatedTeamWar: teams.find((team) => team.abbr === abbr)?.war ?? null,
+      rawWarRows: (seasonPlayers || [])
+        .filter((player) => normalizeTeamCode(player.team) === abbr)
+        .slice(0, 8)
+        .map((player) => ({
+          season: player.season,
+          team: player.team,
+          war_total: player.war_total,
+          computedWar: computeSeasonWar(player),
+        })),
+      perSeasonSubtotal: Object.fromEntries(
+        Object.entries(seasonTeamData[abbr]?.debugBySeason || {}).map(([season, value]) => [season, Number(value.toFixed(2))])
+      ),
+      finalWar: teams.find((team) => team.abbr === abbr)?.war ?? null,
+      finalRank: teams.findIndex((team) => team.abbr === abbr) + 1,
     }));
     console.log("[teams-page] selected seasons", JSON.stringify(selectedSeasons));
-    console.log("[teams-page] war aggregation", JSON.stringify(debugTeams));
-    console.log("[teams-page] sorted order", JSON.stringify(teams.slice(0, 8).map((team) => ({
-      abbr: team.abbr,
-      war: team.war,
-    }))));
+    console.log("[teams-page] war debug", JSON.stringify(debugTeams));
+    console.log(
+      "[teams-page] sorted order",
+      JSON.stringify(teams.slice(0, 8).map((team) => ({ abbr: team.abbr, war: team.war })))
+    );
   }
 
   const seasonSummary = buildSelectedSeasonSummary(selectedSeasons);
-  const seasonOptions = SEASON_OPTIONS.map((season) => ({
+  const warLabel = buildWarLabel(selectedSeasons);
+  const seasonOptions = availableSeasons.map((season) => ({
     value: season,
     label: formatSeasonLabel(season),
+    shortLabel: formatSeasonShortLabel(season),
   }));
 
   return (
@@ -346,7 +398,7 @@ export default async function TeamsPage({ searchParams }) {
                 marginTop: 6,
               }}
             >
-              Ranked by WAR · {seasonSummary}
+              Ranked by {warLabel} · {seasonSummary}
             </div>
             <div
               style={{
@@ -356,7 +408,7 @@ export default async function TeamsPage({ searchParams }) {
                 marginTop: 6,
               }}
             >
-              {selectedSeasons.length} season{selectedSeasons.length === 1 ? "" : "s"} selected · record and points reflect {formatSeasonLabel(mostRecentSeason)}
+              Record and points reflect the most recent selected season
             </div>
           </div>
 
@@ -516,7 +568,7 @@ export default async function TeamsPage({ searchParams }) {
                         letterSpacing: "0.06em",
                       }}
                     >
-                      Selected WAR
+                      {warLabel}
                     </div>
                   </div>
 

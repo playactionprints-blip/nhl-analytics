@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const LABEL_STYLE = {
@@ -10,14 +11,55 @@ const LABEL_STYLE = {
   letterSpacing: "0.08em",
 };
 
+function getClosedLabel(selectedSeasons, seasonOptions) {
+  if (selectedSeasons.length === 1) {
+    return seasonOptions.find((option) => option.value === selectedSeasons[0])?.shortLabel || "1 season selected";
+  }
+  if (selectedSeasons.length <= 2) {
+    return selectedSeasons
+      .map((season) => seasonOptions.find((option) => option.value === season)?.shortLabel || season)
+      .join(", ");
+  }
+  return `${selectedSeasons.length} seasons selected`;
+}
+
 export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  const closedLabel = useMemo(
+    () => getClosedLabel(selectedSeasons, seasonOptions),
+    [selectedSeasons, seasonOptions]
+  );
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (!rootRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
 
   function persistSelections(nextSeasons) {
     const normalized = seasonOptions
       .map((option) => option.value)
       .filter((season) => nextSeasons.includes(season));
+
+    if (!normalized.length) return;
 
     const params = new URLSearchParams(searchParams?.toString() || "");
     params.delete("season");
@@ -37,113 +79,129 @@ export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons }) {
     persistSelections(next);
   }
 
-  function applyPreset(count) {
-    persistSelections(seasonOptions.slice(0, count).map((option) => option.value));
-  }
-
   return (
     <div
+      ref={rootRef}
       style={{
         display: "grid",
-        gap: 12,
+        gap: 6,
         minWidth: 260,
+        position: "relative",
       }}
     >
-      <div style={{ display: "grid", gap: 4 }}>
-        <div style={LABEL_STYLE}>Included Seasons</div>
+      <div style={LABEL_STYLE}>Included Seasons</div>
+
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        style={{
+          width: "100%",
+          borderRadius: 12,
+          border: "1px solid #213547",
+          background: "#0f1823",
+          color: "#e8f5ff",
+          padding: "10px 12px",
+          fontSize: 14,
+          fontFamily: "'Barlow Condensed',sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <span>{closedLabel}</span>
+        <span style={{ color: "#6d8ba8", fontSize: 12 }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open ? (
         <div
+          role="listbox"
+          aria-label="Included seasons"
           style={{
-            color: "#7d9ab6",
-            fontSize: 11,
-            fontFamily: "'DM Mono',monospace",
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            marginTop: 8,
+            borderRadius: 14,
+            border: "1px solid #1d3248",
+            background: "#0b131d",
+            boxShadow: "0 18px 50px rgba(0,0,0,0.45)",
+            padding: 10,
+            zIndex: 30,
+            display: "grid",
+            gap: 6,
           }}
         >
-          Select the seasons included in team WAR.
-        </div>
-      </div>
+          {seasonOptions.map((option) => {
+            const checked = selectedSeasons.includes(option.value);
+            const disabled = checked && selectedSeasons.length === 1;
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          type="button"
-          onClick={() => applyPreset(1)}
-          style={presetButtonStyle}
-        >
-          Current
-        </button>
-        <button
-          type="button"
-          onClick={() => applyPreset(Math.min(2, seasonOptions.length))}
-          style={presetButtonStyle}
-        >
-          Last 2
-        </button>
-        <button
-          type="button"
-          onClick={() => applyPreset(Math.min(3, seasonOptions.length))}
-          style={presetButtonStyle}
-        >
-          Last 3
-        </button>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {seasonOptions.map((option) => {
-          const checked = selectedSeasons.includes(option.value);
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => toggleSeason(option.value)}
-              aria-pressed={checked}
-              style={{
-                borderRadius: 999,
-                border: checked ? "1px solid #3b82f6" : "1px solid #213547",
-                background: checked ? "linear-gradient(180deg,#12263d,#0d1722)" : "#0f1823",
-                color: checked ? "#e8f5ff" : "#7d9ab6",
-                padding: "10px 14px",
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                fontFamily: "'Barlow Condensed',sans-serif",
-              }}
-            >
-              <span
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => !disabled && toggleSeason(option.value)}
+                disabled={disabled}
+                role="option"
+                aria-selected={checked}
                 style={{
-                  width: 14,
-                  height: 14,
-                  borderRadius: 4,
-                  border: checked ? "1px solid #60a5fa" : "1px solid #35506c",
-                  background: checked ? "#173452" : "transparent",
-                  display: "inline-flex",
+                  borderRadius: 10,
+                  border: checked ? "1px solid #315574" : "1px solid transparent",
+                  background: checked ? "#102131" : "transparent",
+                  color: disabled ? "#4d6a85" : checked ? "#e8f5ff" : "#9ab7d0",
+                  padding: "10px 12px",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  display: "flex",
                   alignItems: "center",
-                  justifyContent: "center",
-                  color: "#8fd3ff",
-                  fontSize: 10,
-                  lineHeight: 1,
+                  justifyContent: "space-between",
+                  gap: 12,
+                  fontFamily: "'Barlow Condensed',sans-serif",
                 }}
               >
-                {checked ? "✓" : ""}
-              </span>
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                  <span
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: 4,
+                      border: checked ? "1px solid #60a5fa" : "1px solid #35506c",
+                      background: checked ? "#173452" : "transparent",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#8fd3ff",
+                      fontSize: 10,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {checked ? "✓" : ""}
+                  </span>
+                  {option.label}
+                </span>
+                {disabled ? (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontFamily: "'DM Mono',monospace",
+                      color: "#4d6a85",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Required
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
-
-const presetButtonStyle = {
-  borderRadius: 999,
-  border: "1px solid #1d3248",
-  background: "#0b131d",
-  color: "#8aa6c1",
-  padding: "6px 10px",
-  fontSize: 11,
-  fontWeight: 700,
-  cursor: "pointer",
-  fontFamily: "'DM Mono',monospace",
-};
