@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { createServerClient } from "@/app/lib/supabase";
 import TeamsSeasonFilter from "@/app/components/teams/TeamsSeasonFilter";
@@ -58,6 +59,44 @@ function parseSeason(searchParams) {
   const raw = searchParams?.season;
   const season = Array.isArray(raw) ? raw[0] : raw;
   return SEASON_OPTIONS.includes(season) ? season : CURRENT_SEASON;
+}
+
+function TeamsSeasonFilterFallback({ value }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 6,
+        minWidth: 180,
+      }}
+    >
+      <div
+        style={{
+          color: "#5a7a99",
+          fontSize: 10,
+          fontFamily: "'DM Mono',monospace",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+        }}
+      >
+        Season
+      </div>
+      <div
+        style={{
+          width: "100%",
+          borderRadius: 12,
+          border: "1px solid #213547",
+          background: "#0f1823",
+          color: "#e8f5ff",
+          padding: "10px 12px",
+          fontSize: 14,
+          fontFamily: "'Barlow Condensed',sans-serif",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
 }
 
 function seasonToId(season) {
@@ -274,7 +313,9 @@ export default async function TeamsPage({ searchParams }) {
                 flexWrap: "wrap",
               }}
             >
-              <TeamsSeasonFilter options={seasonOptions} value={selectedSeason} />
+              <Suspense fallback={<TeamsSeasonFilterFallback value={seasonLabel} />}>
+                <TeamsSeasonFilter options={seasonOptions} value={selectedSeason} />
+              </Suspense>
               <div
                 style={{
                   height: 34,
