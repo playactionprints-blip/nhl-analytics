@@ -1186,3 +1186,542 @@ If a fresh conversation needs to resume from the latest application work, the mo
 - test The Odds API / Daily Faceoff behavior on predictions
 - confirm lottery conveyed/protected pick behavior
 - keep pushes narrowly scoped
+
+---
+
+## 26. Five-Day Extension: March 18-23, 2026
+
+This section captures the full product and engineering work completed over the last five days so a new conversation can resume from the current site state instead of the older weekend-only memory.
+
+### Scope of this period
+
+The project expanded from a player-card/predictions site into a broader NHL analytics product suite with:
+
+- a dedicated homepage
+- a mobile-responsiveness pass
+- a much stronger postgame experience
+- a more mature lottery simulator
+- a new Fantasy Hub with rankings, team builder, compare tools, and ongoing scoring/projection debugging
+- multiple infrastructure and backend quality-of-life upgrades
+
+### Commits in this period
+
+- `a4c1725` — 8-season RAPM daisy chain / WAR and ratings refresh
+- `29d7617` — finishing uses 3-year weighted average from `player_seasons`
+- `c917837` — career stats tab and prediction log migration tooling
+- `8e0282f` — expose missing season stats in `playerData.js`
+- `efb5aa0` — add `/playoff-odds`
+- `08f5313` — upgrade `/playoff-odds`
+- `e30924c` — live/final score + scoring summary + game stats + boxscore
+- `34772ea` — live scores banner
+- `d43ffe3` — roster builder team load dropdown
+- `ae0a955` — roster builder load-team UI fix
+- `489d752` — game analytics panel, yesterday link, xG boxscore columns
+- `6bdd2b7` — fix blank `GameStatsPanel`
+- `0a719b6` — forced redeploy/cache bust
+- `084d434` — upgraded player OG image and Share Card button
+- `1d6e0ca` — predictions per-date revalidation
+- `1bdd25d` — past-date predictions fix
+- `524cf8e` — completed-game prediction null crash fix
+- `963f398` — proxy NHL API calls to avoid client-side CORS
+- `cc808cc` — `GameStatsPanel` visuals and merged boxscore work
+- `ed3d8db` — betting unit tracker
+- `86766f9` — nightly Vercel cron for predictions/results logging
+- `797d12c` — prediction card layout fix
+- `9130cbc` — prediction card overflow fix
+- `08fd357` — large background logos, white rink, shot tooltips, meter labels
+- `94187e8` — Deserved To Win meter
+- `3049cf2` — gauge/shot-coordinate normalization fix
+- `ee97ba1` — shot map excludes only blocked shots
+- `c09e690` — wider shot map rink
+- `6a6200e` — shot map fills full card width
+- `b130a5c` — shot map geometry fix
+- `5fc6c51` — allow anon sync log inserts
+- `0ad0f4b` — Deserved To Win meter sweep fix
+- `142e588` — better homepage player search
+- `5eef20e` — expanded scores banner and simplified homepage
+- `d1779c5` — game moments and playoff implications
+- `c1acde2` — homepage scores banner fallback
+- `626a8b0` — redesigned postgame dashboard
+- `a6e1141` — polished postgame analytics layout
+- `12a416e` — dedicated platform homepage
+- `19ecac2` — clarified player card evaluation view
+- `28eca51` — dramatic lottery reveal
+- `a1f6f5b` — full-site mobile responsiveness pass
+- `c40977a` — simplified lottery page around main board
+- `bc54bc9` — Fantasy Hub
+- `2c0c3ce` — Fantasy compare players tab
+- `3146d94` — reorder fantasy league setup flow
+- `ea1f95d` — fix fantasy projection mapping
+- `ded41e0` — validate fantasy ranking projections
+- `caccfb6` — harden fantasy player stat sourcing
+- `fa4e885` — expand fantasy scoring settings and audit projections
+
+### High-level evolution during this period
+
+The product changed shape in a big way:
+
+1. The site stopped being “mostly player cards + predictions” and became a broader platform.
+2. Predictions evolved into both a pregame board and a true postgame analytics destination.
+3. The homepage was elevated from a player-search-first landing page into a platform front door.
+4. The lottery page was iterated twice:
+   - first toward a more dramatic reveal experience
+   - then toward a simpler, table-first simulator
+5. Fantasy Hub became the newest major product area and quickly turned into the main debugging focus.
+
+---
+
+## 27. Original Problems During This Five-Day Window and How They Evolved
+
+### A. Predictions/game detail experience started too thin
+
+The game page originally still felt like a prediction detail page:
+
+- weak top hierarchy
+- unfinished analytics section
+- sequential layout instead of dashboard structure
+- no strong postgame identity
+
+This evolved into:
+
+- a dedicated postgame dashboard
+- stronger hero/header
+- scoring summary + key moments + model recap
+- preserved analytics hooks with much better presentation
+
+### B. Shot map/rink rendering was visibly broken
+
+The rink in the game page had a real geometry bug:
+
+- shots plotted outside boards
+- rink lines did not extend full height
+- coordinate scaling was misaligned
+
+This was corrected by:
+
+- fixing rink line dimensions
+- fixing coordinate normalization
+- clipping shots with SVG logic
+- widening the rink treatment and cleaning visuals
+
+### C. Homepage identity was too narrow
+
+The homepage was too player-search-centric and did not explain the broader product well.
+
+This evolved into:
+
+- a dedicated homepage
+- platform hero and CTA structure
+- daily insights / featured content
+- tool grid
+- featured players preview
+- a separate `/players` destination preserving the old player search experience
+
+### D. Lottery page was useful but too dashboard-heavy
+
+The lottery page first needed more drama, then later needed simplification.
+
+This evolved in two steps:
+
+1. more suspense:
+   - staged reveal
+   - overlay winner animation
+   - reshuffle emphasis
+
+2. cleaner UX:
+   - table-first layout
+   - compact toolbar
+   - tighter results strip
+   - rules/config demoted in visual hierarchy
+
+### E. Fantasy Hub rankings were repeatedly wrong
+
+This became the biggest active debugging area.
+
+Symptoms over several iterations:
+
+- huge projected fantasy totals
+- supporting category columns showing zeroes or nonsense
+- mixed stat sources
+- hidden stale fields inflating value
+- rows ranked highly off malformed data
+
+This evolved through multiple fixes:
+
+1. normalize projected columns and ranking source
+2. validate timeframe application
+3. filter invalid projected rows
+4. harden skater stat sourcing from `player_seasons` instead of stale `players` values
+5. reject impossible skater-side `PPP`
+6. extend scoring categories and make the projection logic auditable through explicit contribution breakdowns
+
+### F. Fantasy settings UX was backward
+
+League scoring lived too low in the page and users built rosters before defining format.
+
+This was corrected by:
+
+- moving league configuration above player search/roster tools
+- framing it as “Step 1: Configure Your League”
+- making it collapsible for returning users
+
+---
+
+## 28. Key Insights and Solutions Developed During These Five Days
+
+### Predictions / postgame insights
+
+- the postgame page works best when it feels like a game report first and a prediction route second
+- existing analytics/data hooks were strong enough; presentation and section hierarchy were the main issues
+- completed games need model recap data from `predictions_log`, not from the live pregame builder alone
+- scoring summary and key moments were the correct foundation to preserve
+
+### Shot map / game analytics insights
+
+- geometry bugs on visualizations can make valid analytics feel untrustworthy
+- the shot map became much more credible once the rink, clipping, and scale matched the actual NHL coordinate space
+- strong empty states matter on analytics sections so the page doesn’t look broken when data is missing
+
+### Homepage/product positioning insights
+
+- the site needed a platform homepage, not just a functional page index
+- the player search page was valuable enough to preserve, but it should not be the front door anymore
+- daily relevance matters on the homepage:
+  - predictions
+  - featured games
+  - featured players
+  - live scores banner
+
+### Lottery UX insights
+
+- the user liked Tankathon’s usability more than the original dashboard-heavy structure
+- a simpler board-first layout is more addictive and easier to repeat-run
+- the reveal animation is best used as seasoning, not the dominant layout
+- ownership/protection context belongs inline with the board as much as possible
+
+### Fantasy Hub insights
+
+- a waiver-style tool is premature without real ownership/availability data
+- a compare-players tool is immediately valuable because it uses existing scoring + timeframe + schedule logic
+- fantasy rankings must use one normalized stat schema end-to-end:
+  - source stats
+  - projected categories
+  - projected fantasy points
+  - visible columns
+  - sorting
+- hidden stale source fields, especially `PPP`, can wreck fantasy rankings even when the visible table looks cleaner
+- league settings are the foundation of the feature and should appear before roster interaction
+- advanced fantasy categories are fine, but only if missing stats stay `null` instead of silently becoming zeroes
+- points-league totals needed an explicit contribution breakdown to make debugging believable
+
+### Infrastructure insights
+
+- nightly cron logging for predictions/results is important for long-run model accountability
+- OG image/share flows add a lot of polish to a content-heavy product
+- `sync_log`/freshness concepts are useful, but must remain backend-only until the UI layer is ready
+
+---
+
+## 29. User Working Style and Preferences Observed in This Period
+
+### Product/design preferences
+
+The user consistently prefers:
+
+- premium dark styling
+- polished, modern layouts
+- pages that feel like real product destinations, not generic utilities
+- strong clarity and interpretability over raw density
+- table-first UX when it improves scanability
+- fun, repeatable tool experiences where appropriate
+
+### Workflow preferences
+
+The user repeatedly prefers:
+
+- making real changes and pushing quickly so they can review live
+- one concrete request at a time for UI work
+- backend/data fixes that address root causes instead of UI band-aids
+- preserving working logic while upgrading UX around it
+- practical, honest framing when data is missing or weak
+
+### Communication preferences
+
+The user responds well to:
+
+- direct explanations of what was broken and why
+- concise summaries of changed files
+- quick push/test loops
+- recommendations framed around what is “best next,” not giant option menus
+
+---
+
+## 30. Collaboration Approaches That Worked Well
+
+### What worked best
+
+- inspect existing structure first instead of rebuilding pages blindly
+- preserve the user’s live product momentum by pushing incremental improvements
+- keep major feature work modular:
+  - homepage components
+  - postgame page components
+  - fantasy hub components
+  - lottery simulator iterations
+- treat visual redesigns as information-architecture problems, not just CSS changes
+- when bugs persisted, move from “patch the output” to “audit the whole data path”
+
+### Good implementation pattern established
+
+For most product work, the successful loop was:
+
+1. inspect current code paths
+2. make a modular UI/data change
+3. lint/check locally
+4. push to `main`
+5. user tests live on Vercel
+6. refine from screenshots or behavior notes
+
+This pattern worked particularly well for:
+
+- postgame page redesign
+- homepage work
+- lottery UX iteration
+- fantasy hub buildout
+- mobile responsiveness
+
+---
+
+## 31. Clarifications and Corrections the User Made
+
+The user gave several important corrections during this period:
+
+- the dedicated homepage should not replace the Players page
+- the new player page should remain a player-evaluation tool only, not betting-related
+- the NHL lottery page should move closer to Tankathon usability without copying it
+- the lottery page should ultimately become simpler and more table-first, not more dashboard-heavy
+- a Waiver Finder should not be built yet because there is no reliable ownership/availability data
+- Fantasy Compare Players should be the next major fantasy feature instead
+- league settings belong above player/roster interaction in Fantasy Hub
+- fantasy rankings bugs should be fixed in the data/projection pipeline, not merely hidden in the table UI
+- projected fantasy totals must represent remaining-season or selected-timeframe value, not stale/full-season defaults
+- PPP and SHP should not silently re-count goals/assists through hidden logic
+
+---
+
+## 32. Project Context and Examples Used
+
+### External reference styles/products used conceptually
+
+- HockeyStats:
+  - postgame page structure
+  - premium single-game dashboard feel
+  - predictions/game cards inspiration
+- MoneyPuck:
+  - Deserved To Win meter concept
+  - shot-map / xG-style inspiration
+  - advanced game analytics inspiration
+- Tankathon:
+  - lottery simulator usability
+  - table-first board focus
+  - inline ownership/protection clarity
+
+### Internal routes/features now relevant to a new conversation
+
+- `/`
+- `/players`
+- `/players/[playerId]`
+- `/predictions`
+- `/predictions/[date]/[gameId]`
+- `/playoff-odds`
+- `/lottery`
+- `/roster-builder`
+- `/fantasy`
+
+### Key files in this period
+
+- Homepage:
+  - [app/page.js](/Users/cspeedie/Desktop/nhl-analytics/app/page.js)
+  - [app/players/page.js](/Users/cspeedie/Desktop/nhl-analytics/app/players/page.js)
+  - [app/components/home/HomeHero.jsx](/Users/cspeedie/Desktop/nhl-analytics/app/components/home/HomeHero.jsx)
+  - [app/lib/playerCardPageData.js](/Users/cspeedie/Desktop/nhl-analytics/app/lib/playerCardPageData.js)
+
+- Postgame/predictions:
+  - [app/predictions/[date]/[gameId]/page.js](/Users/cspeedie/Desktop/nhl-analytics/app/predictions/[date]/[gameId]/page.js)
+  - [app/predictions/[date]/[gameId]/PostgameDashboardClient.jsx](/Users/cspeedie/Desktop/nhl-analytics/app/predictions/[date]/[gameId]/PostgameDashboardClient.jsx)
+  - [app/predictions/[date]/[gameId]/GameStatsPanel.jsx](/Users/cspeedie/Desktop/nhl-analytics/app/predictions/[date]/[gameId]/GameStatsPanel.jsx)
+  - [app/lib/predictionsData.js](/Users/cspeedie/Desktop/nhl-analytics/app/lib/predictionsData.js)
+
+- Lottery:
+  - [LotterySimulator.jsx](/Users/cspeedie/Desktop/nhl-analytics/LotterySimulator.jsx)
+
+- Fantasy Hub:
+  - [app/fantasy/page.js](/Users/cspeedie/Desktop/nhl-analytics/app/fantasy/page.js)
+  - [app/components/fantasy-hub/FantasyHubApp.jsx](/Users/cspeedie/Desktop/nhl-analytics/app/components/fantasy-hub/FantasyHubApp.jsx)
+  - [app/components/fantasy-hub/FantasyLeagueSettings.jsx](/Users/cspeedie/Desktop/nhl-analytics/app/components/fantasy-hub/FantasyLeagueSettings.jsx)
+  - [app/components/fantasy-hub/FantasyRankingsTable.jsx](/Users/cspeedie/Desktop/nhl-analytics/app/components/fantasy-hub/FantasyRankingsTable.jsx)
+  - [app/components/fantasy-hub/FantasyComparePlayers.jsx](/Users/cspeedie/Desktop/nhl-analytics/app/components/fantasy-hub/FantasyComparePlayers.jsx)
+  - [app/components/fantasy-hub/fantasyHubUtils.js](/Users/cspeedie/Desktop/nhl-analytics/app/components/fantasy-hub/fantasyHubUtils.js)
+  - [app/api/fantasy/players/route.js](/Users/cspeedie/Desktop/nhl-analytics/app/api/fantasy/players/route.js)
+  - [app/api/fantasy/schedule/route.js](/Users/cspeedie/Desktop/nhl-analytics/app/api/fantasy/schedule/route.js)
+
+---
+
+## 33. Templates and Processes Established
+
+### Push-and-test template
+
+Use this rhythm:
+
+1. implement one focused feature/fix
+2. run lint or targeted validation
+3. push to `main`
+4. user checks Vercel deployment/live route
+5. iterate from screenshots or bug reports
+
+### Fantasy rankings debugging template
+
+The debugging process that emerged for Fantasy Hub was:
+
+1. identify the exact normalized projection object
+2. ensure visible columns and ranking sort use the same object
+3. separate actual stats vs projected stats
+4. validate timeframe alignment
+5. reject malformed rows before ranking
+6. add targeted debug logging for top rows
+7. inspect one known player manually for end-to-end validation
+
+### UI redesign template
+
+When redesigning a page, the effective method was:
+
+1. keep data hooks/backend logic intact
+2. preserve one or two working foundation sections
+3. fix information hierarchy
+4. modularize into smaller components
+5. only then add polish and motion
+
+### Mobile pass template
+
+For responsive work, the best approach became:
+
+1. shared layout/container audit
+2. nav/header mobile fix
+3. cards/tables/charts/control patterns
+4. page-specific cleanups
+5. final overflow/tap-target QA
+
+---
+
+## 34. Current State at the End of This Five-Day Window
+
+### Homepage
+
+- dedicated product homepage exists
+- Players remains a separate route
+- homepage now acts as the front door to the platform
+
+### Predictions / postgame
+
+- postgame page is substantially more premium and usable
+- scoring summary, key moments, and analytics are all present
+- shot map geometry issues were fixed
+- live scores banner exists
+- nightly cron and prediction logging exist
+
+### Lottery
+
+- simulator logic remains intact
+- page is now more board-first and closer to a fast repeat-use simulator
+- reveal flow is still present but less dominant
+
+### Player pages
+
+- player card interpretation layer improved
+- player page is clearer as an evaluation tool
+- share card OG route exists
+
+### Fantasy Hub
+
+- major new section exists with:
+  - My Team
+  - Rankings
+  - Compare Players
+  - Schedule
+- league setup is now the first step
+- rankings logic has been hardened multiple times
+- scoring settings are now broader and grouped more cleanly
+- fantasy projection logic now has explicit contribution breakdown support
+
+### Infrastructure / backend
+
+- prediction logging + units + cron work are in place
+- some backend freshness/sync concepts were added in adjacent work
+- repo still needs careful scoping because many features have landed quickly
+
+---
+
+## 35. Active Caveats / Likely Open Problems
+
+### Fantasy Hub remains the most likely active debugging area
+
+Even after the recent hardening, the most likely remaining issues are still in Fantasy Hub:
+
+- validating advanced stat availability for every fantasy category
+- ensuring no stale upstream fields leak into projections
+- verifying that the expanded scoring categories behave sensibly in live settings
+- checking whether `PPP`/`SHP` should remain hidden columns or become visible when weighted
+
+### Likely place to resume next
+
+If a new conversation resumes right now, the highest-probability next work item is:
+
+- keep debugging Fantasy Rankings projections live after deploy
+
+The next most likely product work areas are:
+
+- more Fantasy Hub polish
+- more targeted postgame analytics improvements
+- continued lottery UX tuning
+
+---
+
+## 36. Recommended Next Steps
+
+### Highest-priority immediate steps
+
+1. Test the live Fantasy Hub after the latest scoring/projection deploy:
+   - `/fantasy`
+   - league settings expansion
+   - rankings under different scoring weights
+   - compare player behavior under the same settings
+
+2. Validate one known fantasy player manually in dev/live:
+   - Matthew Tkachuk was the chosen manual audit reference
+   - confirm remaining-games logic and contribution totals make sense
+
+3. Decide whether fantasy rankings should expose more of the weighted categories in the table when those weights are active:
+   - especially `PPP`, `SHP`, `FW%`, `TOI`, `PP TOI`
+
+### Strong future additions
+
+- fantasy ranking mode split:
+  - earned to date
+  - rest of season projection
+- fantasy-specific tooltips explaining projected stats/timeframe
+- better fantasy schedule context and opponent strength
+- more polished player fit / roster fit notes in Fantasy Compare
+- eventual waiver tool only after real ownership/availability data exists
+
+### Product-level continuation ideas
+
+- further postgame page polish from live screenshots
+- continue tightening mobile UX after real-device review
+- keep simplifying complex tools toward clearer first-use experiences
+
+---
+
+## 37. Short Handoff Summary
+
+If a new conversation needs the quickest possible restart:
+
+> Over the last five days, the site became a broader NHL analytics platform with a dedicated homepage, stronger postgame pages, a mobile responsiveness pass, a refined lottery simulator, and a new Fantasy Hub. The biggest current active area is Fantasy Hub rankings/scoring reliability. The user prefers fast live pushes, preserving working logic, premium dark styling, and root-cause data fixes rather than cosmetic patches. The most likely next step is to keep validating and refining Fantasy projections using the new explicit contribution breakdowns and live testing on `/fantasy`.
