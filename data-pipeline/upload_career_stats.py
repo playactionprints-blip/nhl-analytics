@@ -25,9 +25,11 @@ exec(open('upload_career_stats.py').read())
 
 import os
 import sys
+import time
 import unicodedata
 
 import pandas as pd
+import requests as _req
 
 # ── env ───────────────────────────────────────────────────────────────────────
 try:
@@ -92,6 +94,22 @@ EH_TEAM_TO_CODE = {
     "Vegas Golden Knights":   "VGK",
     "Washington Capitals":    "WSH",
     "Winnipeg Jets":          "WPG",
+}
+
+# EH uses abbreviated codes that differ from NHL standard for 4 teams
+EH_ABBREV_FIX = {
+    "L.A": "LAK",
+    "S.J": "SJS",
+    "T.B": "TBL",
+    "N.J": "NJD",
+}
+
+# First-name aliases: CSV may use "Alex" where NHL API/Supabase stores "Alexander"
+FIRST_NAME_ALIASES = {
+    "Alex": "Alexander",
+    "Mike": "Michael",
+    "Manny": "Emmanuel",
+    "Zach": "Zachary",
 }
 
 
@@ -171,6 +189,88 @@ print(f"    {len(player_rows)} players fetched")
 
 name_to_id = {normalize_name(r['full_name']): r['player_id'] for r in player_rows}
 
+# ── Step 2b: Resolve retired players via NHL stats REST API ──────────────────
+# The Supabase players table only has active players. Any CSV player not found
+# there is retired. Look them up by exact name via the NHL historical stats API.
+print("\n[2b] Scanning CSV for players not in Supabase ...")
+df_pre = pd.read_csv(CSV_FILE)
+csv_names = {str(r.get('Player', '') or '').strip() for _, r in df_pre.iterrows()}
+unmatched_names = sorted(n for n in csv_names if n and name_to_id.get(normalize_name(n)) is None)
+print(f"    {len(unmatched_names)} players not in Supabase — resolving via NHL API ...")
+
+
+def nhl_stats_player_id(full_name):
+    """Query NHL stats REST API for a player's ID by exact full name.
+    Also tries first-name aliases (Alex → Alexander, etc.) on failure.
+    """
+    def _query(name):
+        try:
+            r = _req.get(
+                "https://api.nhle.com/stats/rest/en/skater/summary",
+                params={
+                    "limit": 3,
+                    "start": 0,
+                    "sort": '[{"property":"seasonId","direction":"DESC"}]',
+                    "cayenneExp": f'skaterFullName="{name}" and gameTypeId=2',
+                },
+                timeout=8,
+            )
+            if r.ok:
+                rows = r.json().get("data", [])
+                if rows:
+                    return int(rows[0]["playerId"])
+        except Exception:
+            pass
+        return None
+
+    pid = _query(full_name)
+    if pid:
+        return pid
+
+    # Try first-name alias (Alex → Alexander, etc.)
+    parts = full_name.split(' ', 1)
+    if len(parts) == 2 and parts[0] in FIRST_NAME_ALIASES:
+        alt_name = f"{FIRST_NAME_ALIASES[parts[0]]} {parts[1]}"
+        pid = _query(alt_name)
+        if pid:
+            # Also register the canonical name so the CSV lookup hits
+            name_to_id[normalize_name(alt_name)] = pid
+            return pid
+    return None
+
+
+def supabase_name_lookup(full_name):
+    """Look up player_id in name_to_id, also trying first-name aliases."""
+    pid = name_to_id.get(normalize_name(full_name))
+    if pid:
+        return pid
+    parts = full_name.split(' ', 1)
+    if len(parts) == 2 and parts[0] in FIRST_NAME_ALIASES:
+        return name_to_id.get(normalize_name(f"{FIRST_NAME_ALIASES[parts[0]]} {parts[1]}"))
+    return None
+
+
+resolved = 0
+failed = []
+for i, name in enumerate(unmatched_names):
+    # Skip if the alias variant is already in name_to_id (Alexander Holtz etc.)
+    if supabase_name_lookup(name):
+        resolved += 1
+        continue
+    pid = nhl_stats_player_id(name)
+    if pid:
+        name_to_id[normalize_name(name)] = pid
+        resolved += 1
+    else:
+        failed.append(name)
+    # Polite pacing — 20 req/s max
+    if i % 20 == 19:
+        time.sleep(1.0)
+
+print(f"    Resolved {resolved} / {len(unmatched_names)} retired players via NHL API")
+if failed:
+    print(f"    Still unmatched ({len(failed)}): {sorted(failed)[:20]}")
+
 # ── Step 3: Process CSV rows ──────────────────────────────────────────────────
 print("\n[3] Processing CSV rows ...")
 records = []
@@ -182,15 +282,20 @@ for _, row in df.iterrows():
     season      = str(row.get('Season', '') or '').strip()
     team_full   = str(row.get('Team',   '') or '').strip()
 
-    player_id = name_to_id.get(normalize_name(player_name))
+    player_id = supabase_name_lookup(player_name)
     if player_id is None:
         unmatched.add(player_name)
         continue
 
     if team_full in EH_TEAM_TO_CODE:
         team_abbr = EH_TEAM_TO_CODE[team_full]
+    elif team_full in EH_ABBREV_FIX:
+        team_abbr = EH_ABBREV_FIX[team_full]
+    elif len(team_full) <= 4 and team_full.replace('.', '').isalpha():
+        # Already an abbreviation (ANA, BOS, PHX, ATL, etc.) — use as-is
+        team_abbr = team_full
     else:
-        # Fallback: first 3 chars uppercased; flag for review
+        # Unknown full name — flag for review
         team_abbr = team_full[:3].upper() if team_full else 'UNK'
         unknown_teams.add(team_full)
 
