@@ -11,6 +11,7 @@ import {
 } from "@/app/lib/predictionsData";
 import DailyInsights from "@/app/components/home/DailyInsights";
 import FeatureGrid from "@/app/components/home/FeatureGrid";
+import HomeCardsExplorer from "@/app/components/home/HomeCardsExplorer";
 import FeaturedPlayersPreview from "@/app/components/home/FeaturedPlayersPreview";
 import HomeCTA from "@/app/components/home/HomeCTA";
 import HomeHero from "@/app/components/home/HomeHero";
@@ -162,26 +163,71 @@ function mapInsightCards(predictions = []) {
     });
 }
 
-async function fetchFeaturedPlayers() {
+function normalizeTeamCode(team) {
+  const map = { "L.A": "LAK", "N.J": "NJD", "S.J": "SJS", "T.B": "TBL" };
+  return map[team] || team || null;
+}
+
+async function fetchHomeExplorerPlayers() {
   const supabase = createServerClient();
   const { data } = await supabase
     .from("players")
     .select("player_id,full_name,team,position,war_total,overall_rating,gp")
     .order("war_total", { ascending: false, nullsFirst: false })
-    .limit(5);
+    .limit(1200);
 
   return data || [];
+}
+
+function buildTeamExplorerData(players = []) {
+  const grouped = new Map();
+
+  for (const player of players) {
+    const team = normalizeTeamCode(player.team);
+    if (!team || !TEAM_COLOR[team]) continue;
+
+    if (!grouped.has(team)) {
+      grouped.set(team, {
+        abbr: team,
+        name: TEAM_FULL[team] || team,
+        war: 0,
+        playerCount: 0,
+        ratingSum: 0,
+        ratingCount: 0,
+      });
+    }
+
+    const entry = grouped.get(team);
+    entry.playerCount += 1;
+    if (player.war_total != null && Number.isFinite(Number(player.war_total))) {
+      entry.war += Number(player.war_total);
+    }
+    if (player.overall_rating != null && player.position !== "G") {
+      entry.ratingSum += Number(player.overall_rating);
+      entry.ratingCount += 1;
+    }
+  }
+
+  return Array.from(grouped.values())
+    .map((team) => ({
+      ...team,
+      war: Number(team.war.toFixed(1)),
+      avgRating: team.ratingCount ? Number((team.ratingSum / team.ratingCount).toFixed(1)) : null,
+    }))
+    .sort((a, b) => b.war - a.war || b.playerCount - a.playerCount || a.name.localeCompare(b.name));
 }
 
 export default async function HomePage() {
   const todayString = formatDateString(getTorontoDateParts());
 
-  const [predictionResult, featuredPlayers] = await Promise.all([
+  const [predictionResult, explorerPlayers] = await Promise.all([
     buildPredictionsForDate(todayString).catch(() => ({ predictions: [] })),
-    fetchFeaturedPlayers().catch(() => []),
+    fetchHomeExplorerPlayers().catch(() => []),
   ]);
 
   const insightCards = mapInsightCards(predictionResult?.predictions || []);
+  const featuredPlayers = explorerPlayers.slice(0, 5);
+  const teamExplorer = buildTeamExplorerData(explorerPlayers);
 
   return (
     <main
@@ -203,6 +249,7 @@ export default async function HomePage() {
         }}
       >
         <HomeHero quickLinks={getQuickLinks()} />
+        <HomeCardsExplorer players={explorerPlayers} teams={teamExplorer} />
         <DailyInsights
           dateLabel={formatHeadlineDate(todayString)}
           cards={insightCards}
