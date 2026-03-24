@@ -17,7 +17,6 @@ export async function GET(request) {
     const [
       { data: careerStats },
       { data: recentSeasons },
-      { data: playerInfo },
     ] = await Promise.all([
       supabase
         .from("career_stats")
@@ -31,14 +30,47 @@ export async function GET(request) {
         )
         .eq("player_id", playerId)
         .order("season"),
-      supabase
-        .from("players")
-        .select(
-          "player_id,full_name,position,team,headshot_url,jersey,percentiles,war_total,rapm_off,rapm_def,off_rating,def_rating,overall_rating"
-        )
-        .eq("player_id", playerId)
-        .single(),
     ]);
+
+    let playerInfo = null;
+    const { data: activePlayer } = await supabase
+      .from("players")
+      .select(
+        "player_id,full_name,position,team,headshot_url,jersey,percentiles,war_total,rapm_off,rapm_def,off_rating,def_rating,overall_rating"
+      )
+      .eq("player_id", playerId)
+      .single();
+
+    if (activePlayer) {
+      playerInfo = activePlayer;
+    } else {
+      // Retired player — fetch from NHL API
+      try {
+        const r = await fetch(
+          `https://api-web.nhle.com/v1/player/${playerId}/landing`,
+          { next: { revalidate: 86400 } }
+        );
+        if (r.ok) {
+          const d = await r.json();
+          playerInfo = {
+            player_id: playerId,
+            full_name: `${d.firstName?.default || ""} ${d.lastName?.default || ""}`.trim(),
+            position: d.position || null,
+            team: d.currentTeamAbbrev || "Retired",
+            headshot_url: d.headshot || null,
+            jersey: d.sweaterNumber || null,
+            percentiles: null,
+            war_total: null,
+            rapm_off: null,
+            rapm_def: null,
+            off_rating: null,
+            def_rating: null,
+            overall_rating: null,
+            is_retired: true,
+          };
+        }
+      } catch {}
+    }
 
     // Build unified season map
     const seasonMap = {};

@@ -266,9 +266,15 @@ function PlayerSelector({ players, onSelect }) {
 
 // ── player header card ────────────────────────────────────────────────────────
 
-function PlayerHeader({ player }) {
+function PlayerHeader({ player, seasons = [] }) {
   const teamColor = TEAM_COLOR[player.team] || "#2fb4ff";
   const pct = player.percentiles || {};
+  const isRetired = !player.off_rating && !player.overall_rating;
+  const careerGP = seasons.reduce((s, r) => s + (r.gp || 0), 0);
+  const careerG = seasons.reduce((s, r) => s + (r.g || 0), 0);
+  const careerA = seasons.reduce((s, r) => s + (r.a || 0), 0);
+  const careerPTS = seasons.reduce((s, r) => s + (r.pts || 0), 0);
+  const peakPts82 = Math.max(0, ...seasons.map((s) => s.pts_per_82 || 0));
 
   return (
     <div
@@ -283,15 +289,13 @@ function PlayerHeader({ player }) {
     >
       {/* Left: identity */}
       <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-        {player.headshot_url && (
-          <img
-            src={player.headshot_url}
-            alt={player.full_name}
-            width={80}
-            height={80}
-            style={{ borderRadius: 16, objectFit: "cover", flexShrink: 0, border: `2px solid ${teamColor}44` }}
-          />
-        )}
+        <img
+          src={player.headshot_url || `https://assets.nhle.com/mugs/nhl/latest/${player.player_id}.png`}
+          alt={player.full_name}
+          width={80}
+          height={80}
+          style={{ borderRadius: 16, objectFit: "cover", flexShrink: 0, border: `2px solid ${teamColor}44` }}
+        />
         <div>
           <div style={{ ...MONO, fontSize: 10, color: teamColor, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>
             {player.team} · #{player.jersey} · {player.position}
@@ -299,28 +303,46 @@ function PlayerHeader({ player }) {
           <div style={{ fontSize: 28, fontWeight: 900, color: "#eff8ff", lineHeight: 1.1 }}>
             {player.full_name}
           </div>
-          <div style={{ display: "flex", gap: 20, marginTop: 12, flexWrap: "wrap" }}>
-            <div>
-              <div style={LABEL_STYLE}>Off Rating</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: "#2fb4ff" }}>{fmt(player.off_rating, 1)}</div>
-            </div>
-            <div>
-              <div style={LABEL_STYLE}>Def Rating</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: "#35e3a0" }}>{fmt(player.def_rating, 1)}</div>
-            </div>
-            <div>
-              <div style={LABEL_STYLE}>Overall</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: "#eff8ff" }}>{fmt(player.overall_rating, 1)}</div>
-            </div>
-            {player.war_total != null && (
-              <div>
-                <div style={LABEL_STYLE}>3yr WAR</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: player.war_total >= 0 ? "#35e3a0" : "#ff8d9b" }}>
-                  {fmt(player.war_total, 2)}
+          {isRetired ? (
+            <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 12 }}>
+              {[
+                { label: "Career GP", value: careerGP },
+                { label: "Career G", value: careerG },
+                { label: "Career A", value: careerA },
+                { label: "Career PTS", value: careerPTS },
+                { label: "Peak PTS/82", value: peakPts82.toFixed(1) },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: "#eff8ff" }}>{value}</div>
+                  <div style={{ fontSize: 10, color: "#5e7b98", fontFamily: "'DM Mono',monospace",
+                    textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 2 }}>{label}</div>
                 </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 20, marginTop: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={LABEL_STYLE}>Off Rating</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: "#2fb4ff" }}>{fmt(player.off_rating, 1)}</div>
               </div>
-            )}
-          </div>
+              <div>
+                <div style={LABEL_STYLE}>Def Rating</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: "#35e3a0" }}>{fmt(player.def_rating, 1)}</div>
+              </div>
+              <div>
+                <div style={LABEL_STYLE}>Overall</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: "#eff8ff" }}>{fmt(player.overall_rating, 1)}</div>
+              </div>
+              {player.war_total != null && (
+                <div>
+                  <div style={LABEL_STYLE}>3yr WAR</div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: player.war_total >= 0 ? "#35e3a0" : "#ff8d9b" }}>
+                    {fmt(player.war_total, 2)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -521,7 +543,7 @@ export default function HistoryPageClient({ players }) {
       {playerData && !loading && (
         <div style={{ display: "grid", gap: 20 }}>
           {/* Section 1: Player header */}
-          {playerData.player && <PlayerHeader player={playerData.player} />}
+          {playerData.player && <PlayerHeader player={playerData.player} seasons={playerData.seasons || []} />}
 
           {/* Section 2: Career charts (two-column grid) */}
           {chartSeasons.length > 0 && (
