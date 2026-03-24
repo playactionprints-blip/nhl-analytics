@@ -229,7 +229,7 @@ export default async function TeamsPage({ searchParams }) {
   const [{ data: seasonPlayers }, { data: currentPlayers }, standings] = await Promise.all([
     supabase
       .from("player_seasons")
-      .select("player_id,team,position,season,war_total,war_ev_off,war_ev_def,war_pp,war_pk,war_shooting,war_penalties")
+      .select("player_id,team,season,war_total,war_ev_off,war_ev_def,war_pp,war_pk,war_shooting,war_penalties")
       .in("season", selectedSeasons),
     mostRecentSeason === CURRENT_SEASON
       ? supabase.from("players").select("player_id,team,position,overall_rating")
@@ -245,6 +245,7 @@ export default async function TeamsPage({ searchParams }) {
       war: 0,
       playerCount: 0,
       debugBySeason: {},
+      players: new Set(),
     };
     currentRatingData[abbr] = { ratingSum: 0, ratingCount: 0 };
   }
@@ -253,13 +254,10 @@ export default async function TeamsPage({ searchParams }) {
     const abbr = normalizeTeamCode(player.team);
     if (!abbr || !seasonTeamData[abbr]) continue;
 
-    if (player.season === mostRecentSeason) {
-      seasonTeamData[abbr].playerCount += 1;
-    }
-
     const seasonWar = computeSeasonWar(player);
     if (seasonWar != null) {
       seasonTeamData[abbr].war += seasonWar;
+      seasonTeamData[abbr].players.add(player.player_id);
 
       if (!seasonTeamData[abbr].debugBySeason[player.season]) {
         seasonTeamData[abbr].debugBySeason[player.season] = 0;
@@ -291,7 +289,7 @@ export default async function TeamsPage({ searchParams }) {
           mostRecentSeason === CURRENT_SEASON && ratingData.ratingCount > 0
             ? Number((ratingData.ratingSum / ratingData.ratingCount).toFixed(1))
             : null,
-        playerCount: seasonData.playerCount,
+        playerCount: seasonData.players?.size || 0,
         record,
         color: TEAM_COLOR[abbr] || "#4a6a88",
       };
@@ -315,6 +313,7 @@ export default async function TeamsPage({ searchParams }) {
         Object.entries(seasonTeamData[abbr]?.debugBySeason || {}).map(([season, value]) => [season, Number(value.toFixed(2))])
       ),
       finalWar: teams.find((team) => team.abbr === abbr)?.war ?? null,
+      finalPlayerCount: teams.find((team) => team.abbr === abbr)?.playerCount ?? null,
       finalRank: teams.findIndex((team) => team.abbr === abbr) + 1,
     }));
     console.log("[teams-page] selected seasons", JSON.stringify(selectedSeasons));

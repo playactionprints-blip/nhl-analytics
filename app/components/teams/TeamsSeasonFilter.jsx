@@ -27,11 +27,16 @@ export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
+  const [localSelections, setLocalSelections] = useState(selectedSeasons);
   const rootRef = useRef(null);
 
+  useEffect(() => {
+    setLocalSelections(selectedSeasons);
+  }, [selectedSeasons]);
+
   const closedLabel = useMemo(
-    () => getClosedLabel(selectedSeasons, seasonOptions),
-    [selectedSeasons, seasonOptions]
+    () => getClosedLabel(localSelections, seasonOptions),
+    [localSelections, seasonOptions]
   );
 
   useEffect(() => {
@@ -61,6 +66,8 @@ export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons }) {
 
     if (!normalized.length) return;
 
+    setLocalSelections(normalized);
+
     const params = new URLSearchParams(searchParams?.toString() || "");
     params.delete("season");
     params.delete("war");
@@ -71,9 +78,9 @@ export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons }) {
   }
 
   function toggleSeason(season) {
-    const next = selectedSeasons.includes(season)
-      ? selectedSeasons.filter((value) => value !== season)
-      : [...selectedSeasons, season];
+    const next = localSelections.includes(season)
+      ? localSelections.filter((value) => value !== season)
+      : [...localSelections, season];
 
     if (!next.length) return;
     persistSelections(next);
@@ -138,8 +145,8 @@ export default function TeamsSeasonFilter({ seasonOptions, selectedSeasons }) {
           }}
         >
           {seasonOptions.map((option) => {
-            const checked = selectedSeasons.includes(option.value);
-            const disabled = checked && selectedSeasons.length === 1;
+            const checked = localSelections.includes(option.value);
+            const disabled = checked && localSelections.length === 1;
 
             return (
               <button
