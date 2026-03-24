@@ -168,18 +168,74 @@ function normalizeTeamCode(team) {
   return map[team] || team || null;
 }
 
+function parseToi(toi) {
+  if (!toi) return null;
+  const parts = String(toi).split(":");
+  const mins = Number.parseInt(parts[0], 10);
+  const secs = Number.parseInt(parts[1] || "0", 10);
+  if (Number.isNaN(mins)) return null;
+  return mins + secs / 60;
+}
+
+async function fetchStandingsSummary() {
+  try {
+    const [standingsRes, ppRes] = await Promise.all([
+      fetch("https://api-web.nhle.com/v1/standings/now", { next: { revalidate: 3600 } }),
+      fetch(
+        "https://api.nhle.com/stats/rest/en/team/powerplay?cayenneExp=seasonId=20252026",
+        { next: { revalidate: 3600 } }
+      ),
+    ]);
+
+    const standingsMap = {};
+
+    if (standingsRes.ok) {
+      const standingsData = await standingsRes.json();
+      for (const team of standingsData.standings || []) {
+        const abbr = typeof team.teamAbbrev === "object"
+          ? team.teamAbbrev.default
+          : team.teamAbbrev;
+        if (!abbr) continue;
+        standingsMap[abbr] = {
+          wins: team.wins || 0,
+          losses: team.losses || 0,
+          otLosses: team.otLosses || 0,
+          points: team.points || 0,
+          ppPct: null,
+        };
+      }
+    }
+
+    if (ppRes.ok) {
+      const powerPlayData = await ppRes.json();
+      const teamByFullName = Object.fromEntries(
+        Object.entries(TEAM_FULL).map(([abbr, name]) => [name, abbr])
+      );
+      for (const team of powerPlayData.data || []) {
+        const abbr = teamByFullName[team.teamFullName];
+        if (!abbr || !standingsMap[abbr]) continue;
+        standingsMap[abbr].ppPct = team.powerPlayPct != null ? +(team.powerPlayPct * 100).toFixed(1) : null;
+      }
+    }
+
+    return standingsMap;
+  } catch {
+    return {};
+  }
+}
+
 async function fetchHomeExplorerPlayers() {
   const supabase = createServerClient();
   const { data } = await supabase
     .from("players")
-    .select("player_id,full_name,team,position,war_total,overall_rating,gp")
+    .select("player_id,full_name,team,position,war_total,overall_rating,off_rating,def_rating,rapm_off_pct,rapm_def_pct,gp,toi,cf_pct,xgf_pct,percentiles")
     .order("war_total", { ascending: false, nullsFirst: false })
     .limit(1200);
 
   return data || [];
 }
 
-function buildTeamExplorerData(players = []) {
+function buildTeamExplorerData(players = [], standings = {}) {
   const grouped = new Map();
 
   for (const player of players) {
@@ -194,6 +250,10 @@ function buildTeamExplorerData(players = []) {
         playerCount: 0,
         ratingSum: 0,
         ratingCount: 0,
+        cfWeightedSum: 0,
+        cfToi: 0,
+        xgfWeightedSum: 0,
+        xgfToi: 0,
       });
     }
 
@@ -206,28 +266,48 @@ function buildTeamExplorerData(players = []) {
       entry.ratingSum += Number(player.overall_rating);
       entry.ratingCount += 1;
     }
+    const toi = parseToi(player.toi);
+    if (toi) {
+      if (player.cf_pct != null && Number.isFinite(Number(player.cf_pct))) {
+        entry.cfWeightedSum += Number(player.cf_pct) * toi;
+        entry.cfToi += toi;
+      }
+      if (player.xgf_pct != null && Number.isFinite(Number(player.xgf_pct))) {
+        entry.xgfWeightedSum += Number(player.xgf_pct) * toi;
+        entry.xgfToi += toi;
+      }
+    }
   }
 
-  return Array.from(grouped.values())
+  const ranked = Array.from(grouped.values())
     .map((team) => ({
       ...team,
       war: Number(team.war.toFixed(1)),
       avgRating: team.ratingCount ? Number((team.ratingSum / team.ratingCount).toFixed(1)) : null,
+      avgCF: team.cfToi > 0 ? Number((team.cfWeightedSum / team.cfToi).toFixed(1)) : null,
+      avgXGF: team.xgfToi > 0 ? Number((team.xgfWeightedSum / team.xgfToi).toFixed(1)) : null,
+      record: standings[team.abbr] || null,
     }))
     .sort((a, b) => b.war - a.war || b.playerCount - a.playerCount || a.name.localeCompare(b.name));
+
+  return ranked.map((team, index) => ({
+    ...team,
+    rank: index + 1,
+  }));
 }
 
 export default async function HomePage() {
   const todayString = formatDateString(getTorontoDateParts());
 
-  const [predictionResult, explorerPlayers] = await Promise.all([
+  const [predictionResult, explorerPlayers, standings] = await Promise.all([
     buildPredictionsForDate(todayString).catch(() => ({ predictions: [] })),
     fetchHomeExplorerPlayers().catch(() => []),
+    fetchStandingsSummary().catch(() => ({})),
   ]);
 
   const insightCards = mapInsightCards(predictionResult?.predictions || []);
   const featuredPlayers = explorerPlayers.slice(0, 5);
-  const teamExplorer = buildTeamExplorerData(explorerPlayers);
+  const teamExplorer = buildTeamExplorerData(explorerPlayers, standings);
 
   return (
     <main
