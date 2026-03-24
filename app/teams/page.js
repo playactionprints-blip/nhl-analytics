@@ -11,6 +11,11 @@ export const metadata = {
 
 const CURRENT_SEASON = "25-26";
 const SEASON_OPTIONS = ["25-26", "24-25", "23-24"];
+const WAR_MODE_OPTIONS = [
+  { value: "1y", label: "1-Year WAR", seasons: 1 },
+  { value: "3y", label: "3-Year WAR", seasons: 3 },
+  { value: "5y", label: "5-Year WAR", seasons: 5 },
+];
 
 const TEAM_FULL = {
   ANA: "Anaheim Ducks", BOS: "Boston Bruins", BUF: "Buffalo Sabres",
@@ -61,48 +66,78 @@ function parseSeason(searchParams) {
   return SEASON_OPTIONS.includes(season) ? season : CURRENT_SEASON;
 }
 
-function TeamsSeasonFilterFallback({ value }) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gap: 6,
-        minWidth: 180,
-      }}
-    >
-      <div
-        style={{
-          color: "#5a7a99",
-          fontSize: 10,
-          fontFamily: "'DM Mono',monospace",
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-        }}
-      >
-        Season
-      </div>
-      <div
-        style={{
-          width: "100%",
-          borderRadius: 12,
-          border: "1px solid #213547",
-          background: "#0f1823",
-          color: "#e8f5ff",
-          padding: "10px 12px",
-          fontSize: 14,
-          fontFamily: "'Barlow Condensed',sans-serif",
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
+function parseWarMode(searchParams) {
+  const raw = searchParams?.war;
+  const warMode = Array.isArray(raw) ? raw[0] : raw;
+  return WAR_MODE_OPTIONS.some((option) => option.value === warMode) ? warMode : "1y";
+}
+
+function getSeasonWindow(selectedSeason, warMode) {
+  const count = WAR_MODE_OPTIONS.find((option) => option.value === warMode)?.seasons || 1;
+  const startIndex = SEASON_OPTIONS.indexOf(selectedSeason);
+  if (startIndex === -1) return [CURRENT_SEASON];
+  return SEASON_OPTIONS.slice(startIndex, startIndex + count);
+}
+
+function computeSeasonWar(player) {
+  const directWar = Number(player?.war_total);
+  if (Number.isFinite(directWar)) return directWar;
+
+  const componentKeys = [
+    "war_ev_off",
+    "war_ev_def",
+    "war_pp",
+    "war_pk",
+    "war_shooting",
+    "war_penalties",
+  ];
+
+  const componentValues = componentKeys
+    .map((key) => Number(player?.[key]))
+    .filter((value) => Number.isFinite(value));
+
+  if (!componentValues.length) return null;
+  return componentValues.reduce((sum, value) => sum + value, 0);
 }
 
 function seasonToId(season) {
   const start = `20${String(season).slice(0, 2)}`;
   const end = `20${String(season).slice(3, 5)}`;
   return `${start}${end}`;
+}
+
+function TeamsSeasonFilterFallback({ seasonLabel, warModeLabel }) {
+  const boxStyle = {
+    width: "100%",
+    borderRadius: 12,
+    border: "1px solid #213547",
+    background: "#0f1823",
+    color: "#e8f5ff",
+    padding: "10px 12px",
+    fontSize: 14,
+    fontFamily: "'Barlow Condensed',sans-serif",
+  };
+
+  const labelStyle = {
+    color: "#5a7a99",
+    fontSize: 10,
+    fontFamily: "'DM Mono',monospace",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+  };
+
+  return (
+    <>
+      <div style={{ display: "grid", gap: 6, minWidth: 180 }}>
+        <div style={labelStyle}>Season</div>
+        <div style={boxStyle}>{seasonLabel}</div>
+      </div>
+      <div style={{ display: "grid", gap: 6, minWidth: 180 }}>
+        <div style={labelStyle}>WAR Window</div>
+        <div style={boxStyle}>{warModeLabel}</div>
+      </div>
+    </>
+  );
 }
 
 async function fetchStandingsForSeason(season) {
@@ -161,16 +196,19 @@ async function fetchStandingsForSeason(season) {
 
 export default async function TeamsPage({ searchParams }) {
   const selectedSeason = parseSeason(searchParams);
+  const selectedWarMode = parseWarMode(searchParams);
+  const selectedWarConfig = WAR_MODE_OPTIONS.find((option) => option.value === selectedWarMode) || WAR_MODE_OPTIONS[0];
+  const seasonWindow = getSeasonWindow(selectedSeason, selectedWarMode);
   const supabase = createServerClient();
 
   const [{ data: seasonPlayers }, { data: currentPlayers }, standings] = await Promise.all([
     supabase
       .from("player_seasons")
-      .select("player_id,team,position,war_total")
-      .eq("season", selectedSeason),
-    supabase
-      .from("players")
-      .select("player_id,team,position,overall_rating"),
+      .select("player_id,team,position,season,war_total,war_ev_off,war_ev_def,war_pp,war_pk,war_shooting,war_penalties")
+      .in("season", seasonWindow),
+    selectedSeason === CURRENT_SEASON
+      ? supabase.from("players").select("player_id,team,position,overall_rating")
+      : Promise.resolve({ data: [] }),
     fetchStandingsForSeason(selectedSeason),
   ]);
 
@@ -178,16 +216,22 @@ export default async function TeamsPage({ searchParams }) {
   const currentRatingData = {};
 
   for (const abbr of Object.keys(TEAM_FULL)) {
-    seasonTeamData[abbr] = { war: 0, playerCount: 0 };
+    seasonTeamData[abbr] = { war: 0, playerCount: 0, contributingSeasons: new Set() };
     currentRatingData[abbr] = { ratingSum: 0, ratingCount: 0 };
   }
 
   for (const player of seasonPlayers || []) {
     const abbr = player.team;
     if (!abbr || !seasonTeamData[abbr]) continue;
-    seasonTeamData[abbr].playerCount += 1;
-    if (player.war_total != null && Number.isFinite(Number(player.war_total))) {
-      seasonTeamData[abbr].war += Number(player.war_total);
+
+    if (player.season === selectedSeason) {
+      seasonTeamData[abbr].playerCount += 1;
+    }
+
+    const seasonWar = computeSeasonWar(player);
+    if (seasonWar != null) {
+      seasonTeamData[abbr].war += seasonWar;
+      seasonTeamData[abbr].contributingSeasons.add(player.season);
     }
   }
 
@@ -202,26 +246,59 @@ export default async function TeamsPage({ searchParams }) {
 
   const teams = Object.entries(TEAM_FULL)
     .map(([abbr, name]) => {
-      const seasonData = seasonTeamData[abbr] || { war: 0, playerCount: 0 };
+      const seasonData = seasonTeamData[abbr] || { war: 0, playerCount: 0, contributingSeasons: new Set() };
       const ratingData = currentRatingData[abbr] || { ratingSum: 0, ratingCount: 0 };
       const record = standings[abbr] || null;
+
       return {
         abbr,
         name,
-        war: +seasonData.war.toFixed(1),
-        avgRating: ratingData.ratingCount > 0 ? +(ratingData.ratingSum / ratingData.ratingCount).toFixed(1) : null,
+        war: Number(seasonData.war.toFixed(1)),
+        avgRating:
+          selectedSeason === CURRENT_SEASON && ratingData.ratingCount > 0
+            ? Number((ratingData.ratingSum / ratingData.ratingCount).toFixed(1))
+            : null,
         playerCount: seasonData.playerCount,
         record,
         color: TEAM_COLOR[abbr] || "#4a6a88",
+        contributingSeasons: seasonData.contributingSeasons.size,
       };
     })
     .sort((a, b) => b.war - a.war || b.playerCount - a.playerCount || a.name.localeCompare(b.name));
 
   const seasonLabel = formatSeasonLabel(selectedSeason);
+  const warModeLabel = selectedWarConfig.label;
   const seasonOptions = SEASON_OPTIONS.map((season) => ({
     value: season,
     label: formatSeasonLabel(season),
   }));
+  const partialWindow = seasonWindow.length < selectedWarConfig.seasons;
+
+  if (process.env.NODE_ENV !== "production") {
+    const debugTeams = ["TOR", "FLA", "EDM"].map((abbr) => ({
+      team: abbr,
+      selectedSeason,
+      selectedWarMode,
+      seasonWindow,
+      rawTeamInputs: (seasonPlayers || [])
+        .filter((player) => player.team === abbr)
+        .slice(0, 5)
+        .map((player) => ({
+          season: player.season,
+          war_total: player.war_total,
+          war_ev_off: player.war_ev_off,
+          war_ev_def: player.war_ev_def,
+          computedWar: computeSeasonWar(player),
+        })),
+      computedTeamWar: teams.find((team) => team.abbr === abbr)?.war ?? null,
+    }));
+    console.log("[teams-page] war debug", JSON.stringify(debugTeams));
+    console.log("[teams-page] sorted order", JSON.stringify(teams.slice(0, 8).map((team) => ({
+      abbr: team.abbr,
+      war: team.war,
+      playerCount: team.playerCount,
+    }))));
+  }
 
   return (
     <div
@@ -288,8 +365,20 @@ export default async function TeamsPage({ searchParams }) {
                 marginTop: 6,
               }}
             >
-              Ranked by 1-Year WAR · {seasonLabel} Season
+              Ranked by {warModeLabel} · {seasonLabel} Season
             </div>
+            {partialWindow ? (
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "#4d6f8d",
+                  fontFamily: "'DM Mono',monospace",
+                  marginTop: 6,
+                }}
+              >
+                Using available seasons only ({seasonWindow.map(formatSeasonLabel).join(" + ")})
+              </div>
+            ) : null}
           </div>
 
           <div
@@ -313,32 +402,24 @@ export default async function TeamsPage({ searchParams }) {
                 flexWrap: "wrap",
               }}
             >
-              <Suspense fallback={<TeamsSeasonFilterFallback value={seasonLabel} />}>
-                <TeamsSeasonFilter options={seasonOptions} value={selectedSeason} />
+              <Suspense
+                fallback={
+                  <TeamsSeasonFilterFallback
+                    seasonLabel={seasonLabel}
+                    warModeLabel={warModeLabel}
+                  />
+                }
+              >
+                <TeamsSeasonFilter
+                  seasonOptions={seasonOptions}
+                  seasonValue={selectedSeason}
+                  warModeOptions={WAR_MODE_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  }))}
+                  warModeValue={selectedWarMode}
+                />
               </Suspense>
-              <div
-                style={{
-                  height: 34,
-                  width: 1,
-                  background: "#142433",
-                }}
-              />
-              <div style={{ display: "grid", gap: 4 }}>
-                <div
-                  style={{
-                    color: "#5a7a99",
-                    fontSize: 10,
-                    fontFamily: "'DM Mono',monospace",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                  }}
-                >
-                  Ranking Mode
-                </div>
-                <div style={{ color: "#e8f4ff", fontSize: 14, fontWeight: 800 }}>
-                  1-Year WAR
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -362,7 +443,7 @@ export default async function TeamsPage({ searchParams }) {
             return (
               <Link
                 key={team.abbr}
-                href={`/team/${team.abbr}?season=${selectedSeason}`}
+                href={`/team/${team.abbr}?season=${selectedSeason}&war=${selectedWarMode}`}
                 className="team-card"
                 style={{
                   display: "block",
@@ -444,7 +525,14 @@ export default async function TeamsPage({ searchParams }) {
                         fontSize: 20,
                         fontWeight: 900,
                         lineHeight: 1,
-                        color: team.war > 30 ? "#00e5a0" : team.war > 15 ? "#f0c040" : team.war > 0 ? "#f08040" : "#e05050",
+                        color:
+                          team.war > 30
+                            ? "#00e5a0"
+                            : team.war > 15
+                              ? "#f0c040"
+                              : team.war > 0
+                                ? "#f08040"
+                                : "#e05050",
                         fontFamily: "'Barlow Condensed',sans-serif",
                       }}
                     >
@@ -460,11 +548,16 @@ export default async function TeamsPage({ searchParams }) {
                         letterSpacing: "0.06em",
                       }}
                     >
-                      1Y WAR
+                      {warModeLabel}
                     </div>
                   </div>
 
-                  <div style={{ width: 1, background: "#0d1825" }} />
+                  <div
+                    style={{
+                      width: 1,
+                      background: "#12202e",
+                    }}
+                  />
 
                   <div style={{ flex: 1, textAlign: "center" }}>
                     <div
@@ -472,11 +565,11 @@ export default async function TeamsPage({ searchParams }) {
                         fontSize: 20,
                         fontWeight: 900,
                         lineHeight: 1,
-                        color: team.avgRating != null ? pctColor(team.avgRating) : "#2a4060",
+                        color: pctColor(team.avgRating ?? 0),
                         fontFamily: "'Barlow Condensed',sans-serif",
                       }}
                     >
-                      {team.avgRating ?? "—"}
+                      {team.avgRating != null ? Math.round(team.avgRating) : "—"}
                     </div>
                     <div
                       style={{
@@ -492,7 +585,12 @@ export default async function TeamsPage({ searchParams }) {
                     </div>
                   </div>
 
-                  <div style={{ width: 1, background: "#0d1825" }} />
+                  <div
+                    style={{
+                      width: 1,
+                      background: "#12202e",
+                    }}
+                  />
 
                   <div style={{ flex: 1, textAlign: "center" }}>
                     <div
@@ -500,7 +598,7 @@ export default async function TeamsPage({ searchParams }) {
                         fontSize: 20,
                         fontWeight: 900,
                         lineHeight: 1,
-                        color: "#5a7a99",
+                        color: "#9bdcff",
                         fontFamily: "'Barlow Condensed',sans-serif",
                       }}
                     >
@@ -523,18 +621,6 @@ export default async function TeamsPage({ searchParams }) {
               </Link>
             );
           })}
-        </div>
-
-        <div
-          style={{
-            marginTop: 32,
-            fontSize: 10,
-            color: "#1e3348",
-            fontFamily: "'DM Mono',monospace",
-            textAlign: "center",
-          }}
-        >
-          Data: NHL API · Natural Stat Trick · Evolving-Hockey · TopDownHockey
         </div>
       </div>
     </div>
