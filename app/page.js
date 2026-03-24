@@ -1,5 +1,5 @@
 import { createServerClient } from "@/app/lib/supabase";
-import { TEAM_COLOR } from "@/app/lib/nhlTeams";
+import { TEAM_COLOR, TEAM_FULL } from "@/app/lib/nhlTeams";
 import {
   buildPredictionsForDate,
   confidenceMeta,
