@@ -3,6 +3,8 @@ import { jsonError, jsonWithCache } from "@/app/lib/apiCache";
 
 export const revalidate = 300;
 
+const MISSING_SEASONS = ["17-18", "18-19", "19-20", "20-21", "21-22", "22-23"];
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -95,6 +97,71 @@ export async function GET(request) {
       }
     }
 
+    // Fill missing seasons 17-18 through 22-23 from NHL API game-log
+    const missingSeasonsForPlayer = MISSING_SEASONS.filter((s) => !seasonMap[s]);
+
+    if (missingSeasonsForPlayer.length > 0) {
+      await Promise.all(
+        missingSeasonsForPlayer.map(async (seasonLabel) => {
+          const [start] = seasonLabel.split("-");
+          const startYear = 2000 + parseInt(start);
+          const nhlSeasonId = `${startYear}${startYear + 1}`;
+
+          try {
+            const r = await fetch(
+              `https://api-web.nhle.com/v1/player/${playerId}/game-log/${nhlSeasonId}/2`,
+              { next: { revalidate: 86400 } }
+            );
+            if (!r.ok) return;
+            const d = await r.json();
+
+            const games = d.gameLog || [];
+            if (games.length === 0) return;
+
+            const gp = games.length;
+            const g = games.reduce((sum, gm) => sum + (gm.goals || 0), 0);
+            const a = games.reduce((sum, gm) => sum + (gm.assists || 0), 0);
+            const pts = g + a;
+            const pts_per_82 =
+              gp > 0 ? Math.round((pts / gp) * 82 * 10) / 10 : null;
+            const toi_total = games.reduce((sum, gm) => {
+              const [m, sec] = (gm.toi || "0:00").split(":").map(Number);
+              return sum + m + sec / 60;
+            }, 0);
+
+            const teamCounts = {};
+            games.forEach((gm) => {
+              const t = gm.teamAbbrev || "";
+              teamCounts[t] = (teamCounts[t] || 0) + 1;
+            });
+            const team =
+              Object.entries(teamCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ||
+              null;
+
+            seasonMap[seasonLabel] = {
+              season: seasonLabel,
+              team,
+              gp,
+              g,
+              a,
+              pts,
+              toi_total: Math.round(toi_total * 100) / 100,
+              ixg: null,
+              pts_per_82,
+              war_total: null,
+              war_ev_off: null,
+              war_ev_def: null,
+              war_pp: null,
+              war_pk: null,
+              xgf_pct: null,
+            };
+          } catch {
+            // Season not found for this player — skip silently
+          }
+        })
+      );
+    }
+
     const seasons = Object.values(seasonMap).sort((a, b) =>
       a.season.localeCompare(b.season)
     );
@@ -102,9 +169,10 @@ export async function GET(request) {
     // Fetch birth year from NHL API for age curve
     let birthYear = null;
     try {
-      const r = await fetch(`https://api-web.nhle.com/v1/player/${playerId}/landing`, {
-        next: { revalidate: 86400 },
-      });
+      const r = await fetch(
+        `https://api-web.nhle.com/v1/player/${playerId}/landing`,
+        { next: { revalidate: 86400 } }
+      );
       if (r.ok) {
         const d = await r.json();
         birthYear = d.birthDate ? parseInt(d.birthDate.split("-")[0]) : null;
@@ -119,7 +187,10 @@ export async function GET(request) {
       return { ...s, age };
     });
 
-    return jsonWithCache({ player: playerInfo, seasons: seasonsWithAge, birthYear }, 300);
+    return jsonWithCache(
+      { player: playerInfo, seasons: seasonsWithAge, birthYear },
+      300
+    );
   } catch (error) {
     return jsonError(error.message || "Failed to load player history", 500);
   }
