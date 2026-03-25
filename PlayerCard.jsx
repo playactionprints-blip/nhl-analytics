@@ -710,10 +710,10 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
       fontFamily: "system-ui, -apple-system, sans-serif",
     }}>
       {/* ── Body: 55% left / 45% right ───────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "55% 1fr", gap: 24, paddingTop: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "55% 1fr", gap: 24, paddingTop: 16, borderLeft: `3px solid ${accent}33`, paddingLeft: 14 }}>
 
         {/* ── LEFT PANEL ─────────────────────────────────────────────────── */}
-        <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-start" }}>
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-start", gap: 0, background: `linear-gradient(135deg, ${accent}08 0%, transparent 60%)`, borderRadius: 8, padding: "8px 10px" }}>
 
           {/* WAR Component bars */}
           <div style={sectionLabelStyle}>WAR Components</div>
