@@ -1957,6 +1957,23 @@ if __name__ == '__main__':
         season_results[season_key] = merged
         upload_season_rapm(season_key, merged)
 
+    # Save per-season RAPM to JSON for compute_historical_war.py
+    per_season_rapm = {}
+    for sk, df_s in raw_season_results.items():
+        per_season_rapm[sk] = {
+            str(int(row.player_id)): {
+                'rapm_off': round(float(row.rapm_off), 4),
+                'rapm_def': round(float(row.rapm_def), 4),
+            }
+            for row in df_s.itertuples()
+            if pd.notna(row.rapm_off) and pd.notna(row.rapm_def)
+        }
+    _rapm_json_path = os.path.join(DATA_DIR, 'per_season_rapm.json')
+    with open(_rapm_json_path, 'w') as _f:
+        json.dump(per_season_rapm, _f)
+    _total_ps = sum(len(v) for v in per_season_rapm.values())
+    print(f"\nSaved per-season RAPM to {_rapm_json_path} ({_total_ps} total player-seasons)")
+
     # Step 4: project per-season RAPM to 3-year card RAPM and upload to players
     print(f"\n{'='*60}")
     print("Step 4 — Project 3-year RAPM card")
