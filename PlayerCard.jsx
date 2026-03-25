@@ -52,10 +52,11 @@ function logoUrl(teamAbbr) {
 
 // ── Utility ──────────────────────────────────────────────────────────────────
 function pctColor(v) {
-  if (v >= 85) return "#00e5a0";
-  if (v >= 60) return "#f0c040";
-  if (v >= 40) return "#f08040";
-  return "#e05050";
+  if (v == null) return "#3a5570";
+  if (v >= 80) return "#35e3a0";
+  if (v >= 60) return "#2fb4ff";
+  if (v >= 40) return "#f0c040";
+  return "#ff6b6b";
 }
 function statColor(pct) {
   if (pct >= 52) return "#00e5a0";
@@ -627,235 +628,248 @@ function CompactPercentileSummary({ player }) {
 }
 
 function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
-  const avgToi = parseAvgToi(player.toi);
   const percentiles = player.percentiles || {};
   const profilePct = percentiles["WAR"] ?? percentiles["Overall"] ?? player.overall_rating ?? null;
   const tier = getPlayerTier(player);
   const descriptor = getPlayerDescriptor(player);
   const usage = getUsageSummary(player);
-  const strengths = getTopStrengths(player);
-  const trendInsight = getTrendInsight(player);
-  const positionLabel =
-    player.position === "D"
-      ? "defencemen"
-      : player.position === "G"
-        ? "goalies"
-        : "forwards";
-  const physicalBits = [
-    player.position,
-    age != null ? `Age ${age}` : null,
-    roleLabel(player),
-    formatFeetInches(player.height_cm),
-    formatLbs(player.weight_kg),
-  ].filter(Boolean);
-  const marketValue = player.contract_info?.market_value ?? null;
-  const surplusValue = marketValue != null && player.contract_info?.cap_hit != null
-    ? Number(marketValue) - Number(player.contract_info.cap_hit)
-    : null;
-  const ixgPerGame = player.gp && player.ixg != null ? player.ixg / player.gp : null;
-  const barsLeft = [
-    { label: "Even Strength Offence", value: percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct, color: "#19c2ff" },
-    { label: "Even Strength Defence", value: percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct, color: "#21b8ff" },
-    { label: "Power Play Impact", value: percentiles["PP"], color: "#1bbcff" },
-    { label: "Penalty Kill Impact", value: percentiles["PK"], color: "#1fb0e3" },
-    { label: "Finishing Impact", value: percentiles["Shooting"], color: "#2cc8ff" },
-  ];
-  const barsRight = [
-    { label: "Goals", value: percentiles["Goals/60"], color: "#ffb51f" },
-    { label: "Points", value: percentiles["Pts/60"], color: "#ffb11a" },
-    { label: "Penalty Impact", value: percentiles["Penalties"], color: "#ffb31c" },
-    { label: "Competition*", value: percentiles["Competition"], color: "#f6a91c" },
-    { label: "Teammates*", value: percentiles["Teammates"], color: "#ffb927" },
-  ];
-  const summaryBars = [
-    { label: "Offence Impact", value: percentiles["Off Rating"] ?? player.off_rating, color: "linear-gradient(90deg,#24566d 0%,#16c6ff 100%)", textColor: "#19c2ff" },
-    { label: "Defensive Impact", value: percentiles["Def Rating"] ?? player.def_rating, color: "linear-gradient(90deg,#6f3840 0%,#ff4d57 100%)", textColor: "#ff4d57" },
-    { label: "Finishing Impact", value: percentiles["Shooting"], color: "linear-gradient(90deg,#6d5430 0%,#f1ab1c 100%)", textColor: "#ffb11a" },
-  ];
+  const positionLabel = player.position === "D" ? "defencemen" : "forwards";
+  const isCenter = (player.position || "").toUpperCase() === "C";
+  const foTotal = (player.fow || 0) + (player.fol || 0);
+  const foPct = isCenter && foTotal >= 100 ? ((player.fow || 0) / foTotal * 100) : null;
   const warTrend = player.warTrend || [];
   const impactTrend = player.impactTrend || [];
+  const ixgPer60 = (() => {
+    const avgToi = parseAvgToi(player.toi);
+    if (player.ixg == null || !player.gp || !avgToi) return null;
+    const toi60 = avgToi * player.gp / 60;
+    return toi60 > 0 ? player.ixg / toi60 : null;
+  })();
+
+  const pc = (v) => {
+    if (v == null) return "#3a5570";
+    if (v >= 80) return "#35e3a0";
+    if (v >= 60) return "#2fb4ff";
+    if (v >= 40) return "#f0c040";
+    return "#ff6b6b";
+  };
+
+  const dividerStyle = { height: 1, background: "rgba(255,255,255,0.05)", margin: "14px 0" };
+  const sectionLabelStyle = {
+    fontSize: 9, color: "#3a5570", letterSpacing: "0.12em",
+    textTransform: "uppercase", marginBottom: 12, fontFamily: "'DM Mono',monospace",
+  };
+
+  const warTiles = [
+    { label: "EV OFF", value: percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct },
+    { label: "EV DEF", value: percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct },
+    { label: "PP", value: percentiles["PP"] },
+    { label: "PK", value: percentiles["PK"] },
+    { label: "FINISH", value: percentiles["Shooting"] },
+  ];
+  const productionBars = [
+    { label: "Goals / 60", value: percentiles["Goals/60"] },
+    { label: "Pts / 60", value: percentiles["Pts/60"] },
+    { label: "1st Assists / 60", value: percentiles["1st Assists"] ?? percentiles["a1_60"] },
+    { label: "ixG / 60", value: percentiles["ixG/60"] },
+  ];
+  const contextBars = [
+    { label: "Penalties", value: percentiles["Penalties"] },
+    { label: "Competition *", value: percentiles["Competition"] },
+    { label: "Teammates *", value: percentiles["Teammates"] },
+    ...(isCenter && foPct != null ? [{ label: "Faceoff % \u2746", value: percentiles["FO%"] ?? percentiles["fo_pct"] }] : []),
+  ];
+  const seasonStats = [
+    { label: "POINTS", value: player.pts != null ? String(player.pts) : "\u2014", color: null },
+    { label: "GOALS", value: player.g != null ? String(player.g) : "\u2014", color: null },
+    { label: "AVG TOI", value: player.toi || "\u2014", color: "#35e3a0" },
+    {
+      label: isCenter && foPct != null ? "FACEOFF %" : "ixG / 60",
+      value: isCenter && foPct != null ? `${foPct.toFixed(1)}%` : (ixgPer60 != null ? ixgPer60.toFixed(2) : "\u2014"),
+      color: "#2fb4ff",
+    },
+  ];
 
   return (
     <div style={{
-      background: "#0c1117",
-      border: "1px solid #1c242d",
-      borderRadius: 24,
-      padding: 28,
+      background: "#05090f",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 18,
+      padding: "24px 28px",
       color: "#f1efe9",
-      boxShadow: "0 30px 80px rgba(0,0,0,0.35)",
+      fontFamily: "system-ui, -apple-system, sans-serif",
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, paddingBottom: 22, borderBottom: "1px solid #1b222a" }}>
-        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+      {/* ── Header ───────────────────────────────────────────────────────── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, paddingBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <div style={{
-            width: 66,
-            height: 66,
-            borderRadius: "50%",
-            border: `1px solid ${accent}`,
-            color: accent,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            textAlign: "center",
-            fontFamily: "'DM Mono',monospace",
-            fontSize: 12,
-            fontWeight: 700,
-            lineHeight: 1.1,
+            width: 60, height: 60, borderRadius: "50%",
+            border: `1px solid ${accent}`, color: accent,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            textAlign: "center", fontFamily: "'DM Mono',monospace",
+            fontSize: 11, fontWeight: 700, lineHeight: 1.1,
             background: `${accent}12`,
           }}>
             <div>{teamAbbr.slice(0, 3)}<br />{teamFull.split(" ").slice(-1)[0].slice(0, 3).toUpperCase()}</div>
           </div>
           <div>
-            <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.04em", lineHeight: 1.05 }}>
+            <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.04em", lineHeight: 1.05 }}>
               {player.full_name || player.name}
             </div>
-            <div style={{ fontSize: 16, color: "#8b9097", marginTop: 6 }}>
-              {physicalBits.join(" • ")}
+            <div style={{ fontSize: 12, color: "#6a7a8a", marginTop: 5, fontFamily: "'DM Mono',monospace" }}>
+              {[player.jersey ? `#${player.jersey}` : null, player.position, age != null ? `${age} yrs` : null].filter(Boolean).join(" \u00b7 ")}
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
-              <span style={{ fontSize: 11, color: "#04111d", background: accent, borderRadius: 999, padding: "5px 10px", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+              <span style={{ fontSize: 10, color: "#04111d", background: accent, borderRadius: 999, padding: "4px 9px", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
                 {tier}
               </span>
-              <span style={{ fontSize: 12, color: "#d7ecfb", fontWeight: 700 }}>
-                {descriptor}
-              </span>
-            </div>
-            <div style={{ marginTop: 8, fontSize: 12, color: "#88aac5", fontFamily: "'DM Mono',monospace" }}>
-              Usage: {usage}
+              <span style={{ fontSize: 12, color: "#d7ecfb", fontWeight: 700 }}>{descriptor}</span>
+              <span style={{ fontSize: 11, color: "#5a7a90", fontFamily: "'DM Mono',monospace" }}>{usage}</span>
             </div>
           </div>
         </div>
-
+        {/* WAR badge */}
         <div style={{
-          border: `1px solid ${accent}`,
-          borderRadius: 14,
-          padding: "10px 18px",
-          minWidth: 120,
-          textAlign: "center",
-          background: `${accent}12`,
+          border: `1px solid ${accent}`, borderRadius: 12,
+          padding: "8px 16px", minWidth: 110, textAlign: "center",
+          background: `${accent}12`, flexShrink: 0,
         }}>
-          <div style={{ fontSize: 12, color: accent, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            3-Year WAR
+          <div style={{ fontSize: 10, color: accent, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>3-Yr WAR</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: accent, lineHeight: 1.1 }}>
+            {player.war_total != null ? `${player.war_total > 0 ? "+" : ""}${player.war_total.toFixed(1)}` : "\u2014"}
           </div>
-          <div style={{ fontSize: 24, fontWeight: 900, color: accent, lineHeight: 1.1 }}>
-            {player.war_total != null ? `${player.war_total > 0 ? "+" : ""}${player.war_total.toFixed(1)}` : "—"}
-          </div>
-          <div style={{ fontSize: 9, color: "#8bd9b1", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
-            {profilePct != null ? formatPercentileSuffix(profilePct) : "Value signal building"}
+          <div style={{ fontSize: 9, color: "#8bd9b1", fontFamily: "'DM Mono',monospace", marginTop: 3 }}>
+            {profilePct != null ? formatPercentileSuffix(profilePct) : "building"}
           </div>
         </div>
       </div>
 
-      {/* Main 2-column body: left=tiles, right=charts */}
-      <div style={{ display: "grid", gridTemplateColumns: "60% 1fr", gap: 20, paddingTop: 22, paddingBottom: 22, borderBottom: "1px solid #1b222a" }}>
-        {/* Left: two rows of PercentileTile */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div>
-            <div style={{ fontSize: 10, color: "#6d87a1", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
-              WAR Components
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
-              <PercentileTile label="EV Offence" value={percentiles["EV Off"] ?? percentiles["RAPM Off"] ?? player.rapm_off_pct} />
-              <PercentileTile label="EV Defence" value={percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct} />
-              <PercentileTile label="PP Impact" value={percentiles["PP"]} />
-              <PercentileTile label="PK Impact" value={percentiles["PK"]} />
-              <PercentileTile label="Finishing" value={percentiles["Shooting"]} />
-            </div>
+      {/* ── Body: 55% left / 45% right ───────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "55% 1fr", gap: 24, paddingTop: 20 }}>
+
+        {/* ── LEFT PANEL ─────────────────────────────────────────────────── */}
+        <div style={{ display: "flex", flexDirection: "column" }}>
+
+          {/* WAR Component glass tiles */}
+          <div style={sectionLabelStyle}>WAR Components</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 14 }}>
+            {warTiles.map((tile) => (
+              <div key={tile.label} style={{
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: 8, padding: "10px 6px", textAlign: "center",
+              }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: pc(tile.value), lineHeight: 1, fontFamily: "'DM Mono',monospace" }}>
+                  {tile.value != null ? Math.round(tile.value) : "\u2014"}
+                </div>
+                <div style={{ fontSize: 8, color: "#3a5570", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 5 }}>
+                  {tile.label}
+                </div>
+              </div>
+            ))}
           </div>
-          <div>
-            <div style={{ fontSize: 10, color: "#6d87a1", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
-              Skills &amp; Production
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
-              <PercentileTile label="Goals/60" value={percentiles["Goals/60"]} />
-              <PercentileTile label="Pts/60" value={percentiles["Pts/60"]} />
-              <PercentileTile label="Penalties" value={percentiles["Penalties"]} />
-              <PercentileTile label="Competition" value={percentiles["Competition"]} subtitle="*" />
-              <PercentileTile label="Teammates" value={percentiles["Teammates"]} subtitle="*" />
-            </div>
+
+          <div style={dividerStyle} />
+
+          {/* Production bars */}
+          <div style={sectionLabelStyle}>Production</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+            {productionBars.map((bar) => (
+              <div key={bar.label}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                  <span style={{ fontSize: 11, color: "#8b9097" }}>{bar.label}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: pc(bar.value), fontFamily: "'DM Mono',monospace" }}>
+                    {bar.value != null ? Math.round(bar.value) : "\u2014"}
+                  </span>
+                </div>
+                <div style={{ height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${bar.value ?? 0}%`, background: pc(bar.value), borderRadius: 2 }} />
+                </div>
+              </div>
+            ))}
           </div>
-          <div style={{ fontSize: 10, color: "#4a5a6a", fontFamily: "'DM Mono',monospace", lineHeight: 1.6 }}>
-            * Competition &amp; Teammates are deployment context metrics; less stable than WAR or EV impact.{" "}
-            Stable signals: 3-Year WAR, EV Offence, Goals, Points, ixG.
+
+          <div style={dividerStyle} />
+
+          {/* Context & Deployment bars */}
+          <div style={sectionLabelStyle}>Context &amp; Deployment</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {contextBars.map((bar) => {
+              const isFO = bar.label.includes("\u2746");
+              const displayVal = isFO && foPct != null ? `${foPct.toFixed(1)}%` : (bar.value != null ? Math.round(bar.value) : "\u2014");
+              const barWidth = isFO && foPct != null ? foPct : (bar.value ?? 0);
+              const barColor = isFO ? "#f0c040" : pc(bar.value);
+              return (
+                <div key={bar.label}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                    <span style={{ fontSize: 11, color: "#8b9097" }}>{bar.label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: barColor, fontFamily: "'DM Mono',monospace" }}>
+                      {displayVal}
+                    </span>
+                  </div>
+                  <div style={{ height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${barWidth}%`, background: barColor, borderRadius: 2 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Footnotes */}
+          <div style={{ marginTop: 14, fontSize: 10, color: "#3a5570", fontFamily: "'DM Mono',monospace", lineHeight: 1.7 }}>
+            {"* Deployment context \u2014 less stable than WAR or EV impact."}
+            {isCenter && foPct != null ? " \u2746 Faceoff % shown for centres (\u2265100 draws)." : ""}
           </div>
         </div>
 
-        {/* Right: trend charts */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* ── RIGHT PANEL ────────────────────────────────────────────────── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          <div style={sectionLabelStyle}>Trend (Percentile)</div>
           <TrendPanel
-            title="Player Value Trend"
+            title=""
             subtitle="WAR Percentile"
             data={warTrend}
             lines={[{ key: "war", label: "WAR", color: "#f1efe9" }]}
             accent={accent}
           />
-          {trendInsight ? (
-            <div style={{ color: "#89a5be", fontSize: 12, lineHeight: 1.6, fontFamily: "'DM Mono',monospace" }}>
-              {trendInsight}
-            </div>
-          ) : null}
           <TrendPanel
-            title=" "
-            subtitle={<span>EV <span style={{ color: "#19c2ff" }}>Offence</span> vs <span style={{ color: "#ff4d57" }}>Defence</span></span>}
+            title=""
+            subtitle={<span><span style={{ color: "#2fb4ff" }}>EV Off</span> vs <span style={{ color: "#ff6b6b" }}>Def</span> vs <span style={{ color: "#35e3a0" }}>Finish</span></span>}
             data={impactTrend}
             lines={[
-              { key: "off", label: "EV Off", color: "#19c2ff" },
-              { key: "def", label: "EV Def", color: "#ff4d57" },
+              { key: "off", label: "EV Off", color: "#2fb4ff" },
+              { key: "def", label: "EV Def", color: "#ff6b6b" },
+              { key: "finishing", label: "Finishing", color: "#35e3a0" },
             ]}
             accent={accent}
           />
+
+          <div style={dividerStyle} />
+
+          <div style={sectionLabelStyle}>Current Season</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {seasonStats.map((stat) => (
+              <div key={stat.label} style={{
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: 8, padding: "10px 12px", textAlign: "center",
+              }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: stat.color || "#f1efe9", lineHeight: 1, fontFamily: "'DM Mono',monospace" }}>
+                  {stat.value}
+                </div>
+                <div style={{ fontSize: 8, color: "#3a5570", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 5 }}>
+                  {stat.label}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Bottom row: Usage & Contract + At a glance */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, paddingTop: 22 }}>
-        <div style={{
-          background: "#171d24",
-          border: "1px solid #272f38",
-          borderRadius: 16,
-          padding: 18,
-          alignSelf: "start",
-        }}>
-          <div style={{ fontSize: 12, color: "#7a7f86", fontFamily: "'DM Mono',monospace", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 14 }}>
-            Usage &amp; Contract
-          </div>
-          {[
-            { label: "Usage", value: usage },
-            { label: "TOI", value: avgToi != null ? `${avgToi.toFixed(1)} minutes per game` : null },
-            { label: "PP TOI", value: player.gp && player.toi_pp ? `${fmtMinSec(player.toi_pp / player.gp)} per game` : null },
-            { label: "PK TOI", value: player.gp && player.toi_pk ? `${fmtMinSec(player.toi_pk / player.gp)} per game` : null },
-            { label: "Cap hit", value: player.contract_info?.cap_hit ? `${formatMoneyShort(player.contract_info.cap_hit)}${player.contract_info?.years_remaining ? ` × ${player.contract_info.years_remaining} yrs` : ""}` : null },
-            { label: "Market value", value: marketValue != null ? formatMoneyShort(marketValue) : null },
-            { label: "Surplus value", value: surplusValue != null ? formatSigned(surplusValue / 1_000_000, 1).replace("+", "+$").replace("-", "-$") + "M" : null, color: surplusValue > 0 ? "#32e39a" : "#f1efe9" },
-            { label: "Expiry", value: player.contract_info?.expiry ? `${player.contract_info.expiry}` : null },
-          ].filter((item) => item.value != null).map((item, index, arr) => (
-            <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: index === arr.length - 1 ? "none" : "1px solid #252c34" }}>
-              <span style={{ fontSize: 15, color: "#8b9097" }}>{item.label}</span>
-              <span style={{ fontSize: 15, color: item.color || "#f1efe9", fontWeight: 700, textAlign: "right" }}>{item.value}</span>
-            </div>
-          ))}
-        </div>
-        <div style={{ display: "grid", gap: 10, padding: "14px 16px", borderRadius: 16, border: "1px solid #202a34", background: "#141a21", alignSelf: "start" }}>
-          <div style={{ fontSize: 10, color: "#6d87a1", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-            At a glance
-          </div>
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ color: "#eef8ff", fontSize: 17, fontWeight: 800 }}>
-              {descriptor}
-            </div>
-            <div style={{ color: "#90a8bc", fontSize: 13, lineHeight: 1.6 }}>
-              {profilePct != null ? `${formatPercentileSuffix(profilePct)} overall player value signal.` : "Player value signal still building."}
-            </div>
-          </div>
-          {strengths.length ? (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {strengths.map((item) => (
-                <span key={item.label} style={{ fontSize: 11, color: "#dff2ff", borderRadius: 999, border: "1px solid #234663", background: "#0f1b28", padding: "6px 10px" }}>
-                  {item.label}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </div>
+      {/* ── Footer watermark ─────────────────────────────────────────────── */}
+      <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.05)", textAlign: "center", fontSize: 8, color: "#2a3a4a", fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+        {"3-Year Weighted Avg \u00b7 Percentile Rank Among "}{positionLabel.charAt(0).toUpperCase() + positionLabel.slice(1)}{" \u00b7 NHL Analytics"}
       </div>
     </div>
   );
@@ -1194,7 +1208,7 @@ function PlayerCard({ player }) {
   };
 
   return (
-    <div className="pc-card" style={{ width:cardWidth, background:"linear-gradient(160deg,#0c1a28 0%,#081016 100%)", borderRadius:16, border:"1px solid #1e2d40", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
+    <div className="pc-card" style={{ width:cardWidth, background:"#05090f", borderRadius:18, border:"1px solid rgba(255,255,255,0.08)", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
       {/* Top accent bar */}
       <div style={{ height:3, background:`linear-gradient(90deg,${accent},${accent}88,transparent)` }} />
 
@@ -2048,8 +2062,10 @@ function enrichPlayersWithSeasonTrends(players, seasonStats) {
     });
     ["F", "D", "G"].forEach((group) => {
       const evRows = seasonLookups[season][`${group}_ev`] || [];
+      const allRows = seasonLookups[season][group] || [];
       seasonLookups[season][`${group}_off`] = computePercentileLookup(evRows, "war_ev_off");
       seasonLookups[season][`${group}_def`] = computePercentileLookup(evRows, "war_ev_def");
+      seasonLookups[season][`${group}_finishing`] = computePercentileLookup(allRows, "war_shooting");
       seasonLookups[season][`${group}_ev_by_id`] = new Set(evRows.map((row) => row.player_id));
     });
   });
@@ -2068,12 +2084,13 @@ function enrichPlayersWithSeasonTrends(players, seasonStats) {
       const evQualified = seasonLookups[season][`${group}_ev_by_id`]?.has(player.player_id);
       const offPct = evQualified ? seasonLookups[season][`${group}_off`][player.player_id] : null;
       const defPct = evQualified ? seasonLookups[season][`${group}_def`][player.player_id] : null;
+      const finishingPct = seasonLookups[season][`${group}_finishing`]?.[player.player_id] ?? null;
 
       if (warPct != null) {
         warTrend.push({ season, war: warPct });
       }
-      if (offPct != null || defPct != null) {
-        impactTrend.push({ season, off: offPct ?? null, def: defPct ?? null });
+      if (offPct != null || defPct != null || finishingPct != null) {
+        impactTrend.push({ season, off: offPct ?? null, def: defPct ?? null, finishing: finishingPct ?? null });
       }
     });
 
