@@ -464,9 +464,26 @@ function TrendPanel({ title, subtitle, data, lines, accent }) {
           <XAxis dataKey="season" tick={{ fontSize: 11, fill: "#7f8388", fontFamily: "DM Mono,monospace" }} axisLine={false} tickLine={false} />
           <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#7f8388", fontFamily: "DM Mono,monospace" }} axisLine={false} tickLine={false} />
           <Tooltip
-            contentStyle={{ background: "#0a1016", border: "1px solid #283240", borderRadius: 10, fontSize: 12, fontFamily: "DM Mono,monospace" }}
-            labelStyle={{ color: "#9da4ad" }}
-            formatter={(v, _name, item) => [formatChartValue(v), item?.payload?.label || item?.name || "Value"]}
+            content={({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              const seen = new Set();
+              const filtered = [...payload].reverse().filter(p => {
+                const key = `${p.color}|${Math.round(p.value ?? 0)}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              }).reverse();
+              return (
+                <div style={{ background: "#0a1016", border: "1px solid #283240", borderRadius: 10, padding: "8px 10px", fontSize: 12, fontFamily: "DM Mono,monospace" }}>
+                  {label && <div style={{ color: "#9da4ad", marginBottom: 4 }}>{label}</div>}
+                  {filtered.map((p, i) => (
+                    <div key={i} style={{ color: p.color, marginTop: i > 0 ? 2 : 0 }}>
+                      {p.name}: {formatChartValue(p.value)}
+                    </div>
+                  ))}
+                </div>
+              );
+            }}
           />
           {lines.map((line) => (
             <Area
@@ -636,7 +653,10 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
   const positionLabel = player.position === "D" ? "defencemen" : "forwards";
   const isCenter = (player.position || "").toUpperCase() === "C";
   const foTotal = (player.fow || 0) + (player.fol || 0);
-  const foPct = isCenter && foTotal >= 100 ? ((player.fow || 0) / foTotal * 100) : null;
+  const foPctRaw = foTotal >= 100
+    ? ((player.fow || 0) / foTotal * 100)
+    : (player.fo_pct != null ? player.fo_pct : null);
+  const foPct = isCenter && foPctRaw != null ? foPctRaw : null;
   const warTrend = player.warTrend || [];
   const impactTrend = player.impactTrend || [];
   const ixgPer60 = (() => {
@@ -703,24 +723,20 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
       <div style={{ display: "grid", gridTemplateColumns: "55% 1fr", gap: 24, paddingTop: 16 }}>
 
         {/* ── LEFT PANEL ─────────────────────────────────────────────────── */}
-        <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-start" }}>
 
-          {/* WAR Component glass tiles */}
+          {/* WAR Component bars */}
           <div style={sectionLabelStyle}>WAR Components</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 10 }}>
             {warTiles.map((tile) => (
-              <div key={tile.label} style={{
-                width: 80, flexShrink: 0,
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.07)",
-                borderRadius: 8, padding: "8px 4px", textAlign: "center",
-              }}>
-                <div style={{ fontSize: 17, fontWeight: 800, color: pc(tile.value), lineHeight: 1, fontFamily: "'DM Mono',monospace" }}>
+              <div key={tile.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 11, color: "#7a9ab5", width: 110, flexShrink: 0 }}>{tile.label}</span>
+                <div style={{ width: 160, flexShrink: 0, height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${tile.value ?? 0}%`, background: pc(tile.value), borderRadius: 2 }} />
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 700, color: pc(tile.value), width: 36, textAlign: "right", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>
                   {tile.value != null ? Math.round(tile.value) : "\u2014"}
-                </div>
-                <div style={{ fontSize: 8, color: "#3a5570", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 4 }}>
-                  {tile.label}
-                </div>
+                </span>
               </div>
             ))}
           </div>
@@ -1165,7 +1181,7 @@ function PlayerCard({ player }) {
       <div style={{ height:3, background:`linear-gradient(90deg,${accent},${accent}88,transparent)` }} />
 
       {/* Header */}
-      <div style={{ padding:"20px 24px 16px", background:`linear-gradient(135deg,${accent}22 0%,transparent 60%)`, borderBottom:"1px solid #1a2535", position:"relative", overflow:"hidden" }}>
+      <div style={{ padding:"16px 20px", background:`linear-gradient(135deg,${accent}22 0%,transparent 60%)`, borderBottom:"1px solid #1a2535", position:"relative", overflow:"hidden" }}>
         {/* Jersey number watermark */}
         <div className="pc-jersey" style={{ position:"absolute", right:-8, top:-10, fontSize:110, fontWeight:900, color:`${accent}18`, lineHeight:1, fontFamily:"'Barlow Condensed',sans-serif", userSelect:"none", letterSpacing:"-4px" }}>
           {player.jersey || ""}
@@ -1177,12 +1193,12 @@ function PlayerCard({ player }) {
 
           <div style={{ flex:1 }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
-              <span style={{ fontSize:11, color:accent, fontFamily:"'DM Mono',monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
+              <span style={{ fontSize:10, color:accent, fontFamily:"'DM Mono',monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
                 {player.jersey ? `#${player.jersey}` : ""}{player.position ? ` · ${player.position}` : ""}{age ? ` · ${age} yrs` : ""}
               </span>
             </div>
-            <div style={{ fontSize:26, fontWeight:800, color:"#e8f4ff", lineHeight:1, letterSpacing:"-0.5px" }}>{firstName}</div>
-            <div style={{ fontSize:30, fontWeight:900, color:"white", lineHeight:1, letterSpacing:"-1px", textTransform:"uppercase" }}>{lastName}</div>
+            <div style={{ fontSize:18, fontWeight:800, color:"#e8f4ff", lineHeight:1, letterSpacing:"-0.5px" }}>{firstName}</div>
+            <div style={{ fontSize:22, fontWeight:900, color:"white", lineHeight:1, letterSpacing:"-1px", textTransform:"uppercase" }}>{lastName}</div>
             {!isGoalie && (
               <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginTop:8 }}>
                 <span style={{ fontSize:10, color:"#04111d", background:accent, borderRadius:999, padding:"4px 9px", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>
@@ -1193,10 +1209,9 @@ function PlayerCard({ player }) {
                 </span>
               </div>
             )}
-            {/* Team row with logo */}
-            <div style={{ marginTop:6, display:"flex", alignItems:"center", gap:6 }}>
+            {/* Team logo */}
+            <div style={{ marginTop:6 }}>
               <TeamLogo abbr={teamAbbr} size={20} />
-              <span style={{ fontSize:11, color:"#4a6a88", fontFamily:"'DM Mono',monospace" }}>{teamFull}</span>
             </div>
             {!isGoalie && (
               <div style={{ marginTop:6, fontSize:10, color:"#7fa0bc", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em" }}>
@@ -1207,7 +1222,7 @@ function PlayerCard({ player }) {
         </div>
 
         {/* WAR / position badge top right */}
-        <div className="pc-war-badge" style={{ position:"absolute", top:20, right:24, background:"#00e5a015", border:"1px solid #00e5a044", borderRadius:10, padding:"14px 20px", textAlign:"center", zIndex:2 }}>
+        <div className="pc-war-badge" style={{ position:"absolute", top:20, right:24, background:"#00e5a015", border:"1px solid #00e5a044", borderRadius:10, padding:"10px 14px", textAlign:"center", zIndex:2 }}>
           {isGoalie ? (
             <>
               <div style={{ fontSize:14, fontWeight:900, color:"#00e5a0", lineHeight:1 }}>G</div>
