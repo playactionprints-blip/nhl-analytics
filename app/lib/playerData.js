@@ -61,7 +61,10 @@ function buildPercentilePayload(player) {
   };
 }
 
-function buildCurrentSeasonPayload(player) {
+function buildCurrentSeasonPayload(player, seasonRows = []) {
+  const psRow = seasonRows.find((s) => s.season === "25-26");
+  const fow = player.fow || psRow?.fow || null;
+  const fol = player.fol || psRow?.fol || null;
   const assists = (player.a1 || 0) + (player.a2 || 0);
   return {
     gp: toNumber(player.gp, 0),
@@ -76,8 +79,10 @@ function buildCurrentSeasonPayload(player) {
     gva: toNumber(player.gva, 0),
     blk: toNumber(player.blk, 0),
     hits: toNumber(player.hits, 0),
-    fow: toNumber(player.fow, 0),
-    fol: toNumber(player.fol, 0),
+    fow: toNumber(fow, 0),
+    fol: toNumber(fol, 0),
+    toi_pp: toNumber(player.toi_pp, null),
+    toi_pk: toNumber(player.toi_pk, null),
     ixg: toNumber(player.ixg, null),
     icf: toNumber(player.icf, null),
     iff: toNumber(player.iff, null),
@@ -121,7 +126,7 @@ function buildPlayerResponse(player, seasonRows, lastUpdated) {
     position: player.position,
     jersey: player.jersey ?? null,
     headshotUrl: player.headshot_url ?? null,
-    currentSeason: buildCurrentSeasonPayload(player),
+    currentSeason: buildCurrentSeasonPayload(player, seasonRows),
     war: buildWarPayload(player),
     rapm: buildRapmPayload(player),
     percentiles: buildPercentilePayload(player),
