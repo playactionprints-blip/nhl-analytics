@@ -665,19 +665,19 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
     { label: "EV DEF", value: percentiles["EV Def"] ?? percentiles["RAPM Def"] ?? player.rapm_def_pct },
     { label: "PP", value: percentiles["PP"] },
     { label: "PK", value: percentiles["PK"] },
-    { label: "FINISH", value: percentiles["Shooting"] },
+    { label: "FINISH", value: percentiles["Finishing"] },
   ];
   const productionBars = [
     { label: "Goals / 60", value: percentiles["Goals/60"] },
     { label: "Pts / 60", value: percentiles["Pts/60"] },
-    { label: "1st Assists / 60", value: percentiles["1st Assists"] ?? percentiles["a1_60"] },
+    { label: "1st Assists / 60", value: percentiles["1st Assists/60"] },
     { label: "ixG / 60", value: percentiles["ixG/60"] },
   ];
   const contextBars = [
     { label: "Penalties", value: percentiles["Penalties"] },
     { label: "Competition *", value: percentiles["Competition"] },
     { label: "Teammates *", value: percentiles["Teammates"] },
-    ...(isCenter && foPct != null ? [{ label: "Faceoff % \u2746", value: percentiles["FO%"] ?? percentiles["fo_pct"] }] : []),
+    ...(isCenter && foPct != null ? [{ label: "Faceoff % \u2746", value: percentiles["FO%"] }] : []),
   ];
   const seasonStats = [
     { label: "POINTS", value: player.pts != null ? String(player.pts) : "\u2014", color: null },
@@ -695,60 +695,15 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
       background: "#05090f",
       border: "1px solid rgba(255,255,255,0.08)",
       borderRadius: 18,
-      padding: "24px 28px",
+      padding: "20px 24px",
       color: "#f1efe9",
       fontFamily: "system-ui, -apple-system, sans-serif",
     }}>
-      {/* ── Header ───────────────────────────────────────────────────────── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, paddingBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <div style={{
-            width: 60, height: 60, borderRadius: "50%",
-            border: `1px solid ${accent}`, color: accent,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            textAlign: "center", fontFamily: "'DM Mono',monospace",
-            fontSize: 11, fontWeight: 700, lineHeight: 1.1,
-            background: `${accent}12`,
-          }}>
-            <div>{teamAbbr.slice(0, 3)}<br />{teamFull.split(" ").slice(-1)[0].slice(0, 3).toUpperCase()}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.04em", lineHeight: 1.05 }}>
-              {player.full_name || player.name}
-            </div>
-            <div style={{ fontSize: 12, color: "#6a7a8a", marginTop: 5, fontFamily: "'DM Mono',monospace" }}>
-              {[player.jersey ? `#${player.jersey}` : null, player.position, age != null ? `${age} yrs` : null].filter(Boolean).join(" \u00b7 ")}
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
-              <span style={{ fontSize: 10, color: "#04111d", background: accent, borderRadius: 999, padding: "4px 9px", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
-                {tier}
-              </span>
-              <span style={{ fontSize: 12, color: "#d7ecfb", fontWeight: 700 }}>{descriptor}</span>
-              <span style={{ fontSize: 11, color: "#5a7a90", fontFamily: "'DM Mono',monospace" }}>{usage}</span>
-            </div>
-          </div>
-        </div>
-        {/* WAR badge */}
-        <div style={{
-          border: `1px solid ${accent}`, borderRadius: 12,
-          padding: "8px 16px", minWidth: 110, textAlign: "center",
-          background: `${accent}12`, flexShrink: 0,
-        }}>
-          <div style={{ fontSize: 10, color: accent, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>3-Yr WAR</div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: accent, lineHeight: 1.1 }}>
-            {player.war_total != null ? `${player.war_total > 0 ? "+" : ""}${player.war_total.toFixed(1)}` : "\u2014"}
-          </div>
-          <div style={{ fontSize: 9, color: "#8bd9b1", fontFamily: "'DM Mono',monospace", marginTop: 3 }}>
-            {profilePct != null ? formatPercentileSuffix(profilePct) : "building"}
-          </div>
-        </div>
-      </div>
-
       {/* ── Body: 55% left / 45% right ───────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "55% 1fr", gap: 24, paddingTop: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "55% 1fr", gap: 24, paddingTop: 16 }}>
 
         {/* ── LEFT PANEL ─────────────────────────────────────────────────── */}
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
 
           {/* WAR Component glass tiles */}
           <div style={sectionLabelStyle}>WAR Components</div>
@@ -823,7 +778,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
         </div>
 
         {/* ── RIGHT PANEL ────────────────────────────────────────────────── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
 
           <div style={sectionLabelStyle}>Trend (Percentile)</div>
           <TrendPanel
@@ -1255,7 +1210,7 @@ function PlayerCard({ player }) {
         </div>
 
         {/* WAR / position badge top right */}
-        <div className="pc-war-badge" style={{ position:"absolute", top:20, right:24, background:"#00e5a015", border:"1px solid #00e5a044", borderRadius:8, padding:"6px 12px", textAlign:"center", zIndex:2 }}>
+        <div className="pc-war-badge" style={{ position:"absolute", top:20, right:24, background:"#00e5a015", border:"1px solid #00e5a044", borderRadius:10, padding:"14px 20px", textAlign:"center", zIndex:2 }}>
           {isGoalie ? (
             <>
               <div style={{ fontSize:14, fontWeight:900, color:"#00e5a0", lineHeight:1 }}>G</div>
@@ -1263,8 +1218,13 @@ function PlayerCard({ player }) {
             </>
           ) : (
             <>
-              <div style={{ fontSize:20, fontWeight:900, color:"#00e5a0", lineHeight:1 }}>{player.war_total != null ? `${player.war_total > 0 ? "+" : ""}${player.war_total.toFixed(1)}` : "—"}</div>
-              <div style={{ fontSize:9, color:"#00e5a088", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em" }}>3-Year WAR</div>
+              <div style={{ fontSize:32, fontWeight:900, color:"#00e5a0", lineHeight:1 }}>{player.war_total != null ? `${player.war_total > 0 ? "+" : ""}${player.war_total.toFixed(1)}` : "—"}</div>
+              <div style={{ fontSize:9, color:"#00e5a088", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginTop:4 }}>3-Year WAR</div>
+              {player.percentiles?.["WAR"] != null && (
+                <div style={{ fontSize:9, color:"#00e5a066", fontFamily:"'DM Mono',monospace", marginTop:2 }}>
+                  {formatPercentileSuffix(player.percentiles["WAR"])}
+                </div>
+              )}
             </>
           )}
         </div>

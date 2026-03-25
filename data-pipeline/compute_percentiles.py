@@ -45,6 +45,18 @@ cols = (
 players = sb.table('players').select(cols).neq('position', 'G').execute().data
 print(f"Fetched {len(players)} skaters")
 
+# ── Fetch current-season a1 from player_seasons ──────────────────────────────
+CURRENT_SEASON = '25-26'
+ps_rows = sb.table('player_seasons').select('player_id,a1,toi').eq('season', CURRENT_SEASON).execute().data
+a1_lookup = {}
+for row in ps_rows:
+    pid = row['player_id']
+    a1 = row.get('a1')
+    toi_min = row.get('toi')
+    if a1 is not None and toi_min and float(toi_min) > 0:
+        a1_lookup[pid] = float(a1) / (float(toi_min) / 60.0)
+print(f"Fetched a1_60 for {len(a1_lookup)} players from player_seasons")
+
 rows = []
 for p in players:
     gp = safe(p.get('gp')) or 0
@@ -87,6 +99,7 @@ for p in players:
         'off_rating': safe(p.get('off_rating')),
         'def_rating': safe(p.get('def_rating')),
         'overall_rating': safe(p.get('overall_rating')),
+        'a1_60': a1_lookup.get(p['player_id']),
     })
 
 df = pd.DataFrame(rows)
@@ -106,7 +119,7 @@ metric_labels = {
     'war_ev_def': 'EV Def',
     'war_pp': 'PP',
     'war_pk': 'PK',
-    'war_shooting': 'Shooting',
+    'war_shooting': 'Finishing',
     'war_penalties': 'Penalties',
     'rapm_off': 'RAPM Off',
     'rapm_def': 'RAPM Def',
@@ -115,6 +128,7 @@ metric_labels = {
     'off_rating': 'Off Rating',
     'def_rating': 'Def Rating',
     'overall_rating': 'Overall',
+    'a1_60': '1st Assists/60',
 }
 
 for group_key in ('F', 'D'):
