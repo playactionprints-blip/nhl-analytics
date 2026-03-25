@@ -143,7 +143,7 @@ CARD_SEASON_WEIGHTS = {
     '23-24': 0.20,
 }
 MIN_TOI_MINUTES = 200
-MAX_RAPM = 5.0
+MAX_RAPM = 3.0
 QOT_QOC_TOI_SHRINK = 600.0
 QOT_QOC_MAX_ABS = 2.5
 QOT_IMPACT_OFF_WEIGHT = 0.7
@@ -754,13 +754,17 @@ def _compute_toi_from_stints(stints_df):
     return {pid: t / 60.0 for pid, t in toi_sec.items()}
 
 
-def run_prior_informed_rapm(stints_by_season, player_seasons_df):
+def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_filter=None):
     """
     Daisy chain RAPM across all available seasons (oldest first).
     Each season's output becomes the prior for the next, propagating
     player identity information forward through time.
     Returns dict: {season: raw_results_df} with rapm_off/rapm_def columns.
     Card projection uses only the 3 most recent seasons via CARD_SEASON_WEIGHTS.
+
+    current_season_filter: optional set of player_ids with ≥200 min in the current season
+      (25-26). Passed only to the '25-26' build_rapm() call to exclude low-sample
+      call-ups that lack both current-season TOI and a prior.
     """
     # Sort chronologically by season start year
     seasons_in_order = sorted(
@@ -847,7 +851,8 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df):
                 print(f"    DIAGNOSTIC failed: {_e}")
 
         print(f"  Fitting prior-informed RAPM for {season}...")
-        raw_results = build_rapm(stints, priors=season_priors)
+        csf = current_season_filter if season == '25-26' else None
+        raw_results = build_rapm(stints, priors=season_priors, current_season_filter=csf)
         all_season_results[season] = raw_results
 
         # Feed this season's results forward as the next season's prior
@@ -1241,7 +1246,7 @@ def fetch_all_stints(game_ids, season_cfg):
 
 
 # ── Step 3: Build RAPM regression ─────────────────────────────────────────────
-def build_rapm(stints_df, priors=None):
+def build_rapm(stints_df, priors=None, current_season_filter=None):
     """
     Fit offense/defense RAPM on combined stints with separate coefficient blocks.
     Each observation models one team's xG rate in a stint:
@@ -1254,6 +1259,11 @@ def build_rapm(stints_df, priors=None):
       When provided, the prior is subtracted from the target before regression
       and added back to the coefficients after, anchoring players to reasonable
       box-score estimates so collinearity can't push them to absurd values.
+
+    current_season_filter: optional set of player_ids with ≥200 min current-season TOI.
+      When provided, players NOT in this set are excluded from the regression matrix
+      unless they have a prior (established history). Prevents 3-GP call-ups from
+      polluting the matrix via inflated prior chain values.
     """
     stints_df = stints_df[stints_df['duration_seconds'] >= 10].copy()
     n_stints  = len(stints_df)
@@ -1286,15 +1296,34 @@ def build_rapm(stints_df, priors=None):
     toi_away = _explode_toi('away_players')
     player_toi_sec = toi_home.add(toi_away, fill_value=0)
 
-    # Pre-regression TOI filter: exclude players with <300 min 5v5 TOI from the regression
+    # Pre-regression TOI filter: exclude players with <500 min 5v5 TOI from the regression
     # matrix to suppress small-sample noise. Excluded players receive RAPM=0 (league mean).
-    MIN_REGRESSION_TOI_SEC = 300 * 60
+    MIN_REGRESSION_TOI_SEC = 500 * 60
     excluded_pids = {p for p in all_pids if player_toi_sec.get(p, 0) < MIN_REGRESSION_TOI_SEC}
-    all_pids  = sorted(p for p in all_pids if player_toi_sec.get(p, 0) >= MIN_REGRESSION_TOI_SEC)
+    # Fix 2: also exclude players not in current_season_filter (if provided) unless they
+    # have a strong prior history (prior exists AND ≥500 min combined in this season's stints).
+    if current_season_filter is not None:
+        newly_excluded = set()
+        for p in list(excluded_pids):
+            pass  # already excluded — keep
+        qualified_pids = sorted(p for p in all_pids if player_toi_sec.get(p, 0) >= MIN_REGRESSION_TOI_SEC)
+        for p in list(qualified_pids):
+            if p not in current_season_filter:
+                if not (priors and p in priors):
+                    newly_excluded.add(p)
+        excluded_pids = excluded_pids | newly_excluded
+        all_pids = sorted(p for p in all_pids
+                          if player_toi_sec.get(p, 0) >= MIN_REGRESSION_TOI_SEC
+                          and p not in newly_excluded)
+        if newly_excluded:
+            print(f"  Current-season filter excluded {len(newly_excluded)} more players "
+                  f"(no 25-26 TOI ≥200 min and no prior)")
+    else:
+        all_pids = sorted(p for p in all_pids if player_toi_sec.get(p, 0) >= MIN_REGRESSION_TOI_SEC)
     pid_idx   = {p: i for i, p in enumerate(all_pids)}
     n_players = len(all_pids)
-    print(f"  Pre-regression TOI filter (≥300 min): {n_players} in matrix, "
-          f"{len(excluded_pids)} excluded (will receive RAPM=0)")
+    print(f"  Pre-regression TOI filter (≥500 min): {n_players} in matrix, "
+          f"{len(excluded_pids)} excluded (will receive shrunk prior or RAPM=0)")
 
     has_season_weight = 'season_weight' in stints_df.columns
     print(f"Building RAPM matrix: {n_stints*2:,} rows × {n_players * 2 + n_context} features"
@@ -1371,7 +1400,7 @@ def build_rapm(stints_df, priors=None):
 
     X = sparse.csr_matrix((vals, (r_idx, c_idx)), shape=(n_stints * 2, n_players * 2 + n_context))
 
-    alphas = [10.0, 50.0, 100.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0]
+    alphas = [100.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0, 50000.0]
 
     print("Fitting joint offense/defense RAPM (RidgeCV)...")
     model = RidgeCV(alphas=alphas, fit_intercept=True)
@@ -1382,12 +1411,41 @@ def build_rapm(stints_df, priors=None):
     rapm_off = coef[:n_players].copy()
     rapm_def = -coef[n_players:n_players * 2].copy()  # lower xGA allowed = better defense
 
+    # Fix 4: hard cap before adding priors back — clips regression blow-up artifacts
+    n_clipped = int(((rapm_off > MAX_RAPM) | (rapm_off < -MAX_RAPM) |
+                     (rapm_def > MAX_RAPM) | (rapm_def < -MAX_RAPM)).sum())
+    if n_clipped:
+        print(f"  Hard cap ±{MAX_RAPM}: clipping {n_clipped} player coefficient(s)")
+    rapm_off = np.clip(rapm_off, -MAX_RAPM, MAX_RAPM)
+    rapm_def = np.clip(rapm_def, -MAX_RAPM, MAX_RAPM)
+
     # Add priors back to recover final RAPM estimates
     if priors:
         for i, pid in enumerate(all_pids):
             p = priors.get(pid, {})
             rapm_off[i] += p.get('off', 0.0)
             rapm_def[i] += p.get('def', 0.0)
+
+    # Fix 5: per-season diagnostics
+    print(f"  Diagnostics ({len(all_pids)} players in matrix):")
+    print(f"    Off: mean={rapm_off.mean():.4f} std={rapm_off.std():.4f} "
+          f"min={rapm_off.min():.4f} max={rapm_off.max():.4f}")
+    print(f"    Def: mean={rapm_def.mean():.4f} std={rapm_def.std():.4f} "
+          f"min={rapm_def.min():.4f} max={rapm_def.max():.4f}")
+    if rapm_off.std() > 0.5:
+        print(f"  ⚠  rapm_off std={rapm_off.std():.4f} > 0.5 — possible collinearity inflation")
+    top15_idx = np.argsort(rapm_off)[-15:][::-1]
+    top15_str = ", ".join(
+        f"pid{all_pids[i]}={rapm_off[i]:.3f}" + (" (MC)" if all_pids[i] == MCDAVID_ID else "")
+        for i in top15_idx
+    )
+    print(f"  Top 15 rapm_off: {top15_str}")
+    mc_i = pid_idx.get(MCDAVID_ID)
+    if mc_i is not None:
+        print(f"  McDavid: toi={float(player_toi_sec.get(MCDAVID_ID, 0)) / 60:.1f}min "
+              f"rapm_off={rapm_off[mc_i]:.4f} rapm_def={rapm_def[mc_i]:.4f}")
+    else:
+        print(f"  McDavid: not in regression matrix")
 
     results = pd.DataFrame({
         'player_id':     all_pids,
@@ -1571,19 +1629,19 @@ def upload_season_rapm(season_key, results_df):
 def null_impossible_rapm(sb):
     """
     Set rapm_off/rapm_def to NULL in Supabase for any player where
-    abs(rapm_off) > 5.0 or abs(rapm_def) > 5.0.
+    abs(rapm_off) > MAX_RAPM or abs(rapm_def) > MAX_RAPM.
     These values are physically impossible and indicate small-sample regression blow-up.
     """
     rows = sb.table('players').select('player_id,rapm_off,rapm_def').execute().data
     to_null = [
         r['player_id'] for r in rows
-        if (r.get('rapm_off') is not None and abs(float(r['rapm_off'])) > 5.0)
-        or (r.get('rapm_def') is not None and abs(float(r['rapm_def'])) > 5.0)
+        if (r.get('rapm_off') is not None and abs(float(r['rapm_off'])) > MAX_RAPM)
+        or (r.get('rapm_def') is not None and abs(float(r['rapm_def'])) > MAX_RAPM)
     ]
     if not to_null:
-        print("  No impossible RAPM values found (all abs() ≤ 5.0)")
+        print(f"  No impossible RAPM values found (all abs() ≤ {MAX_RAPM})")
         return
-    print(f"  Nulling out {len(to_null)} players with |RAPM| > 5.0...")
+    print(f"  Nulling out {len(to_null)} players with |RAPM| > {MAX_RAPM}...")
     null_data = {
         'rapm_off': None,
         'rapm_def': None,
@@ -1703,7 +1761,6 @@ def check_and_maybe_upload(results_df):
     results_df['rapm_def_pct'] = results_df['rapm_def'].rank(pct=True) * 100
 
     # Drop remaining impossible values (physically unreachable regardless of sample size)
-    MAX_RAPM = 5.0
     n_extreme = (
         (results_df['rapm_off'].abs() > MAX_RAPM) |
         (results_df['rapm_def'].abs() > MAX_RAPM)
@@ -1930,11 +1987,37 @@ if __name__ == '__main__':
     print(f"{'='*60}")
     player_seasons_df = fetch_player_seasons_for_priors()
 
+    # Step 2c: compute current-season (25-26) qualified player set for TOI filter
+    print(f"\n{'='*60}")
+    print("Step 2c — Current-season TOI filter (≥200 min in 25-26)")
+    print(f"{'='*60}")
+    current_season_filter = None
+    stints_2526_path = SEASON_CONFIGS['25-26']['stints_file']
+    if os.path.exists(stints_2526_path) and '25-26' in season_dfs:
+        cs_stints = season_dfs['25-26']
+        cs_toi = defaultdict(float)
+        for _col in ('home_players', 'away_players'):
+            _exp = cs_stints[['duration_seconds', _col]].copy()
+            _exp[_col] = _exp[_col].astype(str).str.split('|')
+            _exp = _exp.explode(_col)
+            _exp = _exp[_exp[_col].str.strip() != '']
+            _exp[_col] = _exp[_col].astype(int)
+            for _pid, _toi in _exp.groupby(_col)['duration_seconds'].sum().items():
+                cs_toi[_pid] += float(_toi)
+        MIN_CURRENT_TOI_SEC = 200 * 60
+        current_season_filter = {p for p, t in cs_toi.items() if t >= MIN_CURRENT_TOI_SEC}
+        print(f"  {len(current_season_filter)} players with ≥200 min in 25-26 stints "
+              f"(out of {len(cs_toi)} total seen)")
+    else:
+        print(f"  Warning: 25-26 stints not available — current_season_filter disabled")
+
     # Step 3: prior-informed RAPM with daisy chain 18-19 → … → 25-26
     print(f"\n{'='*60}")
     print("Step 3 — Prior-informed RAPM (daisy chain 18-19 → 25-26)")
     print(f"{'='*60}")
-    raw_season_results = run_prior_informed_rapm(season_dfs, player_seasons_df)
+    raw_season_results = run_prior_informed_rapm(
+        season_dfs, player_seasons_df, current_season_filter=current_season_filter
+    )
 
     # Step 3b: filter, compute context metrics, upload per-season RAPM
     print(f"\n{'='*60}")
