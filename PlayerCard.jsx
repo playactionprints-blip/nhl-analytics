@@ -654,10 +654,10 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
     return "#ff6b6b";
   };
 
-  const dividerStyle = { height: 1, background: "rgba(255,255,255,0.05)", margin: "14px 0" };
+  const dividerStyle = { height: 1, background: "rgba(255,255,255,0.05)", margin: "10px 0" };
   const sectionLabelStyle = {
     fontSize: 9, color: "#3a5570", letterSpacing: "0.12em",
-    textTransform: "uppercase", marginBottom: 12, fontFamily: "'DM Mono',monospace",
+    textTransform: "uppercase", marginBottom: 8, fontFamily: "'DM Mono',monospace",
   };
 
   const warTiles = [
@@ -695,7 +695,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
       background: "#05090f",
       border: "1px solid rgba(255,255,255,0.08)",
       borderRadius: 18,
-      padding: "20px 24px",
+      padding: "16px 20px",
       color: "#f1efe9",
       fontFamily: "system-ui, -apple-system, sans-serif",
     }}>
@@ -707,17 +707,18 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
 
           {/* WAR Component glass tiles */}
           <div style={sectionLabelStyle}>WAR Components</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 14 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
             {warTiles.map((tile) => (
               <div key={tile.label} style={{
+                width: 80, flexShrink: 0,
                 background: "rgba(255,255,255,0.03)",
                 border: "1px solid rgba(255,255,255,0.07)",
-                borderRadius: 8, padding: "10px 6px", textAlign: "center",
+                borderRadius: 8, padding: "8px 4px", textAlign: "center",
               }}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: pc(tile.value), lineHeight: 1, fontFamily: "'DM Mono',monospace" }}>
+                <div style={{ fontSize: 17, fontWeight: 800, color: pc(tile.value), lineHeight: 1, fontFamily: "'DM Mono',monospace" }}>
                   {tile.value != null ? Math.round(tile.value) : "\u2014"}
                 </div>
-                <div style={{ fontSize: 8, color: "#3a5570", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 5 }}>
+                <div style={{ fontSize: 8, color: "#3a5570", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 4 }}>
                   {tile.label}
                 </div>
               </div>
@@ -728,18 +729,16 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
 
           {/* Production bars */}
           <div style={sectionLabelStyle}>Production</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 10 }}>
             {productionBars.map((bar) => (
-              <div key={bar.label}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                  <span style={{ fontSize: 11, color: "#8b9097" }}>{bar.label}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: pc(bar.value), fontFamily: "'DM Mono',monospace" }}>
-                    {bar.value != null ? Math.round(bar.value) : "\u2014"}
-                  </span>
-                </div>
-                <div style={{ height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+              <div key={bar.label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 0 }}>
+                <span style={{ fontSize: 11, color: "#7a9ab5", width: 110, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bar.label}</span>
+                <div style={{ width: 160, flexShrink: 0, height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
                   <div style={{ height: "100%", width: `${bar.value ?? 0}%`, background: pc(bar.value), borderRadius: 2 }} />
                 </div>
+                <span style={{ fontSize: 12, fontWeight: 700, color: pc(bar.value), width: 36, textAlign: "right", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>
+                  {bar.value != null ? Math.round(bar.value) : "\u2014"}
+                </span>
               </div>
             ))}
           </div>
@@ -748,23 +747,21 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
 
           {/* Context & Deployment bars */}
           <div style={sectionLabelStyle}>Context &amp; Deployment</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             {contextBars.map((bar) => {
               const isFO = bar.label.includes("\u2746");
               const displayVal = isFO && foPct != null ? `${foPct.toFixed(1)}%` : (bar.value != null ? Math.round(bar.value) : "\u2014");
               const barWidth = isFO && foPct != null ? foPct : (bar.value ?? 0);
               const barColor = isFO ? "#f0c040" : pc(bar.value);
               return (
-                <div key={bar.label}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span style={{ fontSize: 11, color: "#8b9097" }}>{bar.label}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: barColor, fontFamily: "'DM Mono',monospace" }}>
-                      {displayVal}
-                    </span>
-                  </div>
-                  <div style={{ height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+                <div key={bar.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: "#7a9ab5", width: 110, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bar.label}</span>
+                  <div style={{ width: 160, flexShrink: 0, height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${barWidth}%`, background: barColor, borderRadius: 2 }} />
                   </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: barColor, width: 36, textAlign: "right", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>
+                    {displayVal}
+                  </span>
                 </div>
               );
             })}
