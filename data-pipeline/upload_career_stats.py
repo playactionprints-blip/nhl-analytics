@@ -309,19 +309,30 @@ for _, row in df.iterrows():
     toi  = parse_toi(row.get('TOI'))
     ixg  = safe_float(row.get('ixG'))
 
+    # EH penalty columns: iPENT2/iPEND2 = 2-min minor counts, iPENT5/iPEND5 = major counts
+    # Convert counts → penalty minutes (2-min minors × 2, majors × 5)
+    pent2 = safe_float(row.get('iPENT2')) or 0.0
+    pend2 = safe_float(row.get('iPEND2')) or 0.0
+    pent5 = safe_float(row.get('iPENT5')) or 0.0
+    pend5 = safe_float(row.get('iPEND5')) or 0.0
+    penalty_minutes_taken = round(pent2 * 2.0 + pent5 * 5.0, 1) if (pent2 or pent5) else None
+    penalty_minutes_drawn = round(pend2 * 2.0 + pend5 * 5.0, 1) if (pend2 or pend5) else None
+
     pts_per_82 = round((pts / gp) * 82, 1) if gp > 0 else 0.0
 
     records.append({
-        'player_id':  player_id,
-        'season':     season,
-        'team':       team_abbr,
-        'gp':         gp,
-        'g':          g,
-        'a':          a,
-        'pts':        pts,
-        'toi_total':  round(toi, 2) if toi is not None else None,
-        'ixg':        round(ixg, 3) if ixg is not None else None,
-        'pts_per_82': pts_per_82,
+        'player_id':              player_id,
+        'season':                 season,
+        'team':                   team_abbr,
+        'gp':                     gp,
+        'g':                      g,
+        'a':                      a,
+        'pts':                    pts,
+        'toi_total':              round(toi, 2) if toi is not None else None,
+        'ixg':                    round(ixg, 3) if ixg is not None else None,
+        'pts_per_82':             pts_per_82,
+        'penalty_minutes_taken':  penalty_minutes_taken,
+        'penalty_minutes_drawn':  penalty_minutes_drawn,
     })
 
 match_rate = len(records) / max(1, len(df)) * 100

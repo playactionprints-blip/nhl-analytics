@@ -100,6 +100,14 @@ def paginate(table, select, filters=None):
     return rows
 
 
+# ── Fix 3: SQL for career_stats penalty columns (run once in Supabase editor) ─
+# EH all-seasons CSV has iPENT2/iPEND2 (2-min minors) and iPENT5/iPEND5 (majors).
+# After running the migration, re-run upload_career_stats.py to populate them.
+print("NOTE: If career_stats is missing penalty columns, run in Supabase SQL editor:")
+print("  alter table career_stats add column if not exists penalty_minutes_taken float8;")
+print("  alter table career_stats add column if not exists penalty_minutes_drawn float8;")
+print()
+
 # ── Step 1: Load position map from players table ──────────────────────────────
 print("Step 1: Loading player positions...")
 player_rows = paginate('players', 'player_id,position')
@@ -122,6 +130,13 @@ print("\nStep 3: Loading historical_nst...")
 nst_rows = paginate('historical_nst', 'player_id,season,toi_pp,xgf_pp,toi_pk,xga_pk,toi_5v5,xgf_pct,hdcf_pct,cf_pct')
 print(f"  {len(nst_rows)} historical_nst rows")
 
+# ── Step 3b: Load player_seasons PP/PK for recent seasons (23-24+) ────────────
+print("\nStep 3b: Loading player_seasons PP/PK for recent seasons...")
+ps_rows = paginate('player_seasons',
+    'player_id,season,toi_pp,xgf_pp,toi_pk,xga_pk,toi_5v5,xgf_pct,hdcf_pct,cf_pct,'
+    'penalty_minutes_drawn,penalty_minutes_taken')
+print(f"  {len(ps_rows)} player_seasons rows")
+
 # ── Step 4: Load per_season_rapm.json ─────────────────────────────────────────
 print("\nStep 4: Loading per_season_rapm.json...")
 rapm_json_path = os.path.join(DATA_DIR, 'per_season_rapm.json')
@@ -143,6 +158,21 @@ career_idx = {(r['player_id'], r['season']): r for r in career_rows}
 # historical_nst: (player_id, season) → row
 nst_idx = {(r['player_id'], r['season']): r for r in nst_rows}
 
+# Merge player_seasons into nst_idx for recent seasons (23-24+).
+# historical_nst only covers 07-08 to 22-23; player_seasons fills the gap.
+# player_seasons wins for any non-null value it has that nst_idx is missing.
+for r in ps_rows:
+    key = (r['player_id'], r['season'])
+    if key not in nst_idx:
+        nst_idx[key] = r
+    else:
+        existing = nst_idx[key]
+        for col in ('toi_pp', 'xgf_pp', 'toi_pk', 'xga_pk', 'toi_5v5',
+                    'xgf_pct', 'hdcf_pct', 'cf_pct',
+                    'penalty_minutes_drawn', 'penalty_minutes_taken'):
+            if existing.get(col) is None and r.get(col) is not None:
+                existing[col] = r[col]
+
 # per_season_rapm: (player_id_str, season) → {rapm_off, rapm_def}
 # Keys are string player_ids
 rapm_idx = {}
@@ -152,6 +182,7 @@ for season_key, players in per_season_rapm.items():
 
 # All (player_id, season) pairs to process
 all_pairs = set(career_idx.keys()) | set(nst_idx.keys())
+all_pairs.update((r['player_id'], r['season']) for r in ps_rows)
 print(f"  {len(all_pairs)} unique (player, season) pairs to process")
 
 # ── Step 6: Compute PP/PK league baselines per season ────────────────────────
@@ -159,11 +190,13 @@ print("\nStep 6: Computing PP/PK baselines...")
 pp_baselines = {}
 pk_baselines = {}
 
-seasons_with_nst = {r['season'] for r in nst_rows}
+# Include player_seasons rows so recent-season baselines use actual PP/PK rates
+all_baseline_rows = nst_rows + ps_rows
+seasons_with_nst = {r['season'] for r in all_baseline_rows}
 for season in seasons_with_nst:
     pp_xgf_total = pp_toi_total = 0.0
     pk_xga_total = pk_toi_total = 0.0
-    for r in nst_rows:
+    for r in all_baseline_rows:
         if r['season'] != season:
             continue
         toi_pp = safe(r.get('toi_pp'))
@@ -258,8 +291,15 @@ for (player_id, season) in sorted(all_pairs):
         shooting_war = (excess_goals * shrink) / GOALS_PER_WIN
 
     # ── Penalties WAR ─────────────────────────────────────────────────────────
-    # career_stats does not store penalty minutes — null for historical seasons
+    # Available for 23-24+ via player_seasons (merged into nst_idx above).
+    # Null for earlier seasons since career_stats has no penalty minutes.
     penalties_war = None
+    pmd = safe(nst.get('penalty_minutes_drawn'))
+    pmt = safe(nst.get('penalty_minutes_taken'))
+    if pmd is not None and pmt is not None:
+        penalties_war = ((pmd - pmt) * NET_XG_PER_PENALTY_MIN) / GOALS_PER_WIN
+    elif pmd is not None:
+        penalties_war = (pmd * NET_XG_PER_PENALTY_MIN) / GOALS_PER_WIN
 
     # ── Total WAR ─────────────────────────────────────────────────────────────
     components = [ev_off, ev_def, pp_war, pk_war, shooting_war, penalties_war]
@@ -277,7 +317,7 @@ for (player_id, season) in sorted(all_pairs):
         'war_pp':       round(pp_war,        2) if pp_war        is not None else None,
         'war_pk':       round(pk_war,        2) if pk_war        is not None else None,
         'war_shooting': round(shooting_war,  2) if shooting_war  is not None else None,
-        'war_penalties': None,
+        'war_penalties': round(penalties_war, 2) if penalties_war is not None else None,
     })
 
 print(f"  Computed WAR for {len(war_rows)} player-season rows")
