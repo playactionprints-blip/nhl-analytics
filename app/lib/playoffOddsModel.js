@@ -107,6 +107,9 @@ export function simulatePlayoffOdds(standings, numSims = 20000) {
     }
   }
 
+  const CLINCHED_TEAMS = new Set(["COL", "DAL"]);
+  const ELIMINATED_TEAMS = new Set(["VAN", "NYR"]);
+
   const results = {};
   for (const t of teamStats) {
     const counter = counters[t.abbr];
@@ -117,6 +120,17 @@ export function simulatePlayoffOdds(standings, numSims = 20000) {
       cupOdds: counter.cup / numSims,
       projectedPoints: Math.round(counter.totalPts / numSims),
     };
+    if (CLINCHED_TEAMS.has(t.abbr)) {
+      results[t.abbr].playoffOdds = 1;
+      results[t.abbr].clinched = true;
+    }
+    if (ELIMINATED_TEAMS.has(t.abbr)) {
+      results[t.abbr].playoffOdds = 0;
+      results[t.abbr].divFinalOdds = 0;
+      results[t.abbr].confFinalOdds = 0;
+      results[t.abbr].cupOdds = 0;
+      results[t.abbr].eliminated = true;
+    }
   }
   return results;
 }

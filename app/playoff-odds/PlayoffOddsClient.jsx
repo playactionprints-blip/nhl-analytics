@@ -27,6 +27,7 @@ function oddsColor(pct) {
 
 function fmtPct(pct) {
   if (pct == null || pct < 0.001) return "—";
+  if (pct >= 1) return "100%";
   if (pct > 0.995) return ">99%";
   const p = Math.round(pct * 100);
   return p < 1 ? "<1%" : `${p}%`;
@@ -87,8 +88,10 @@ function TeamRow({ team, simResults, cutlineAfter = false }) {
   const name = getName(team);
   const sim = simResults[abbr] || {};
 
+  const simClinched = !!sim.clinched;
+  const simEliminated = !!sim.eliminated;
   const rawPlayoff = sim.playoffOdds ?? 0;
-  const isClinched = !!team.clinchIndicator;
+  const isClinched = !!team.clinchIndicator || simClinched;
   const playoff = isClinched ? Math.max(rawPlayoff, 0.99) : rawPlayoff;
   const barColor = oddsColor(playoff);
 
@@ -161,7 +164,7 @@ function TeamRow({ team, simResults, cutlineAfter = false }) {
           {projPts}
         </div>
 
-        {/* Playoff odds — colour-coded bar + % label */}
+        {/* Playoff odds — colour-coded bar + % / CLINCHED / ELIM label */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <div
             style={{
@@ -174,9 +177,11 @@ function TeamRow({ team, simResults, cutlineAfter = false }) {
           >
             <div
               style={{
-                width: `${Math.min(100, playoff * 100)}%`,
+                width: simClinched ? "100%" : simEliminated ? "0%" : `${Math.min(100, playoff * 100)}%`,
                 height: "100%",
-                background: `linear-gradient(90deg, ${barColor}55, ${barColor})`,
+                background: simClinched
+                  ? "linear-gradient(90deg, #35e3a055, #35e3a0)"
+                  : `linear-gradient(90deg, ${barColor}55, ${barColor})`,
                 borderRadius: 3,
               }}
             />
@@ -185,35 +190,35 @@ function TeamRow({ team, simResults, cutlineAfter = false }) {
             style={{
               fontSize: 11,
               fontFamily: "'DM Mono',monospace",
-              color: barColor,
+              color: simClinched ? "#35e3a0" : simEliminated ? "#e05050" : barColor,
               fontWeight: 700,
               minWidth: 34,
               textAlign: "right",
             }}
           >
-            {fmtPct(playoff)}
+            {simClinched ? "CLINCHED" : simEliminated ? "ELIM" : fmtPct(playoff)}
           </div>
         </div>
 
         {/* Div Final — hidden on mobile */}
         <div
           className="hide-sm"
-          style={{ ...STAT, color: oddsColor(sim.divFinalOdds ?? 0) }}
+          style={{ ...STAT, color: simEliminated ? "#3a4a5a" : oddsColor(sim.divFinalOdds ?? 0) }}
         >
-          {fmtPct(sim.divFinalOdds ?? 0)}
+          {simEliminated ? "—" : fmtPct(sim.divFinalOdds ?? 0)}
         </div>
 
         {/* Conf Final — hidden on mobile */}
         <div
           className="hide-sm"
-          style={{ ...STAT, color: oddsColor(sim.confFinalOdds ?? 0) }}
+          style={{ ...STAT, color: simEliminated ? "#3a4a5a" : oddsColor(sim.confFinalOdds ?? 0) }}
         >
-          {fmtPct(sim.confFinalOdds ?? 0)}
+          {simEliminated ? "—" : fmtPct(sim.confFinalOdds ?? 0)}
         </div>
 
         {/* Cup */}
-        <div style={{ ...STAT, color: oddsColor(sim.cupOdds ?? 0) }}>
-          {fmtPct(sim.cupOdds ?? 0)}
+        <div style={{ ...STAT, color: simEliminated ? "#3a4a5a" : oddsColor(sim.cupOdds ?? 0) }}>
+          {simEliminated ? "—" : fmtPct(sim.cupOdds ?? 0)}
         </div>
       </div>
       <div
@@ -241,8 +246,8 @@ function TeamRow({ team, simResults, cutlineAfter = false }) {
                 {abbr} · {currentPts} pts · proj {projPts}
               </div>
             </div>
-            <div style={{ color: oddsColor(playoff), fontSize: 16, fontWeight: 900, fontFamily: "'DM Mono',monospace" }}>
-              {fmtPct(playoff)}
+            <div style={{ color: simClinched ? "#35e3a0" : simEliminated ? "#e05050" : oddsColor(playoff), fontSize: simClinched || simEliminated ? 11 : 16, fontWeight: 900, fontFamily: "'DM Mono',monospace" }}>
+              {simClinched ? "CLINCHED" : simEliminated ? "ELIMINATED" : fmtPct(playoff)}
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
