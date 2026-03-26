@@ -80,7 +80,7 @@ export async function fetchPlayerCardPageData() {
       .select("player_id,team,war_total")
       .eq("season", CURRENT_SEASON)
       .order("war_total", { ascending: false, nullsFirst: false })
-      .limit(10),
+      .limit(5),
   ]);
 
   const safePlayers = (players || []).map((player) => ({

@@ -2288,61 +2288,8 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
 
         {/* Search mode */}
         {browseMode === "search" && (
-          <div className="app-search-shell" style={{ width:"100%", maxWidth:1180, marginBottom:20, display:"grid", gridTemplateColumns:"0.88fr 1.12fr", gap:18, alignItems:"start" }}>
-            <div style={{
-              padding: "22px 20px",
-              borderRadius: 22,
-              border: "1px solid #19314a",
-              background: "linear-gradient(180deg, rgba(11,18,28,0.96) 0%, rgba(7,11,17,0.98) 100%)",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 50px rgba(0,0,0,0.3)",
-            }}>
-              <div style={{ fontSize: 10, color: "#6daee4", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 12 }}>
-                Search Strategy
-              </div>
-              <div style={{ fontSize: 28, fontWeight: 900, color: "#eef8ff", lineHeight: 1.02, marginBottom: 12 }}>
-                Start with the league’s most valuable players.
-              </div>
-              <div style={{ fontSize: 14, color: "#7f99b5", lineHeight: 1.6, marginBottom: 18 }}>
-                Live search updates instantly, while the homepage defaults to current-season WAR leaders so the first click already teaches the shape of your player model.
-              </div>
-              <div style={{ display: "grid", gap: 10 }}>
-                {searchHighlights.map((player, index) => (
-                  <button
-                    key={player.player_id}
-                    onClick={() => openPlayer(playerLookup[player.player_id] || player)}
-                    style={{
-                      width: "100%",
-                      display: "grid",
-                      gridTemplateColumns: "34px 1fr auto",
-                      gap: 12,
-                      alignItems: "center",
-                      padding: "12px 12px 12px 10px",
-                      borderRadius: 14,
-                      border: `1px solid ${(TEAM_COLOR[player.team] || "#2fb4ff")}55`,
-                      background: "rgba(12,22,34,0.88)",
-                      color: "#eef8ff",
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                  >
-                    <img src={logoUrl(player.team)} alt={player.team} width={26} height={26} style={{ objectFit: "contain" }} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.05, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {index + 1}. {player.full_name || player.name}
-                      </div>
-                      <div style={{ marginTop: 3, fontSize: 10, color: "#6d87a1", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                        {player.team} · {player.position || "—"} · {player.war_total != null ? `${Number(player.war_total).toFixed(2)} WAR` : "Profile"}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 10, color: "#9fd8ff", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      Open
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
+          <div className="app-search-shell" style={{ width:"100%", maxWidth:1180, marginBottom:20 }}>
+            <div style={{ width: "100%" }}>
               <div style={{
                 padding: "18px 18px 16px",
                 borderRadius: 22,
@@ -2402,7 +2349,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
                     )}
                   </div>
                   <div style={{ fontSize:10, color:"#3f6282", fontFamily:"'DM Mono',monospace", display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap" }}>
-                    <span>{search.trim() ? "Live substring search across current-season players" : "Defaulting to the top 10 current-season WAR leaders"}</span>
+                    <span>{search.trim() ? "Live substring search across current-season players" : "Defaulting to the top 5 current-season WAR leaders"}</span>
                     <span>Showing {filteredSearchResults.length} of {searchResults.length}</span>
                   </div>
                 </div>
@@ -2420,7 +2367,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
                   letterSpacing: "0.12em",
                   background: "#0b141e",
                 }}>
-                  {search.trim() ? "Matching current-season players" : "Top 10 current-season WAR"}
+                  {search.trim() ? "Matching current-season players" : "Top 5 current-season WAR"}
                 </div>
               )}
               {visiblePlayers.map((p, index) => {
