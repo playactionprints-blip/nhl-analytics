@@ -756,7 +756,8 @@ export async function buildPredictionsForDate(dateString) {
   const normalizedGames = (todayGamesRaw || [])
     .map((game) => normalizeScheduleGame(game, TEAM_FULL))
     .filter(Boolean)
-    .filter((game) => dateStringFromUtcInToronto(game.startTimeUTC) === dateString);
+    .filter((game) => dateStringFromUtcInToronto(game.startTimeUTC) === dateString)
+    .map((game) => ({ ...game, dateString }));
 
   const completedGames = normalizedGames.filter((g) => ["FINAL", "OFF"].includes(g.gameState));
   const activeGames = normalizedGames.filter((g) => !["FINAL", "OFF"].includes(g.gameState));
