@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTheme } from "@/app/components/ThemeProvider";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home" },
@@ -35,6 +36,7 @@ function navLinkStyle(active) {
 export default function TopNav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -52,9 +54,9 @@ export default function TopNav() {
           position: sticky;
           top: 0;
           z-index: 100;
-          background: rgba(5,9,15,0.92);
+          background: var(--nav-bg);
           backdrop-filter: blur(8px);
-          border-bottom: 1px solid #1e2d40;
+          border-bottom: 1px solid var(--nav-border);
         }
         .top-nav-inner {
           max-width: 1440px;
@@ -89,7 +91,7 @@ export default function TopNav() {
           }
           .top-nav-menu-btn {
             display: inline-flex;
-            margin-left: auto;
+            margin-left: 0;
             align-items: center;
             justify-content: center;
             min-width: 42px;
@@ -171,6 +173,25 @@ export default function TopNav() {
               );
             })}
           </div>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            style={{
+              marginLeft: "auto",
+              background: "none",
+              border: "1px solid var(--border-color)",
+              borderRadius: 8,
+              padding: "5px 9px",
+              cursor: "pointer",
+              color: "var(--text-secondary)",
+              fontSize: 14,
+              lineHeight: 1,
+              flexShrink: 0,
+            }}
+          >
+            {theme === "dark" ? "☀" : "☽"}
+          </button>
           <button
             type="button"
             className="top-nav-menu-btn"

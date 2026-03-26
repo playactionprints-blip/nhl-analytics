@@ -6,6 +6,40 @@
   --font-geist-sans: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-geist-mono: "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", monospace;
   --top-nav-height: 44px;
+
+  --bg-primary: #ffffff;
+  --bg-secondary: #f4f6f9;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f0f4f8;
+  --text-primary: #0a1520;
+  --text-secondary: #3a5570;
+  --text-muted: #6b8299;
+  --border-color: rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.15);
+  --accent-blue: #1a7fd4;
+  --accent-teal: #0d9e6e;
+  --accent-green: #0d9e6e;
+  --nav-bg: rgba(255,255,255,0.95);
+  --nav-border: rgba(0,0,0,0.08);
+  --card-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+[data-theme="dark"] {
+  --bg-primary: #05090f;
+  --bg-secondary: #080e17;
+  --bg-card: #091017;
+  --bg-card-hover: #0d1926;
+  --text-primary: #eff8ff;
+  --text-secondary: #7a9ab5;
+  --text-muted: #3a5570;
+  --border-color: rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.12);
+  --accent-blue: #2fb4ff;
+  --accent-teal: #35e3a0;
+  --accent-green: #35e3a0;
+  --nav-bg: rgba(5,9,15,0.95);
+  --nav-border: rgba(255,255,255,0.06);
+  --card-shadow: none;
 }
 
 @theme inline {
@@ -15,16 +49,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: #05090f;
-  color: var(--foreground);
+  background: var(--bg-primary);
+  color: var(--text-primary);
   font-family: 'Barlow Condensed', Arial, Helvetica, sans-serif;
   overflow-x: hidden;
   min-width: 0;
