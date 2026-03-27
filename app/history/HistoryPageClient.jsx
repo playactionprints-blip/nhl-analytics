@@ -448,6 +448,657 @@ function SeasonTable({ seasons }) {
   );
 }
 
+// ── historical season card ────────────────────────────────────────────────────
+
+function warColor(val) {
+  if (val == null) return "rgba(255,255,255,0.25)";
+  if (val > 1.5) return "#35e3a0";
+  if (val > 0.5) return "#2fb4ff";
+  if (val >= 0) return "#f0c040";
+  return "#ff6b6b";
+}
+
+function HistoricalSeasonCard({ player, seasons, birthYear }) {
+  const availableSeasons = (seasons || [])
+    .filter((s) => s.gp > 0)
+    .map((s) => s.season)
+    .sort((a, b) => b.localeCompare(a));
+
+  const [selectedSeason, setSelectedSeason] = useState(availableSeasons[0] || null);
+
+  const season = (seasons || []).find((s) => s.season === selectedSeason);
+  if (!season) return null;
+
+  const startYear = 2000 + parseInt(selectedSeason.split("-")[0]);
+  const age = birthYear ? startYear - birthYear : null;
+  const accent = TEAM_COLOR[season.team] || TEAM_COLOR[player?.team] || "#2fb4ff";
+
+  const peakWAR = Math.max(1, ...seasons.map((s) => Math.abs(s.war_total || 0)));
+
+  function warBarWidth(val) {
+    return Math.min(100, Math.max(0, (Math.abs(val || 0) / peakWAR) * 100));
+  }
+
+  const isDefenseman = player?.position === "D";
+
+  function pts82Color(v) {
+    if (v == null) return "rgba(255,255,255,0.25)";
+    if (isDefenseman) {
+      if (v > 50) return "#35e3a0";
+      if (v > 35) return "#2fb4ff";
+      if (v > 22) return "#f0c040";
+      return "#ff6b6b";
+    }
+    if (v > 82) return "#35e3a0";
+    if (v > 60) return "#2fb4ff";
+    if (v > 40) return "#f0c040";
+    return "#ff6b6b";
+  }
+
+  const seasonsWithWar = seasons.filter((s) => s.war_total != null);
+  const avgCareerWAR =
+    seasonsWithWar.length > 0
+      ? seasonsWithWar.reduce((s, r) => s + r.war_total, 0) / seasonsWithWar.length
+      : null;
+  const bestPts82 = Math.max(0, ...seasons.map((s) => s.pts_per_82 || 0));
+
+  const warTrendData = seasons
+    .filter((s) => s.war_total != null)
+    .map((s) => ({ season: s.season, war_total: s.war_total }));
+
+  const ptsTrendData = seasons
+    .filter((s) => s.pts_per_82 != null)
+    .map((s) => ({ season: s.season, pts_per_82: s.pts_per_82 }));
+
+  const hasAnyWAR = season.war_total != null || season.war_ev_off != null;
+
+  const pts82 = season.pts_per_82;
+
+  const productionBars = [
+    {
+      label: "PTS/82",
+      value: pts82,
+      display: pts82 != null ? fmt(pts82, 1) : "—",
+      max: 200,
+      color: pts82Color(pts82),
+    },
+    {
+      label: "Goals",
+      value: season.g,
+      display: season.g ?? "—",
+      max: 70,
+      color:
+        season.g >= 40 ? "#35e3a0" : season.g >= 25 ? "#2fb4ff" : season.g >= 15 ? "#f0c040" : "#ff6b6b",
+    },
+    {
+      label: "Assists",
+      value: season.a,
+      display: season.a ?? "—",
+      max: 100,
+      color:
+        season.a >= 60 ? "#35e3a0" : season.a >= 40 ? "#2fb4ff" : season.a >= 20 ? "#f0c040" : "#ff6b6b",
+    },
+    {
+      label: "ixG",
+      value: season.ixg,
+      display: season.ixg != null ? fmt(season.ixg, 1) : "—",
+      max: 60,
+      color:
+        season.ixg == null
+          ? "rgba(255,255,255,0.25)"
+          : season.ixg >= 20
+          ? "#35e3a0"
+          : season.ixg >= 12
+          ? "#2fb4ff"
+          : season.ixg >= 7
+          ? "#f0c040"
+          : "#ff6b6b",
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        background: "#05090f",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 24,
+        overflow: "hidden",
+        color: "#eff8ff",
+        fontFamily: "'Barlow Condensed', sans-serif",
+      }}
+    >
+      {/* Accent bar */}
+      <div style={{ height: 3, background: accent }} />
+
+      {/* Header */}
+      <div
+        style={{
+          background: `linear-gradient(135deg, ${accent}22 0%, rgba(9,16,23,0.96) 60%)`,
+          padding: "20px 24px",
+          display: "flex",
+          gap: 20,
+          alignItems: "center",
+          flexWrap: "wrap",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+        }}
+      >
+        {/* Headshot */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={
+            player?.headshot_url ||
+            `https://assets.nhle.com/mugs/nhl/latest/${player?.player_id}.png`
+          }
+          alt={player?.full_name || "Player"}
+          width={72}
+          height={72}
+          style={{
+            borderRadius: 14,
+            objectFit: "cover",
+            flexShrink: 0,
+            border: `2px solid ${accent}55`,
+          }}
+        />
+
+        {/* Identity */}
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <div
+            style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              color: accent,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              marginBottom: 4,
+            }}
+          >
+            {season.team || player?.team} · {player?.position}
+            {age ? ` · Age ${age}` : ""}
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 900, color: "#eff8ff", lineHeight: 1.1 }}>
+            {player?.full_name}
+          </div>
+          <div
+            style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 11,
+              color: "rgba(255,255,255,0.45)",
+              marginTop: 4,
+            }}
+          >
+            {selectedSeason?.toUpperCase()} SEASON
+          </div>
+        </div>
+
+        {/* Stat boxes */}
+        <div style={{ display: "flex", gap: 16, flexShrink: 0 }}>
+          {[
+            { label: "GP", value: season.gp ?? "—" },
+            { label: "G", value: season.g ?? "—" },
+            { label: "A", value: season.a ?? "—" },
+            { label: "PTS", value: season.pts ?? "—" },
+          ].map(({ label, value }) => (
+            <div key={label} style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "#eff8ff" }}>{value}</div>
+              <div
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 9,
+                  color: "rgba(255,255,255,0.35)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  marginTop: 2,
+                }}
+              >
+                {label}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* WAR badge */}
+        {season.war_total != null && (
+          <div
+            style={{
+              background: "rgba(9,16,23,0.8)",
+              border: `1px solid ${warColor(season.war_total)}44`,
+              borderRadius: 12,
+              padding: "10px 16px",
+              textAlign: "center",
+              flexShrink: 0,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 9,
+                color: "rgba(255,255,255,0.35)",
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                marginBottom: 4,
+              }}
+            >
+              WAR
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: warColor(season.war_total) }}>
+              {season.war_total >= 0 ? "+" : ""}
+              {fmt(season.war_total, 2)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Season selector row */}
+      <div
+        style={{
+          padding: "10px 24px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 10,
+            color: "rgba(255,255,255,0.35)",
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+          }}
+        >
+          Season
+        </span>
+        <select
+          value={selectedSeason}
+          onChange={(e) => setSelectedSeason(e.target.value)}
+          style={{
+            background: "#091017",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 8,
+            color: "#eff8ff",
+            padding: "6px 12px",
+            fontSize: 12,
+            fontFamily: "'DM Mono', monospace",
+            cursor: "pointer",
+            outline: "none",
+          }}
+        >
+          {availableSeasons.map((s) => (
+            <option key={s} value={s}>
+              {s.toUpperCase()}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Body — two columns */}
+      <div
+        className="season-card-body"
+        style={{ display: "grid", gridTemplateColumns: "55% 45%", gap: 0, padding: 24 }}
+      >
+        {/* LEFT: WAR components + Production */}
+        <div style={{ paddingRight: 24, borderRight: "1px solid rgba(255,255,255,0.06)" }}>
+          {/* WAR Components */}
+          <div
+            style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              color: "rgba(255,255,255,0.35)",
+              textTransform: "uppercase",
+              letterSpacing: "0.14em",
+              marginBottom: 14,
+            }}
+          >
+            WAR Components
+          </div>
+
+          {!hasAnyWAR ? (
+            <div
+              style={{
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 11,
+                color: "rgba(255,255,255,0.28)",
+                marginBottom: 24,
+                lineHeight: 1.5,
+              }}
+            >
+              N/A — Pre-RAPM era
+              <br />
+              WAR not available before 18-19
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 10, marginBottom: 24 }}>
+              {[
+                { label: "EV Off", value: season.war_ev_off },
+                { label: "EV Def", value: season.war_ev_def },
+                { label: "PP", value: season.war_pp },
+                { label: "PK", value: season.war_pk },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginBottom: 4,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "'DM Mono', monospace",
+                        fontSize: 10,
+                        color: "rgba(255,255,255,0.45)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      {label}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "'DM Mono', monospace",
+                        fontSize: 11,
+                        color: value != null ? warColor(value) : "rgba(255,255,255,0.2)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {value != null
+                        ? value >= 0
+                          ? `+${fmt(value, 2)}`
+                          : fmt(value, 2)
+                        : "N/A"}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      height: 6,
+                      background: "rgba(255,255,255,0.06)",
+                      borderRadius: 3,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {value != null && (
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${warBarWidth(value)}%`,
+                          background: warColor(value),
+                          borderRadius: 3,
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Production bars */}
+          <div
+            style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              color: "rgba(255,255,255,0.35)",
+              textTransform: "uppercase",
+              letterSpacing: "0.14em",
+              marginBottom: 14,
+            }}
+          >
+            Production
+          </div>
+
+          <div style={{ display: "grid", gap: 10 }}>
+            {productionBars.map(({ label, value, display, max, color }) => (
+              <div key={label}>
+                <div
+                  style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "'DM Mono', monospace",
+                      fontSize: 10,
+                      color: "rgba(255,255,255,0.45)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    {label}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "'DM Mono', monospace",
+                      fontSize: 11,
+                      color: value != null ? color : "rgba(255,255,255,0.2)",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {display}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    height: 6,
+                    background: "rgba(255,255,255,0.06)",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                  }}
+                >
+                  {value != null && (
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.min(100, (value / max) * 100)}%`,
+                        background: color,
+                        borderRadius: 3,
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* RIGHT: Career context + trend charts */}
+        <div style={{ paddingLeft: 24 }}>
+          {/* Season vs career stat boxes */}
+          <div
+            style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              color: "rgba(255,255,255,0.35)",
+              textTransform: "uppercase",
+              letterSpacing: "0.14em",
+              marginBottom: 12,
+            }}
+          >
+            Season vs Career
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 20 }}>
+            {[
+              {
+                label: "This Season WAR",
+                value:
+                  season.war_total != null
+                    ? season.war_total >= 0
+                      ? `+${fmt(season.war_total, 2)}`
+                      : fmt(season.war_total, 2)
+                    : "N/A",
+                sub: avgCareerWAR != null ? `Avg ${fmt(avgCareerWAR, 2)}` : null,
+                color: season.war_total != null ? warColor(season.war_total) : "rgba(255,255,255,0.25)",
+              },
+              {
+                label: "PTS/82",
+                value: pts82 != null ? fmt(pts82, 1) : "—",
+                sub: bestPts82 > 0 ? `Best ${fmt(bestPts82, 1)}` : null,
+                color: pts82 != null ? pts82Color(pts82) : "rgba(255,255,255,0.25)",
+              },
+              {
+                label: "GP",
+                value: season.gp ?? "—",
+                sub: "of 82",
+                color: "#eff8ff",
+              },
+            ].map(({ label, value, sub, color }) => (
+              <div
+                key={label}
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: 9,
+                    color: "rgba(255,255,255,0.3)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    marginBottom: 6,
+                  }}
+                >
+                  {label}
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 900, color, lineHeight: 1 }}>{value}</div>
+                {sub && (
+                  <div
+                    style={{
+                      fontFamily: "'DM Mono', monospace",
+                      fontSize: 9,
+                      color: "rgba(255,255,255,0.28)",
+                      marginTop: 4,
+                    }}
+                  >
+                    {sub}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* WAR trend chart */}
+          {warTrendData.length > 1 && (
+            <>
+              <div
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.35)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.14em",
+                  marginBottom: 6,
+                }}
+              >
+                Career WAR Trend
+              </div>
+              <ResponsiveContainer width="100%" height={120}>
+                <LineChart
+                  data={warTrendData}
+                  margin={{ top: 4, right: 4, left: -28, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis
+                    dataKey="season"
+                    tick={{ fill: "rgba(255,255,255,0.28)", fontSize: 9, fontFamily: "'DM Mono',monospace" }}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fill: "rgba(255,255,255,0.28)", fontSize: 9, fontFamily: "'DM Mono',monospace" }}
+                  />
+                  <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
+                  <Line
+                    type="monotone"
+                    dataKey="war_total"
+                    stroke="#35e3a0"
+                    strokeWidth={1.5}
+                    dot={(dotProps) => {
+                      const { cx, cy, payload } = dotProps;
+                      if (cx == null || cy == null) return null;
+                      const isSel = payload?.season === selectedSeason;
+                      return (
+                        <circle
+                          key={`w-${payload.season}`}
+                          cx={cx}
+                          cy={cy}
+                          r={isSel ? 5 : 2.5}
+                          fill={isSel ? "#35e3a0" : "rgba(53,227,160,0.5)"}
+                          stroke={isSel ? "#fff" : "none"}
+                          strokeWidth={1.5}
+                        />
+                      );
+                    }}
+                    connectNulls
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </>
+          )}
+
+          {/* PTS/82 trend chart */}
+          {ptsTrendData.length > 1 && (
+            <>
+              <div
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.35)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.14em",
+                  marginBottom: 6,
+                  marginTop: 16,
+                }}
+              >
+                Career PTS/82 Trend
+              </div>
+              <ResponsiveContainer width="100%" height={120}>
+                <LineChart
+                  data={ptsTrendData}
+                  margin={{ top: 4, right: 4, left: -28, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis
+                    dataKey="season"
+                    tick={{ fill: "rgba(255,255,255,0.28)", fontSize: 9, fontFamily: "'DM Mono',monospace" }}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fill: "rgba(255,255,255,0.28)", fontSize: 9, fontFamily: "'DM Mono',monospace" }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="pts_per_82"
+                    stroke="#2fb4ff"
+                    strokeWidth={1.5}
+                    dot={(dotProps) => {
+                      const { cx, cy, payload } = dotProps;
+                      if (cx == null || cy == null) return null;
+                      const isSel = payload?.season === selectedSeason;
+                      return (
+                        <circle
+                          key={`p-${payload.season}`}
+                          cx={cx}
+                          cy={cy}
+                          r={isSel ? 5 : 2.5}
+                          fill={isSel ? "#2fb4ff" : "rgba(47,180,255,0.5)"}
+                          stroke={isSel ? "#fff" : "none"}
+                          strokeWidth={1.5}
+                        />
+                      );
+                    }}
+                    connectNulls
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── main component ────────────────────────────────────────────────────────────
 
 export default function HistoryPageClient({ players }) {
@@ -463,6 +1114,7 @@ export default function HistoryPageClient({ players }) {
     setLoading(true);
     setError("");
     setPlayerData(null);
+    setHistTab("overview");
 
     fetch(`/api/history/player?id=${selectedPlayerId}`, { cache: "no-store" })
       .then((r) => {
@@ -542,161 +1194,211 @@ export default function HistoryPageClient({ players }) {
 
       {/* Player data */}
       {playerData && !loading && (
-        <div style={{ display: "grid", gap: 20 }}>
-          {/* Section 1: Player header */}
-          {playerData.player && <PlayerHeader player={playerData.player} seasons={playerData.seasons || []} />}
+        <>
+          {/* Tab row */}
+          <div
+            style={{
+              display: "flex",
+              gap: 4,
+              marginBottom: 16,
+              borderBottom: "1px solid var(--border-color)",
+              paddingBottom: 0,
+            }}
+          >
+            {[
+              { key: "overview", label: "Career Overview" },
+              { key: "season-card", label: "Season Card" },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setHistTab(tab.key)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  borderBottom: histTab === tab.key ? "2px solid #2fb4ff" : "2px solid transparent",
+                  color: histTab === tab.key ? "#2fb4ff" : "var(--text-secondary)",
+                  fontSize: 12,
+                  fontFamily: "'DM Mono', monospace",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  padding: "10px 16px",
+                  cursor: "pointer",
+                  marginBottom: -1,
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-          {/* Section 2: Career charts (two-column grid) */}
-          {chartSeasons.length > 0 && (
-            <div
-              style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 20 }}
-              className="history-chart-grid"
-            >
-              {/* Chart A: Points/82 */}
-              <div style={CARD}>
-                <div style={SECTION_TITLE}>Points per 82 Games</div>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={chartSeasons} margin={{ top: 4, right: 12, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#0d1a26" />
-                    <XAxis
-                      dataKey="season"
-                      tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
-                    <Tooltip content={<ChartTooltipPts />} />
-                    <ReferenceLine y={82} stroke="#35e3a0" strokeDasharray="4 3" strokeOpacity={0.5} />
-                    <ReferenceLine y={50} stroke="var(--text-muted)" strokeDasharray="4 3" strokeOpacity={0.4} />
-                    <Line
-                      type="monotone"
-                      dataKey="pts_per_82"
-                      stroke="#2fb4ff"
-                      strokeWidth={2}
-                      dot={{ r: 3, fill: "#2fb4ff", strokeWidth: 0 }}
-                      activeDot={{ r: 5 }}
-                      connectNulls
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-                <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ width: 20, height: 2, background: "#35e3a0", borderTop: "1px dashed #35e3a0" }} />
-                    <span style={{ ...MONO, fontSize: 10, color: "var(--text-muted)" }}>1 pt/gm</span>
+          {/* Overview tab */}
+          {histTab === "overview" && (
+            <div style={{ display: "grid", gap: 20 }}>
+              {/* Section 1: Player header */}
+              {playerData.player && <PlayerHeader player={playerData.player} seasons={playerData.seasons || []} />}
+
+              {/* Section 2: Career charts (two-column grid) */}
+              {chartSeasons.length > 0 && (
+                <div
+                  style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 20 }}
+                  className="history-chart-grid"
+                >
+                  {/* Chart A: Points/82 */}
+                  <div style={CARD}>
+                    <div style={SECTION_TITLE}>Points per 82 Games</div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={chartSeasons} margin={{ top: 4, right: 12, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#0d1a26" />
+                        <XAxis
+                          dataKey="season"
+                          tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
+                        <Tooltip content={<ChartTooltipPts />} />
+                        <ReferenceLine y={82} stroke="#35e3a0" strokeDasharray="4 3" strokeOpacity={0.5} />
+                        <ReferenceLine y={50} stroke="var(--text-muted)" strokeDasharray="4 3" strokeOpacity={0.4} />
+                        <Line
+                          type="monotone"
+                          dataKey="pts_per_82"
+                          stroke="#2fb4ff"
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: "#2fb4ff", strokeWidth: 0 }}
+                          activeDot={{ r: 5 }}
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <div style={{ width: 20, height: 2, background: "#35e3a0", borderTop: "1px dashed #35e3a0" }} />
+                        <span style={{ ...MONO, fontSize: 10, color: "var(--text-muted)" }}>1 pt/gm</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <div style={{ width: 20, height: 2, borderTop: "1px dashed var(--text-muted)" }} />
+                        <span style={{ ...MONO, fontSize: 10, color: "var(--text-muted)" }}>~avg</span>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ width: 20, height: 2, borderTop: "1px dashed var(--text-muted)" }} />
-                    <span style={{ ...MONO, fontSize: 10, color: "var(--text-muted)" }}>~avg</span>
+
+                  {/* Chart B: ixG */}
+                  <div style={CARD}>
+                    <div style={SECTION_TITLE}>Individual Expected Goals</div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={chartSeasons} margin={{ top: 4, right: 12, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#0d1a26" />
+                        <XAxis
+                          dataKey="season"
+                          tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
+                        <Tooltip content={<ChartTooltipIxg />} />
+                        <Line
+                          type="monotone"
+                          dataKey="ixg"
+                          stroke="#ff8c42"
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: "#ff8c42", strokeWidth: 0 }}
+                          activeDot={{ r: 5 }}
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Chart B: ixG */}
-              <div style={CARD}>
-                <div style={SECTION_TITLE}>Individual Expected Goals</div>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={chartSeasons} margin={{ top: 4, right: 12, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#0d1a26" />
-                    <XAxis
-                      dataKey="season"
-                      tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
-                    <Tooltip content={<ChartTooltipIxg />} />
-                    <Line
-                      type="monotone"
-                      dataKey="ixg"
-                      stroke="#ff8c42"
-                      strokeWidth={2}
-                      dot={{ r: 3, fill: "#ff8c42", strokeWidth: 0 }}
-                      activeDot={{ r: 5 }}
-                      connectNulls
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          {/* Section 3: WAR components */}
-          {warSeasons.length > 0 && (
-            <div style={CARD}>
-              <div style={SECTION_TITLE}>WAR Components (Recent Seasons)</div>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={warSeasons} margin={{ top: 4, right: 12, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#0d1a26" />
-                  <XAxis
-                    dataKey="season"
-                    tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
-                  />
-                  <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
-                  <Tooltip content={<ChartTooltipWar />} />
-                  <ReferenceLine y={0} stroke="var(--text-muted)" strokeWidth={1} />
-                  <Bar dataKey="war_ev_off" stackId="war" fill="#35e3a0" name="EV Off" />
-                  <Bar dataKey="war_ev_def" stackId="war" fill="#2fb4ff" name="EV Def" />
-                  <Bar dataKey="war_pp" stackId="war" fill="#f0c040" name="PP" />
-                  <Bar dataKey="war_pk" stackId="war" fill="#ff8d9b" name="PK" />
-                </BarChart>
-              </ResponsiveContainer>
-              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
-                {[["EV Off", "#35e3a0"], ["EV Def", "#2fb4ff"], ["PP", "#f0c040"], ["PK", "#ff8d9b"]].map(([label, color]) => (
-                  <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
-                    <span style={{ ...MONO, fontSize: 10, color: "var(--text-muted)" }}>{label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Section 4: Age curve */}
-          {ageSeasons.length > 1 && (
-            <div style={CARD}>
-              <div style={SECTION_TITLE}>Age Curve — Production by Age</div>
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={ageSeasons} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#0d1a26" />
-                  <XAxis
-                    dataKey="age"
-                    type="number"
-                    domain={["dataMin - 1", "dataMax + 1"]}
-                    tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
-                    label={{ value: "Age", position: "insideBottomRight", offset: -4, fill: "var(--text-muted)", fontSize: 10 }}
-                  />
-                  <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
-                  <Tooltip content={<ChartTooltipAge />} />
-                  <Line
-                    type="monotone"
-                    dataKey="pts_per_82"
-                    stroke="#c084fc"
-                    strokeWidth={2}
-                    dot={(props) => (
-                      <AgeDot
-                        key={`${props.cx}-${props.cy}`}
-                        {...props}
-                        maxGp={maxGp}
-                        isPeak={props.payload?.age === peakAge}
+              {/* Section 3: WAR components */}
+              {warSeasons.length > 0 && (
+                <div style={CARD}>
+                  <div style={SECTION_TITLE}>WAR Components (Recent Seasons)</div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={warSeasons} margin={{ top: 4, right: 12, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#0d1a26" />
+                      <XAxis
+                        dataKey="season"
+                        tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
                       />
-                    )}
-                    activeDot={false}
-                    connectNulls
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-              <div style={{ ...MONO, fontSize: 10, color: "var(--text-muted)", marginTop: 8 }}>
-                Dot size ∝ games played · ★ peak season
-              </div>
+                      <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
+                      <Tooltip content={<ChartTooltipWar />} />
+                      <ReferenceLine y={0} stroke="var(--text-muted)" strokeWidth={1} />
+                      <Bar dataKey="war_ev_off" stackId="war" fill="#35e3a0" name="EV Off" />
+                      <Bar dataKey="war_ev_def" stackId="war" fill="#2fb4ff" name="EV Def" />
+                      <Bar dataKey="war_pp" stackId="war" fill="#f0c040" name="PP" />
+                      <Bar dataKey="war_pk" stackId="war" fill="#ff8d9b" name="PK" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
+                    {[["EV Off", "#35e3a0"], ["EV Def", "#2fb4ff"], ["PP", "#f0c040"], ["PK", "#ff8d9b"]].map(([label, color]) => (
+                      <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
+                        <span style={{ ...MONO, fontSize: 10, color: "var(--text-muted)" }}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Section 4: Age curve */}
+              {ageSeasons.length > 1 && (
+                <div style={CARD}>
+                  <div style={SECTION_TITLE}>Age Curve — Production by Age</div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={ageSeasons} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#0d1a26" />
+                      <XAxis
+                        dataKey="age"
+                        type="number"
+                        domain={["dataMin - 1", "dataMax + 1"]}
+                        tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
+                        label={{ value: "Age", position: "insideBottomRight", offset: -4, fill: "var(--text-muted)", fontSize: 10 }}
+                      />
+                      <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
+                      <Tooltip content={<ChartTooltipAge />} />
+                      <Line
+                        type="monotone"
+                        dataKey="pts_per_82"
+                        stroke="#c084fc"
+                        strokeWidth={2}
+                        dot={(props) => (
+                          <AgeDot
+                            key={`${props.cx}-${props.cy}`}
+                            {...props}
+                            maxGp={maxGp}
+                            isPeak={props.payload?.age === peakAge}
+                          />
+                        )}
+                        activeDot={false}
+                        connectNulls
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <div style={{ ...MONO, fontSize: 10, color: "var(--text-muted)", marginTop: 8 }}>
+                    Dot size ∝ games played · ★ peak season
+                  </div>
+                </div>
+              )}
+
+              {/* Section 5: Season stats table */}
+              {playerData.seasons.length > 0 && (
+                <div style={CARD}>
+                  <div style={SECTION_TITLE}>Season-by-Season Stats</div>
+                  <SeasonTable seasons={playerData.seasons} />
+                </div>
+              )}
             </div>
           )}
 
-          {/* Section 5: Season stats table */}
-          {playerData.seasons.length > 0 && (
-            <div style={CARD}>
-              <div style={SECTION_TITLE}>Season-by-Season Stats</div>
-              <SeasonTable seasons={playerData.seasons} />
-            </div>
+          {/* Season Card tab */}
+          {histTab === "season-card" && (
+            <HistoricalSeasonCard
+              player={playerData.player}
+              seasons={playerData.seasons}
+              birthYear={playerData.birthYear}
+            />
           )}
-        </div>
+        </>
       )}
 
       {/* Empty state */}
@@ -710,6 +1412,18 @@ export default function HistoryPageClient({ players }) {
         @media (max-width: 780px) {
           .history-chart-grid {
             grid-template-columns: 1fr !important;
+          }
+          .season-card-body {
+            grid-template-columns: 1fr !important;
+          }
+          .season-card-body > div:first-child {
+            padding-right: 0 !important;
+            border-right: none !important;
+            padding-bottom: 24px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+          }
+          .season-card-body > div:last-child {
+            padding-left: 0 !important;
           }
         }
       `}</style>
