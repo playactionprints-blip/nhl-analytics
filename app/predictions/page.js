@@ -235,7 +235,7 @@ export default async function PredictionsPage({ searchParams }) {
       <style>{`
         .predictions-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(620px, 1fr));
           gap: 18px;
         }
         .prediction-card {
