@@ -27,12 +27,12 @@ function formatRecord(standings = {}) {
 function movementMeta(movement) {
   if (movement > 0) return { label: `Up ${movement}`, color: "#35e3a0", symbol: "▲" };
   if (movement < 0) return { label: `Down ${Math.abs(movement)}`, color: "#ff6f7b", symbol: "▼" };
-  return { label: "No change", color: "#7f93a8", symbol: "•" };
+  return { label: "No change", color: "var(--text-muted)", symbol: "•" };
 }
 
 function ownershipMeta(row) {
   if (row.isStaticSlot) {
-    return { label: "Static slot", color: "#8ed0ff", bg: "rgba(74, 167, 255, 0.16)" };
+    return { label: "Static slot", color: "var(--accent-blue)", bg: "rgba(74, 167, 255, 0.16)" };
   }
   if (row.requiresManualReview) {
     return { label: "Manual review", color: "#ffb86d", bg: "rgba(255, 171, 64, 0.16)" };
@@ -43,7 +43,7 @@ function ownershipMeta(row) {
   if (row.isTradedPick) {
     return { label: "Conveyed", color: "#35e3a0", bg: "rgba(53, 227, 160, 0.16)" };
   }
-  return { label: "Original owner", color: "#7f93a8", bg: "rgba(127, 147, 168, 0.16)" };
+  return { label: "Original owner", color: "var(--text-muted)", bg: "rgba(127, 147, 168, 0.16)" };
 }
 
 function LegendPill({ label, color, bg }) {
@@ -122,7 +122,7 @@ function RevealWinnerCard({ title, winner, displayTeam, movement, visible }) {
       }}
     >
       <div style={{ textAlign: "center", display: "grid", gap: 8 }}>
-        <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.16em" }}>
+        <div style={{ color: "var(--text-muted)", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.16em" }}>
           {title}
         </div>
         <div style={{ color: "var(--text-primary)", fontSize: 20, fontWeight: 900 }}>
@@ -156,7 +156,7 @@ function RevealWinnerCard({ title, winner, displayTeam, movement, visible }) {
         </div>
         {winner ? (
           <>
-            <div style={{ color: "#f5fbff", fontSize: 34, fontWeight: 900, textAlign: "center", lineHeight: 1 }}>
+            <div style={{ color: "var(--text-primary)", fontSize: 34, fontWeight: 900, textAlign: "center", lineHeight: 1 }}>
               {winner.standings?.name || winner.currentOwner}
             </div>
             <div style={{ color: accent, fontSize: 17, fontWeight: 800, textAlign: "center" }}>
@@ -182,7 +182,7 @@ function RevealWinnerCard({ title, winner, displayTeam, movement, visible }) {
             </div>
           </>
         ) : (
-          <div style={{ color: "#88a7c0", fontSize: 14, fontFamily: "'DM Mono',monospace" }}>
+          <div style={{ color: "var(--text-secondary)", fontSize: 14, fontFamily: "'DM Mono',monospace" }}>
             Cycling through eligible teams…
           </div>
         )}
@@ -212,9 +212,9 @@ function LotteryRevealOverlay({ stage, drawTitle, winner, displayTeam, movement,
           onClick={onSkip}
           style={{
             borderRadius: 999,
-            border: "1px solid #29455f",
-            background: "#0e1722",
-            color: "#cbe5f8",
+            border: "1px solid var(--border-strong)",
+            background: "var(--bg-card)",
+            color: "var(--text-secondary)",
             padding: "9px 12px",
             fontSize: 11,
             fontWeight: 800,
@@ -251,9 +251,9 @@ function ConditionTooltip({ note }) {
         width: 18,
         height: 18,
         borderRadius: "50%",
-        border: "1px solid #29455f",
-        color: "#8ed0ff",
-        background: "#101a25",
+        border: "1px solid var(--border-strong)",
+        color: "var(--accent-blue)",
+        background: "var(--bg-secondary)",
         fontSize: 11,
         fontWeight: 800,
         cursor: "help",
@@ -274,8 +274,8 @@ function ConditionTooltip({ note }) {
           padding: "10px 12px",
           borderRadius: 12,
           background: "rgba(9, 16, 23, 0.98)",
-          border: "1px solid #25435a",
-          color: "#d9ecfa",
+          border: "1px solid var(--border-strong)",
+          color: "var(--text-secondary)",
           fontSize: 12,
           lineHeight: 1.4,
           boxShadow: "0 16px 36px rgba(0,0,0,0.35)",
@@ -311,7 +311,7 @@ function PickOwnershipCluster({ originalTeam, selectionOwner, isProtected, note 
           <>
             <span
               style={{
-                color: isProtected ? "#ff9ca8" : "#5ed5ff",
+                color: isProtected ? "#ff9ca8" : "var(--accent-blue)",
                 fontSize: 14,
                 fontWeight: 900,
                 fontFamily: "'DM Mono',monospace",
@@ -333,7 +333,7 @@ function PickOwnershipCluster({ originalTeam, selectionOwner, isProtected, note 
             padding: "3px 8px",
             borderRadius: 999,
             background: isRetainedProtected ? "rgba(255, 111, 123, 0.14)" : "rgba(53, 227, 160, 0.14)",
-            color: isRetainedProtected ? "#ff8d9b" : "#47e8aa",
+            color: isRetainedProtected ? "#ff8d9b" : "var(--accent-teal)",
             fontSize: 10,
             fontWeight: 700,
             letterSpacing: "0.08em",
@@ -378,22 +378,22 @@ function HistoryRow({ item, index }) {
     <div
       style={{
         padding: "10px 12px",
-        border: "1px solid #1b2734",
+        border: "1px solid var(--border-strong)",
         borderRadius: 14,
-        background: "#0d141d",
+        background: "var(--bg-card)",
         display: "grid",
         gap: 6,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-        <div style={{ fontSize: 11, color: "#6f8aa6", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Sim #{index + 1}
         </div>
-        <div style={{ fontSize: 10, color: "#4d637b", fontFamily: "'DM Mono',monospace" }}>
+        <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace" }}>
           seed {item.seed}
         </div>
       </div>
-      <div style={{ fontSize: 13, color: "#d8ebfb" }}>
+      <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
         {item.winners.length > 0
           ? item.winners.map((winner) => `${winner.currentOwner} won pick ${winner.wonPick}`).join(" · ")
           : "No completed drawings"}
@@ -407,14 +407,14 @@ function SummaryStat({ label, value, accent = "var(--text-primary)" }) {
     <div
       style={{
         borderRadius: 14,
-        border: "1px solid #1a2b3d",
+        border: "1px solid var(--border-strong)",
         background: "var(--bg-card)",
         padding: "10px 12px",
         display: "grid",
         gap: 4,
       }}
     >
-      <div style={{ fontSize: 10, color: "#62809d", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+      <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
         {label}
       </div>
       <div style={{ color: accent, fontSize: 17, fontWeight: 900 }}>{value}</div>
@@ -632,14 +632,14 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
           transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), opacity 320ms ease, border-color 180ms ease, background 180ms ease;
         }
         .lottery-table-row:hover {
-          background: #0f1722;
+          background: var(--bg-card-hover);
         }
         .lottery-button:hover {
           transform: translateY(-1px);
           box-shadow: 0 10px 24px rgba(27, 188, 255, 0.18);
         }
         .lottery-ownership-row:hover {
-          background: #101925;
+          background: var(--bg-secondary);
         }
         .lottery-tooltip:hover .lottery-tooltip-panel {
           opacity: 1 !important;
@@ -687,7 +687,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
       <div style={{ maxWidth: 1320, margin: "0 auto", display: "grid", gap: 16 }}>
         <section
           style={{
-            border: "1px solid #18304a",
+            border: "1px solid var(--border-strong)",
             borderRadius: 22,
             background: "linear-gradient(180deg, rgba(10,20,32,0.98) 0%, rgba(7,11,18,0.98) 100%)",
             boxShadow: "0 18px 44px rgba(0,0,0,0.24)",
@@ -701,14 +701,14 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               <h1 className="lottery-hero-title" style={{ margin: 0, color: "var(--text-primary)", fontSize: 34, lineHeight: 1, letterSpacing: "-0.04em", fontWeight: 900 }}>
                 2026 NHL Draft Lottery Simulator
               </h1>
-              <div style={{ color: "#86a5c0", fontSize: 13, lineHeight: 1.45 }}>
+              <div style={{ color: "var(--text-secondary)", fontSize: 13, lineHeight: 1.45 }}>
                 Simple reveal mode for one lottery run, or analytics mode for landing-spot outcomes.
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <LegendPill label={`${NHL_LOTTERY_RULES.drawCount} draws`} color="#8ed0ff" bg="rgba(74, 167, 255, 0.12)" />
-              <LegendPill label={`Max jump ${NHL_LOTTERY_RULES.maxJump}`} color="#9dc5e6" bg="rgba(157, 197, 230, 0.12)" />
-              <LegendPill label={`Generated ${generatedAt}`} color="#7f93a8" bg="rgba(127, 147, 168, 0.12)" />
+              <LegendPill label={`${NHL_LOTTERY_RULES.drawCount} draws`} color="var(--accent-blue)" bg="rgba(74, 167, 255, 0.12)" />
+              <LegendPill label={`Max jump ${NHL_LOTTERY_RULES.maxJump}`} color="var(--text-secondary)" bg="rgba(157, 197, 230, 0.12)" />
+              <LegendPill label={`Generated ${generatedAt}`} color="var(--text-muted)" bg="rgba(127, 147, 168, 0.12)" />
             </div>
           </div>
 
@@ -720,9 +720,9 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               disabled={!hasEntries}
               style={{
                 borderRadius: 14,
-                border: "1px solid #1bbcff",
-                background: "linear-gradient(180deg,#11bfff 0%,#0d8fe1 100%)",
-                color: "#04121d",
+                border: "1px solid var(--accent-blue)",
+                background: "var(--accent-blue)",
+                color: "var(--bg-primary)",
                 fontWeight: 800,
                 fontSize: 13,
                 padding: "12px 16px",
@@ -740,9 +740,9 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               className="lottery-button"
               style={{
                 borderRadius: 14,
-                border: "1px solid #20374d",
-                background: "#111a23",
-                color: "#e8f5ff",
+                border: "1px solid var(--border-strong)",
+                background: "var(--bg-card)",
+                color: "var(--text-primary)",
                 fontWeight: 800,
                 fontSize: 13,
                 padding: "12px 14px",
@@ -760,9 +760,9 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               disabled={!hasEntries}
               style={{
                 borderRadius: 14,
-                border: "1px solid #20374d",
-                background: mode === "summary" ? "rgba(47,180,255,0.12)" : "#111a23",
-                color: "#e8f5ff",
+                border: "1px solid var(--border-strong)",
+                background: mode === "summary" ? "rgba(47,180,255,0.12)" : "var(--bg-card)",
+                color: "var(--text-primary)",
                 fontWeight: 800,
                 fontSize: 13,
                 padding: "12px 14px",
@@ -780,9 +780,9 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               placeholder="Optional seed"
               style={{
                 background: "var(--bg-card)",
-                border: "1px solid #1d3448",
+                border: "1px solid var(--border-strong)",
                 borderRadius: 14,
-                color: "#e9f6ff",
+                color: "var(--text-primary)",
                 padding: "12px 14px",
                 outline: "none",
                 fontSize: 14,
@@ -793,7 +793,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               <summary
                 style={{
                   cursor: "pointer",
-                  color: "#9fc7e6",
+                  color: "var(--text-secondary)",
                   fontSize: 11,
                   fontFamily: "'DM Mono',monospace",
                   letterSpacing: "0.08em",
@@ -809,7 +809,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                   marginTop: 10,
                   width: "min(420px, 100vw - 52px)",
                   borderRadius: 16,
-                  border: "1px solid #1a2b3d",
+                  border: "1px solid var(--border-strong)",
                   background: "var(--bg-card)",
                   padding: 14,
                   display: "grid",
@@ -817,7 +817,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                 }}
               >
                 {LOTTERY_ASSUMPTIONS.map((item) => (
-                  <div key={item} style={{ color: "#d6e9f7", fontSize: 13, lineHeight: 1.35 }}>
+                  <div key={item} style={{ color: "var(--text-secondary)", fontSize: 13, lineHeight: 1.35 }}>
                     {item}
                   </div>
                 ))}
@@ -826,7 +826,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
           </div>
 
           {overlayStage && mode === "reveal" ? (
-            <div style={{ fontSize: 11, color: "#7bcfff", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            <div style={{ fontSize: 11, color: "var(--accent-blue)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
               Revealing results…
             </div>
           ) : null}
@@ -840,13 +840,13 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
             overflow: "hidden",
           }}
         >
-          <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid #132131", display: "grid", gap: 10 }}>
+          <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid var(--border-color)", display: "grid", gap: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                   Main board
                 </div>
-                <div style={{ fontSize: 26, color: "#f0f8ff", fontWeight: 900, marginTop: 4 }}>
+                <div style={{ fontSize: 26, color: "var(--text-primary)", fontWeight: 900, marginTop: 4 }}>
                   {mode === "summary" ? "Lottery board + analytics mode" : "Current lottery order"}
                 </div>
               </div>
@@ -861,9 +861,9 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                     onClick={() => setMode(item.key)}
                     style={{
                       borderRadius: 999,
-                      border: `1px solid ${mode === item.key ? "#2fb4ff" : "#20374d"}`,
-                      background: mode === item.key ? "rgba(47,180,255,0.16)" : "#111a23",
-                      color: mode === item.key ? "#cfeeff" : "#8ca8c1",
+                      border: `1px solid ${mode === item.key ? "#2fb4ff" : "var(--border-strong)"}`,
+                      background: mode === item.key ? "rgba(47,180,255,0.16)" : "var(--bg-card)",
+                      color: mode === item.key ? "#cfeeff" : "var(--text-secondary)",
                       fontWeight: 800,
                       fontSize: 12,
                       padding: "8px 12px",
@@ -882,18 +882,18 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
             {mode === "reveal" ? (
               result ? (
                 <div className="lottery-results-strip" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-                  <SummaryStat label="Pick #1" value={latestPickOneWinner ? latestPickOneWinner.currentOwner : "—"} accent="#8ed0ff" />
-                  <SummaryStat label="Pick #2" value={latestPickTwoWinner ? latestPickTwoWinner.currentOwner : "—"} accent="#8ed0ff" />
+                  <SummaryStat label="Pick #1" value={latestPickOneWinner ? latestPickOneWinner.currentOwner : "—"} accent="var(--accent-blue)" />
+                  <SummaryStat label="Pick #2" value={latestPickTwoWinner ? latestPickTwoWinner.currentOwner : "—"} accent="var(--accent-blue)" />
                   <SummaryStat label="Biggest jump" value={biggestJumpWinner ? `${biggestJumpWinner.currentOwner} +${biggestJumpWinner.movement}` : "—"} accent="#35e3a0" />
                 </div>
               ) : (
                 <div
                   style={{
                     borderRadius: 16,
-                    border: "1px dashed #244158",
+                    border: "1px dashed var(--border-strong)",
                     background: "var(--bg-card)",
                     padding: "16px 14px",
-                    color: "#7e98b1",
+                    color: "var(--text-secondary)",
                     fontSize: 14,
                     lineHeight: 1.45,
                   }}
@@ -902,13 +902,13 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                 </div>
               )
             ) : (
-              <div style={{ color: "#7e98b1", fontSize: 13, lineHeight: 1.45 }}>
+              <div style={{ color: "var(--text-secondary)", fontSize: 13, lineHeight: 1.45 }}>
                 Summary mode uses the same lottery engine but reports team outcome distributions below the board.
               </div>
             )}
           </div>
 
-          <div className="lottery-table-head" style={{ display: "grid", gridTemplateColumns: "60px minmax(280px, 1.35fr) 72px 108px 72px 76px 88px 132px", gap: 12, padding: "10px 18px", borderBottom: "1px solid #132131", color: "#4a6987", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          <div className="lottery-table-head" style={{ display: "grid", gridTemplateColumns: "60px minmax(280px, 1.35fr) 72px 108px 72px 76px 88px 132px", gap: 12, padding: "10px 18px", borderBottom: "1px solid var(--border-color)", color: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             <div>Pick</div>
             <div>Team</div>
             <div>GP</div>
@@ -921,7 +921,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
 
           <div style={{ display: "grid" }}>
             {baseOrder.length === 0 ? (
-              <div style={{ padding: "18px", color: "#86a5c0", fontSize: 14 }}>
+              <div style={{ padding: "18px", color: "var(--text-secondary)", fontSize: 14 }}>
                 No live lottery teams available right now.
               </div>
             ) : boardRows.map((entry, index) => {
@@ -944,17 +944,17 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                     gap: 12,
                     alignItems: "center",
                     padding: "14px 18px",
-                    borderBottom: "1px solid #111b28",
-                    background: isWinner ? "linear-gradient(90deg, rgba(21,54,82,0.5) 0%, rgba(9,16,23,0.98) 100%)" : "transparent",
+                    borderBottom: "1px solid var(--border-color)",
+                    background: isWinner ? "linear-gradient(90deg, rgba(47,180,255,0.12) 0%, rgba(var(--bg-card-rgb),0.98) 100%)" : "transparent",
                     transform: boardVisible || !result ? "translateX(0)" : `translateX(${index % 2 === 0 ? -18 : 18}px)`,
                     opacity: boardVisible || !result ? 1 : 0.45,
                     transitionDelay: `${index * 40}ms`,
                   }}
                 >
                   <div style={{ display: "grid", gap: 5 }}>
-                    <div style={{ color: isWinner ? "var(--text-primary)" : "#9dc5e6", fontSize: 18, fontWeight: 900 }}>#{finalPick}</div>
+                    <div style={{ color: isWinner ? "var(--text-primary)" : "var(--text-secondary)", fontSize: 18, fontWeight: 900 }}>#{finalPick}</div>
                     {isWinner ? (
-                      <span style={{ color: "#8ed0ff", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      <span style={{ color: "var(--accent-blue)", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                         Pick winner
                       </span>
                     ) : null}
@@ -967,11 +967,11 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                       note={conditionNote}
                     />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 16, color: "#ecf7ff", fontWeight: 800, lineHeight: 1.1 }}>
+                      <div style={{ fontSize: 16, color: "var(--text-primary)", fontWeight: 800, lineHeight: 1.1 }}>
                         {entry.standings.name}
                       </div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 6 }}>
-                        <span style={{ fontSize: 11, color: "#5d7994", fontFamily: "'DM Mono',monospace" }}>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace" }}>
                           {entry.originalTeam}
                           {selectionOwner !== entry.originalTeam ? ` → ${selectionOwner}` : ""}
                         </span>
@@ -998,14 +998,14 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                       </div>
                     </div>
                   </div>
-                  <div style={{ fontSize: 14, color: "#c9d8e5", fontWeight: 700 }}>{entry.standings.gamesPlayed}</div>
-                  <div style={{ fontSize: 14, color: "#c9d8e5", fontWeight: 700 }}>{formatRecord(entry.standings)}</div>
-                  <div style={{ fontSize: 14, color: "#c9d8e5", fontWeight: 700 }}>{entry.standings.points ?? "—"}</div>
-                  <div style={{ fontSize: 14, color: "#90a6bc", fontWeight: 700 }}>{entry.standings.last10Record || "—"}</div>
-                  <div style={{ fontSize: 15, color: "#c9d8e5", fontWeight: 700 }}>{formatPercent(entry.odds)}</div>
+                  <div style={{ fontSize: 14, color: "var(--text-secondary)", fontWeight: 700 }}>{entry.standings.gamesPlayed}</div>
+                  <div style={{ fontSize: 14, color: "var(--text-secondary)", fontWeight: 700 }}>{formatRecord(entry.standings)}</div>
+                  <div style={{ fontSize: 14, color: "var(--text-secondary)", fontWeight: 700 }}>{entry.standings.points ?? "—"}</div>
+                  <div style={{ fontSize: 14, color: "var(--text-secondary)", fontWeight: 700 }}>{entry.standings.last10Record || "—"}</div>
+                  <div style={{ fontSize: 15, color: "var(--text-secondary)", fontWeight: 700 }}>{formatPercent(entry.odds)}</div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                     <ResultBadge row={{ movement }} />
-                    <span style={{ color: "#7c98b3", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
                       started #{entry.baseRank}
                     </span>
                   </div>
@@ -1049,7 +1049,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         alignItems: "center",
                         padding: "12px 14px",
                         borderRadius: 16,
-                        background: "#0e1620",
+                        background: "var(--bg-card)",
                         border: "1px solid var(--border-strong)",
                       }}
                     >
@@ -1057,26 +1057,26 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         <TeamLogo abbr={team.currentOwner} size={28} />
                         <div>
                           <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{team.standings.name}</div>
-                          <div style={{ color: "#63839f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
+                          <div style={{ color: "var(--text-muted)", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
                             Base #{team.baseRank}
                           </div>
                         </div>
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{formatPercent(team.topPickRate)}</div>
-                        <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Pick #1</div>
+                        <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Pick #1</div>
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{formatPercent(topTwoRate)}</div>
-                        <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Top 2</div>
+                        <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Top 2</div>
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{team.averagePick.toFixed(2)}</div>
-                        <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Avg slot</div>
+                        <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Avg slot</div>
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{commonSlot ? `#${commonSlot}` : "—"}</div>
-                        <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Most common</div>
+                        <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Most common</div>
                       </div>
                     </div>
                   );
@@ -1086,10 +1086,10 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               <div
                 style={{
                   borderRadius: 18,
-                  border: "1px dashed #244158",
+                  border: "1px dashed var(--border-strong)",
                   background: "var(--bg-card)",
                   padding: "22px 18px",
-                  color: "#7e98b1",
+                  color: "var(--text-secondary)",
                   fontSize: 14,
                   lineHeight: 1.45,
                 }}
@@ -1122,10 +1122,10 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               </div>
 
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                <LegendPill label="Original Team" color="#9dc5e6" bg="rgba(157, 197, 230, 0.12)" />
+                <LegendPill label="Original Team" color="var(--text-secondary)" bg="rgba(157, 197, 230, 0.12)" />
                 <LegendPill label="Selection Owner" color="#35e3a0" bg="rgba(53, 227, 160, 0.12)" />
                 <LegendPill label="Protected Pick" color="#ff7c8d" bg="rgba(255, 111, 123, 0.12)" />
-                <LegendPill label="Static Slot" color="#8ed0ff" bg="rgba(74, 167, 255, 0.12)" />
+                <LegendPill label="Static Slot" color="var(--accent-blue)" bg="rgba(74, 167, 255, 0.12)" />
               </div>
 
               <div style={{ display: "grid", gap: 10 }}>
@@ -1145,14 +1145,14 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         alignItems: "center",
                         padding: "12px 14px",
                         borderRadius: 16,
-                        background: "#0e1620",
+                        background: "var(--bg-card)",
                         border: "1px solid var(--border-strong)",
                         transition: "background 0.16s ease",
                       }}
                     >
-                      <div style={{ color: "#b6d7f1", fontSize: 18, fontWeight: 900 }}>#{row.slot}</div>
+                      <div style={{ color: "var(--text-secondary)", fontSize: 18, fontWeight: 900 }}>#{row.slot}</div>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ color: "#6d87a0", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                           Original Team
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 5 }}>
@@ -1164,7 +1164,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         </div>
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ color: "#6d87a0", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                           Selection Owner
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 5 }}>
@@ -1191,7 +1191,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         >
                           {meta.label}
                         </span>
-                        <div style={{ color: "#6d87a0", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
+                        <div style={{ color: "var(--text-muted)", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
                           {row.isTradedPick ? "Traded" : "Own pick"}
                         </div>
                       </div>
@@ -1209,20 +1209,20 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                       padding: "14px 16px",
                       borderRadius: 18,
                       background: "linear-gradient(180deg, rgba(17, 88, 140, 0.28) 0%, rgba(10, 18, 27, 0.95) 100%)",
-                      border: "1px solid #246ea7",
+                      border: "1px solid var(--border-strong)",
                     }}
                   >
-                    <div style={{ color: "#d4ecff", fontSize: 20, fontWeight: 900 }}>#{ottawaRow.slot}</div>
+                    <div style={{ color: "var(--text-primary)", fontSize: 20, fontWeight: 900 }}>#{ottawaRow.slot}</div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ color: "#7fc5fb", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      <div style={{ color: "var(--accent-blue)", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                         Special Slot
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 5 }}>
                         <TeamLogo abbr={ottawaRow.originalTeam} size={30} />
-                        <div style={{ color: "#f3fbff", fontSize: 16, fontWeight: 900 }}>Ottawa static pick</div>
+                        <div style={{ color: "var(--text-primary)", fontSize: 16, fontWeight: 900 }}>Ottawa static pick</div>
                       </div>
                     </div>
-                    <div style={{ color: "#d8ebfb", fontSize: 14 }}>
+                    <div style={{ color: "var(--text-secondary)", fontSize: 14 }}>
                       Original team and selection owner: <strong>{ottawaRow.selectionOwner}</strong>
                     </div>
                     <span
@@ -1233,7 +1233,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         padding: "5px 10px",
                         borderRadius: 999,
                         background: "rgba(142, 208, 255, 0.16)",
-                        color: "#8ed0ff",
+                        color: "var(--accent-blue)",
                         fontSize: 10,
                         fontWeight: 700,
                         letterSpacing: "0.08em",
@@ -1263,7 +1263,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               </div>
               <div style={{ display: "grid", gap: 10 }}>
                 {history.length === 0 ? (
-                  <div style={{ color: "#72889d", fontSize: 14 }}>
+                  <div style={{ color: "var(--text-muted)", fontSize: 14 }}>
                     No simulation history yet.
                   </div>
                 ) : (
@@ -1292,7 +1292,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                   How to read the board
                 </div>
               </div>
-              <div style={{ color: "#86a5c0", fontSize: 14, lineHeight: 1.55 }}>
+              <div style={{ color: "var(--text-secondary)", fontSize: 14, lineHeight: 1.55 }}>
                 Reveal mode keeps the board central: Pick #2, then Pick #1, then the rest of the order settles into place. Ownership and protection badges stay inline so you can see who actually makes each selection.
               </div>
               {!hasEntries && (

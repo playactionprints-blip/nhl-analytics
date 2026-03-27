@@ -17,7 +17,7 @@ function SummaryCard({ label, player, value, accent = "#2fb4ff" }) {
         gap: 8,
       }}
     >
-      <div style={{ color: "#7d95ab", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+      <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
         {label}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -31,7 +31,7 @@ function SummaryCard({ label, player, value, accent = "#2fb4ff" }) {
         />
         <div style={{ minWidth: 0 }}>
           <div style={{ color: "var(--text-primary)", fontSize: 14, fontWeight: 900 }}>{player.player_name}</div>
-          <div style={{ color: "#89d4ff", fontSize: 12, fontWeight: 700 }}>{value}</div>
+          <div style={{ color: "var(--accent-blue)", fontSize: 12, fontWeight: 700 }}>{value}</div>
         </div>
       </div>
     </div>
@@ -42,7 +42,7 @@ export default function FantasyCompareSummary({ summary }) {
   return (
     <section style={{ display: "grid", gap: 12 }}>
       <div>
-        <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+        <div style={{ color: "var(--text-muted)", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
           Edge Summary
         </div>
         <div style={{ color: "var(--text-primary)", fontSize: 26, fontWeight: 900, marginTop: 4 }}>
@@ -60,7 +60,7 @@ export default function FantasyCompareSummary({ summary }) {
       <div
         style={{
           borderRadius: 18,
-          border: "1px solid #17344a",
+          border: "1px solid var(--border-strong)",
           background: "var(--bg-card)",
           padding: "14px 16px",
           display: "grid",
@@ -70,7 +70,7 @@ export default function FantasyCompareSummary({ summary }) {
         <div style={{ color: "var(--text-primary)", fontSize: 16, fontWeight: 900 }}>
           Best fit for your settings: {summary.bestFit?.player?.player_name || "—"}
         </div>
-        <div style={{ color: "#86a5c0", fontSize: 13, lineHeight: 1.5 }}>
+        <div style={{ color: "var(--text-secondary)", fontSize: 13, lineHeight: 1.5 }}>
           {summary.bestFit?.note || "Adjust the timeframe or add more players to compare short-term versus long-term value."}
         </div>
       </div>

@@ -14,18 +14,18 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
       <div
         style={{
           borderRadius: 24,
-          border: "1px solid #16283a",
-          background: "#0a121c",
+          border: "1px solid var(--border-strong)",
+          background: "var(--bg-card)",
           padding: "20px 22px",
           display: "grid",
           gap: 10,
         }}
       >
-        <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <div style={{ color: "var(--text-secondary)", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Model
         </div>
         <div style={{ color: "var(--text-primary)", fontSize: 22, fontWeight: 900 }}>Pregame model recap not captured</div>
-        <div style={{ color: "#88a3bb", lineHeight: 1.6, fontSize: 14 }}>
+        <div style={{ color: "var(--text-secondary)", lineHeight: 1.6, fontSize: 14 }}>
           This game doesn’t have a stored pregame snapshot in the model log, so market-vs-model review is unavailable here. The rest of the postgame report still reflects live gamecenter and play-by-play data.
         </div>
       </div>
@@ -33,7 +33,7 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
   }
 
   const accuracyTone = recap.wasCorrect == null
-    ? { color: "#8eb9db", bg: "rgba(47,180,255,0.12)", label: "Pending" }
+    ? { color: "var(--text-secondary)", bg: "rgba(47,180,255,0.12)", label: "Pending" }
     : recap.wasCorrect
       ? { color: "#35e3a0", bg: "rgba(53,227,160,0.14)", label: "Model correct" }
       : { color: "#ff8d9b", bg: "rgba(255,111,123,0.14)", label: "Model missed" };
@@ -42,8 +42,8 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
     <div
       style={{
         borderRadius: 24,
-        border: "1px solid #16283a",
-        background: "#0a121c",
+        border: "1px solid var(--border-strong)",
+        background: "var(--bg-card)",
         padding: compact ? "18px" : "22px",
         display: "grid",
         gap: 16,
@@ -51,7 +51,7 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <div>
-          <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          <div style={{ color: "var(--text-secondary)", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Model
           </div>
           <div style={{ color: "var(--text-primary)", fontSize: compact ? 22 : 26, fontWeight: 900, marginTop: 4 }}>Pregame recap</div>
@@ -103,8 +103,8 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
                 ["Market line", signedOdds(side.marketOdds)],
                 ["Edge", side.edge == null ? "—" : `${side.edge >= 0 ? "+" : ""}${(side.edge * 100).toFixed(1)} pts`],
               ].map(([label, value]) => (
-                <div key={`${side.abbr}-${label}`} style={{ borderRadius: 14, background: "#101a25", border: "1px solid #1a3044", padding: "10px 12px" }}>
-                  <div style={{ color: "#7189a1", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
+                <div key={`${side.abbr}-${label}`} style={{ borderRadius: 14, background: "#101a25", border: "1px solid var(--border-strong)", padding: "10px 12px" }}>
+                  <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
                   <div style={{ color: label === "Edge" && side.edge != null ? (side.edge >= 0 ? "#35e3a0" : "#ff8d9b") : "var(--text-primary)", fontSize: 15, fontWeight: 800, marginTop: 6 }}>{value}</div>
                 </div>
               ))}
@@ -121,7 +121,7 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
           ["Simulations", recap.simulations != null ? recap.simulations.toLocaleString() : "Logged pregame"],
         ].map(([label, value]) => (
           <div key={label} style={{ borderRadius: 14, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "12px 14px" }}>
-            <div style={{ color: "#7189a1", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
+            <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
             <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800, marginTop: 6 }}>{value}</div>
           </div>
         ))}

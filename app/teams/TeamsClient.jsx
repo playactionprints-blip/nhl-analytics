@@ -199,7 +199,7 @@ export default function TeamsClient({
               : null,
           playerCount: seasonData.players.size,
           record,
-          color: TEAM_COLOR[abbr] || "#4a6a88",
+          color: TEAM_COLOR[abbr] || "var(--text-muted)",
           debugBySeason: seasonData.debugBySeason,
         };
       })
@@ -302,7 +302,7 @@ export default function TeamsClient({
             <div
               style={{
                 fontSize: 11,
-                color: "#2a5070",
+                color: "var(--text-muted)",
                 letterSpacing: "0.2em",
                 textTransform: "uppercase",
                 fontFamily: "'DM Mono',monospace",
@@ -315,7 +315,7 @@ export default function TeamsClient({
               style={{
                 fontSize: 42,
                 fontWeight: 900,
-                color: "#e8f4ff",
+                color: "var(--text-primary)",
                 letterSpacing: "-0.5px",
                 lineHeight: 1,
                 margin: 0,
@@ -336,7 +336,7 @@ export default function TeamsClient({
             <div
               style={{
                 fontSize: 10,
-                color: "#4d6f8d",
+                color: "var(--text-muted)",
                 fontFamily: "'DM Mono',monospace",
                 marginTop: 6,
               }}
@@ -400,7 +400,7 @@ export default function TeamsClient({
                 style={{
                   display: "block",
                   textDecoration: "none",
-                  background: "#0a1218",
+                  background: "var(--bg-card)",
                   border: `1px solid ${team.color}22`,
                   borderRadius: 12,
                   padding: "16px",
@@ -449,7 +449,7 @@ export default function TeamsClient({
                       style={{
                         fontSize: 16,
                         fontWeight: 700,
-                        color: "#e8f4ff",
+                        color: "var(--text-primary)",
                         fontFamily: "'Barlow Condensed',sans-serif",
                         lineHeight: 1.2,
                       }}
@@ -459,7 +459,7 @@ export default function TeamsClient({
                     <div
                       style={{
                         fontSize: 10,
-                        color: "#4a6a88",
+                        color: "var(--text-muted)",
                         fontFamily: "'DM Mono',monospace",
                         marginTop: 2,
                       }}
@@ -470,7 +470,7 @@ export default function TeamsClient({
                   </div>
                 </div>
 
-                <div style={{ display: "flex", gap: 8, borderTop: "1px solid #0d1825", paddingTop: 10 }}>
+                <div style={{ display: "flex", gap: 8, borderTop: "1px solid var(--border-color)", paddingTop: 10 }}>
                   <div style={{ flex: 1, textAlign: "center" }}>
                     <div
                       style={{
@@ -493,7 +493,7 @@ export default function TeamsClient({
                     <div
                       style={{
                         fontSize: 9,
-                        color: "#3a5a78",
+                        color: "var(--text-muted)",
                         marginTop: 2,
                         fontFamily: "'DM Mono',monospace",
                         textTransform: "uppercase",
@@ -507,7 +507,7 @@ export default function TeamsClient({
                   <div
                     style={{
                       width: 1,
-                      background: "#12202e",
+                      background: "var(--bg-secondary)",
                     }}
                   />
 
@@ -526,7 +526,7 @@ export default function TeamsClient({
                     <div
                       style={{
                         fontSize: 9,
-                        color: "#3a5a78",
+                        color: "var(--text-muted)",
                         marginTop: 2,
                         fontFamily: "'DM Mono',monospace",
                         textTransform: "uppercase",
@@ -540,7 +540,7 @@ export default function TeamsClient({
                   <div
                     style={{
                       width: 1,
-                      background: "#12202e",
+                      background: "var(--bg-secondary)",
                     }}
                   />
 
@@ -550,7 +550,7 @@ export default function TeamsClient({
                         fontSize: 20,
                         fontWeight: 900,
                         lineHeight: 1,
-                        color: "#9bdcff",
+                        color: "var(--accent-blue)",
                         fontFamily: "'Barlow Condensed',sans-serif",
                       }}
                     >
@@ -559,7 +559,7 @@ export default function TeamsClient({
                     <div
                       style={{
                         fontSize: 9,
-                        color: "#3a5a78",
+                        color: "var(--text-muted)",
                         marginTop: 2,
                         fontFamily: "'DM Mono',monospace",
                         textTransform: "uppercase",

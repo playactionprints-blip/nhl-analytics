@@ -18,7 +18,7 @@ function PositionBadge({ value }) {
       style={{
         borderRadius: 999,
         background: "rgba(47,180,255,0.14)",
-        color: "#8fd6ff",
+        color: "var(--text-secondary)",
         padding: "3px 8px",
         fontSize: 10,
         fontWeight: 800,
@@ -87,9 +87,9 @@ export default function FantasyRosterBuilder({
             style={{
               width: "100%",
               borderRadius: 14,
-              border: "1px solid #213547",
+              border: "1px solid var(--border-strong)",
               background: "var(--bg-card)",
-              color: "#e8f5ff",
+              color: "var(--text-primary)",
               padding: "12px 14px",
               fontSize: 14,
               outline: "none",
@@ -126,7 +126,7 @@ export default function FantasyRosterBuilder({
                       <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800, minWidth: 0 }}>{player.player_name}</div>
                       <PositionBadge value={player.position} />
                     </div>
-                    <div style={{ color: "#7f97ad", fontSize: 12 }}>
+                    <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
                       {player.team} · {formatCapHit(player.cap_hit)}
                     </div>
                   </div>
@@ -138,7 +138,7 @@ export default function FantasyRosterBuilder({
                       borderRadius: 999,
                       border: `1px solid ${rostered ? "#223647" : "#2fb4ff"}`,
                       background: rostered ? "#0c151e" : "rgba(47,180,255,0.12)",
-                      color: rostered ? "#6d879f" : "#a8defd",
+                      color: rostered ? "#6d879f" : "var(--accent-blue)",
                       padding: "8px 10px",
                       fontSize: 10,
                       fontWeight: 800,
@@ -174,12 +174,12 @@ export default function FantasyRosterBuilder({
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                 <div style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 900 }}>{meta.label}</div>
-                <div style={{ color: "#7d95ab", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                <div style={{ color: "var(--text-muted)", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                   {sectionPlayers.length}/{meta.slots}
                 </div>
               </div>
               {sectionPlayers.length === 0 ? (
-                <div style={{ color: "#65819e", fontSize: 13, lineHeight: 1.5 }}>
+                <div style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.5 }}>
                   No players in this section yet.
                 </div>
               ) : (
@@ -211,7 +211,7 @@ export default function FantasyRosterBuilder({
                           <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{player.player_name}</div>
                           <PositionBadge value={player.position} />
                         </div>
-                        <div style={{ color: "#7f97ad", fontSize: 12 }}>
+                        <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
                           {player.team} · WAR {player.war != null ? Number(player.war).toFixed(2) : "—"} · {formatCapHit(player.cap_hit)}
                         </div>
                       </div>
@@ -220,9 +220,9 @@ export default function FantasyRosterBuilder({
                         onClick={() => handleRemovePlayer(player.player_id)}
                         style={{
                           borderRadius: 999,
-                          border: "1px solid #2b3f52",
-                          background: "#101a25",
-                          color: "#9db7cd",
+                          border: "1px solid var(--border-strong)",
+                          background: "var(--bg-secondary)",
+                          color: "var(--text-secondary)",
                           padding: "8px 10px",
                           fontSize: 10,
                           fontWeight: 800,

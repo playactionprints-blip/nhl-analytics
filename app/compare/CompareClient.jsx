@@ -80,16 +80,16 @@ function PlayerPicker({ label, player, onSelect, accent = "#0080FF" }) {
 
   return (
     <div className="compare-player-picker" style={{ flex: 1, minWidth: 240 }}>
-      <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{label}</div>
       {player ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${TEAM_COLOR[player.team] || "#4a6a88"}18`, border: `1px solid ${TEAM_COLOR[player.team] || "#4a6a88"}44`, borderRadius: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${TEAM_COLOR[player.team] || "var(--text-muted)"}18`, border: `1px solid ${TEAM_COLOR[player.team] || "var(--text-muted)"}44`, borderRadius: 10 }}>
           {player.headshot_url && <img src={player.headshot_url} alt={player.full_name} width={44} height={44} style={{ borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />}
           <img src={logoUrl(player.team)} alt={player.team} width={28} height={28} style={{ objectFit: "contain", flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: "#e8f4ff", fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: "-0.3px" }}>{player.full_name}</div>
-            <div style={{ fontSize: 10, color: "#5a7a99", fontFamily: "'DM Mono',monospace" }}>{player.team} · {player.position} · OVR {player.overall_rating != null ? Math.round(player.overall_rating) : "—"}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)", fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: "-0.3px" }}>{player.full_name}</div>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace" }}>{player.team} · {player.position} · OVR {player.overall_rating != null ? Math.round(player.overall_rating) : "—"}</div>
           </div>
-          <button onClick={() => onSelect(null)} style={{ background: "none", border: "none", color: "#3a5a78", cursor: "pointer", fontSize: 14, padding: 4 }}>✕</button>
+          <button onClick={() => onSelect(null)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, padding: 4 }}>✕</button>
         </div>
       ) : (
         <div style={{ position: "relative" }}>
@@ -107,17 +107,17 @@ function PlayerPicker({ label, player, onSelect, accent = "#0080FF" }) {
               setOpen(true);
             }}
             onFocus={() => setOpen(true)}
-            style={{ width: "100%", padding: "12px 16px", background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 10, color: "#e8f4ff", fontSize: 14, fontFamily: "'Barlow Condensed',sans-serif", outline: "none", boxSizing: "border-box" }}
+            style={{ width: "100%", padding: "12px 16px", background: "var(--bg-card)", border: "1px solid var(--border-strong)", borderRadius: 10, color: "var(--text-primary)", fontSize: 14, fontFamily: "'Barlow Condensed',sans-serif", outline: "none", boxSizing: "border-box" }}
           />
           {open && (results.length > 0 || loading) && (
-            <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 99, background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 10, overflow: "hidden", boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}>
-              {loading && <div style={{ padding: "10px 14px", fontSize: 11, color: "#4a6a88", fontFamily: "'DM Mono',monospace" }}>Searching…</div>}
+            <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 99, background: "var(--bg-card)", border: "1px solid var(--border-strong)", borderRadius: 10, overflow: "hidden", boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}>
+              {loading && <div style={{ padding: "10px 14px", fontSize: 11, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace" }}>Searching…</div>}
               {results.map(p => (
-                <button key={p.player_id} onClick={() => choose(p)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "none", border: "none", borderBottom: "1px solid #142231", cursor: "pointer", textAlign: "left" }}>
+                <button key={p.player_id} onClick={() => choose(p)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "none", border: "none", borderBottom: "1px solid var(--border-color)", cursor: "pointer", textAlign: "left" }}>
                   <img src={logoUrl(p.team)} alt={p.team} width={22} height={22} style={{ objectFit: "contain" }} />
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", fontFamily: "'Barlow Condensed',sans-serif" }}>{p.full_name}</div>
-                    <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace" }}>{p.team} · {p.position}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace" }}>{p.team} · {p.position}</div>
                   </div>
                 </button>
               ))}
@@ -167,7 +167,7 @@ function CompareTable({ p1, p2 }) {
       <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'DM Mono',monospace", fontSize: 12 }}>
         <thead>
           <tr style={{ background: "var(--bg-card)" }}>
-            <th style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, color: "#3a5a78", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: "1px solid var(--border-strong)", width: "28%" }}>Stat</th>
+            <th style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: "1px solid var(--border-strong)", width: "28%" }}>Stat</th>
             <th style={{ padding: "8px 14px", textAlign: "right", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", borderBottom: "1px solid var(--border-strong)", color: c1, width: "36%" }}>{p1?.full_name || "Player 1"}</th>
             <th style={{ padding: "8px 14px", textAlign: "right", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", borderBottom: "1px solid var(--border-strong)", color: c2, width: "36%" }}>{p2?.full_name || "Player 2"}</th>
           </tr>
@@ -183,13 +183,13 @@ function CompareTable({ p1, p2 }) {
             const p2Better = bothPresent && (row.higherBetter ? n2 > n1 : n2 < n1);
             const bgColor = i % 2 === 0 ? "var(--bg-primary)" : "#060b12";
             return (
-              <tr key={row.label} style={{ background: bgColor, borderBottom: "1px solid #0a1218" }}>
-                <td style={{ padding: "7px 14px", color: "#5a7a99", fontSize: 11, fontFamily: "'DM Mono',monospace", fontWeight: row.bold ? 700 : 400 }}>{row.label}</td>
-                <td style={{ padding: "7px 14px", textAlign: "right", fontFamily: "'DM Mono',monospace", fontWeight: p1Better ? 800 : 400, color: p1Better ? "#00e5a0" : p2Better ? "#4a6a88" : "#8899aa", fontSize: 13 }}>
+              <tr key={row.label} style={{ background: bgColor, borderBottom: "1px solid var(--border-color)" }}>
+                <td style={{ padding: "7px 14px", color: "var(--text-muted)", fontSize: 11, fontFamily: "'DM Mono',monospace", fontWeight: row.bold ? 700 : 400 }}>{row.label}</td>
+                <td style={{ padding: "7px 14px", textAlign: "right", fontFamily: "'DM Mono',monospace", fontWeight: p1Better ? 800 : 400, color: p1Better ? "#00e5a0" : p2Better ? "var(--text-muted)" : "#8899aa", fontSize: 13 }}>
                   {row.fmt(v1, p1)}
                   {p1Better && <span style={{ marginLeft: 4, fontSize: 9, color: "#00e5a0" }}>▲</span>}
                 </td>
-                <td style={{ padding: "7px 14px", textAlign: "right", fontFamily: "'DM Mono',monospace", fontWeight: p2Better ? 800 : 400, color: p2Better ? "#00e5a0" : p1Better ? "#4a6a88" : "#8899aa", fontSize: 13 }}>
+                <td style={{ padding: "7px 14px", textAlign: "right", fontFamily: "'DM Mono',monospace", fontWeight: p2Better ? 800 : 400, color: p2Better ? "#00e5a0" : p1Better ? "var(--text-muted)" : "#8899aa", fontSize: 13 }}>
                   {row.fmt(v2, p2)}
                   {p2Better && <span style={{ marginLeft: 4, fontSize: 9, color: "#00e5a0" }}>▲</span>}
                 </td>
@@ -225,20 +225,20 @@ function CompareRadar({ p1, p2 }) {
   }));
 
   return (
-    <div style={{ background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "16px 20px" }}>
-      <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Percentile Radar</div>
+    <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "16px 20px" }}>
+      <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Percentile Radar</div>
       <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
         {[p1, p2].map((p, idx) => p && (
           <div key={idx} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 12, height: 3, borderRadius: 2, background: idx === 0 ? c1 : c2 }} />
-            <span style={{ fontSize: 10, color: "#5a7a99", fontFamily: "'DM Mono',monospace" }}>{p.full_name}</span>
+            <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace" }}>{p.full_name}</span>
           </div>
         ))}
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <RadarChart data={data} cx="50%" cy="50%" outerRadius="70%">
           <PolarGrid stroke="var(--border-strong)" />
-          <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10, fill: "#5a7a99", fontFamily: "DM Mono,monospace" }} />
+          <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10, fill: "var(--text-muted)", fontFamily: "DM Mono,monospace" }} />
           <Radar dataKey="p1val" stroke={c1} fill={c1} fillOpacity={0.15} strokeWidth={2} dot={{ r: 3, fill: c1 }} name={p1?.full_name || "P1"} />
           <Radar dataKey="p2val" stroke={c2} fill={c2} fillOpacity={0.15} strokeWidth={2} dot={{ r: 3, fill: c2 }} name={p2?.full_name || "P2"} />
           <Tooltip
@@ -265,22 +265,22 @@ function WarBars({ p1, p2 }) {
   const maxAbs = allVals.length ? Math.max(...allVals.map(Math.abs), 0.1) : 1;
 
   return (
-    <div style={{ background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "16px 20px" }}>
-      <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14 }}>WAR Components</div>
+    <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "16px 20px" }}>
+      <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14 }}>WAR Components</div>
       {bars.map(bar => {
         const v1 = p1?.[bar.k] != null ? Number(p1[bar.k]) : null;
         const v2 = p2?.[bar.k] != null ? Number(p2[bar.k]) : null;
         return (
           <div key={bar.label} style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 10, color: "#4a6a88", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>{bar.label}</div>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>{bar.label}</div>
             {[{v: v1, c: c1, name: p1?.full_name}, {v: v2, c: c2, name: p2?.full_name}].map(({v, c, name}) => (
               <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", width: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name || "—"}</div>
-                <div style={{ flex: 1, height: 14, background: "#1a2535", borderRadius: 7, overflow: "hidden", position: "relative" }}>
+                <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", width: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name || "—"}</div>
+                <div style={{ flex: 1, height: 14, background: "var(--bg-secondary)", borderRadius: 7, overflow: "hidden", position: "relative" }}>
                   {v != null && (
                     <div style={{ position: "absolute", left: v >= 0 ? "50%" : `${50 - (Math.abs(v) / maxAbs) * 50}%`, width: `${(Math.abs(v) / maxAbs) * 50}%`, height: "100%", background: `${c}cc`, borderRadius: 7, transition: "width 0.7s ease" }} />
                   )}
-                  <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: "#2a3d55" }} />
+                  <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: "var(--border-strong)" }} />
                 </div>
                 <div style={{ fontSize: 11, color: v != null ? (v >= 0 ? c : "#e05050") : "var(--text-muted)", fontFamily: "'DM Mono',monospace", fontWeight: 700, width: 40, textAlign: "right" }}>
                   {v != null ? `${v >= 0 ? "+" : ""}${v.toFixed(bar.digits)}` : "—"}
@@ -303,22 +303,22 @@ function Verdict({ p1, p2 }) {
   const w2 = p2.war_total ?? 0;
   const winner = r1 > r2 ? p1 : r2 > r1 ? p2 : null;
   const margin = Math.abs(r1 - r2).toFixed(1);
-  const accentW = winner ? (TEAM_COLOR[winner.team] || "#00e5a0") : "#4a6a88";
+  const accentW = winner ? (TEAM_COLOR[winner.team] || "#00e5a0") : "var(--text-muted)";
 
   return (
-    <div style={{ background: winner ? `${accentW}0f` : "#0d1825", border: `1px solid ${accentW}44`, borderRadius: 10, padding: "16px 20px" }}>
-      <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Verdict</div>
+    <div style={{ background: winner ? `${accentW}0f` : "var(--bg-card)", border: `1px solid ${accentW}44`, borderRadius: 10, padding: "16px 20px" }}>
+      <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Verdict</div>
       {winner ? (
         <>
           <div style={{ fontSize: 20, fontWeight: 900, color: accentW, fontFamily: "'Barlow Condensed',sans-serif", marginBottom: 6 }}>
             {winner.full_name} leads by {margin} OVR pts
           </div>
-          <div style={{ fontSize: 12, color: "#5a7a99", fontFamily: "'DM Mono',monospace" }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace" }}>
             {p1.full_name}: OVR {Math.round(r1)} · WAR {w1.toFixed(2)} &nbsp;|&nbsp;
             {p2.full_name}: OVR {Math.round(r2)} · WAR {w2.toFixed(2)}
           </div>
           {Math.abs(w1 - w2) > 0.5 && (
-            <div style={{ fontSize: 11, color: "#4a6a88", fontFamily: "'DM Mono',monospace", marginTop: 6 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", marginTop: 6 }}>
               {w1 > w2 ? p1.full_name : p2.full_name} has the WAR edge (+{Math.abs(w1 - w2).toFixed(2)}).
             </div>
           )}
@@ -377,8 +377,8 @@ export default function CompareClient() {
         body { background:var(--bg-primary); }
         input::placeholder { color:var(--text-muted); }
         ::-webkit-scrollbar { width:4px; }
-        ::-webkit-scrollbar-track { background:#0d1825; }
-        ::-webkit-scrollbar-thumb { background:#1e2d40; border-radius:2px; }
+        ::-webkit-scrollbar-track { background:var(--bg-card); }
+        ::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:2px; }
         @media (max-width: 860px) {
           .compare-page-shell {
             padding: 20px 14px 36px !important;
@@ -413,8 +413,8 @@ export default function CompareClient() {
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           {/* Page header */}
           <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 11, color: "#2a5070", letterSpacing: "0.2em", textTransform: "uppercase", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>NHL Analytics</div>
-            <h1 className="compare-page-title" style={{ fontSize: 38, fontWeight: 900, color: "#e8f4ff", letterSpacing: "-1px", lineHeight: 1 }}>Player Compare</h1>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.2em", textTransform: "uppercase", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>NHL Analytics</div>
+            <h1 className="compare-page-title" style={{ fontSize: 38, fontWeight: 900, color: "var(--text-primary)", letterSpacing: "-1px", lineHeight: 1 }}>Player Compare</h1>
             <div style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", marginTop: 6 }}>Select two skaters to compare stats, ratings, and percentiles</div>
           </div>
 
@@ -436,20 +436,20 @@ export default function CompareClient() {
               {/* Player headers */}
               <div className="compare-header-cards" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 {[p1, p2].map((p, idx) => {
-                  const accent = TEAM_COLOR[p.team] || "#4a6a88";
+                  const accent = TEAM_COLOR[p.team] || "var(--text-muted)";
                   return (
                     <div key={idx} style={{ padding: "16px 20px", background: `${accent}18`, border: `1px solid ${accent}44`, borderRadius: 10, display: "flex", alignItems: "center", gap: 14 }}>
                       {p.headshot_url && <img src={p.headshot_url} alt={p.full_name} width={56} height={56} style={{ borderRadius: 8, objectFit: "cover" }} />}
                       <img src={logoUrl(p.team)} alt={p.team} width={36} height={36} style={{ objectFit: "contain" }} />
                       <div>
-                        <div style={{ fontSize: 22, fontWeight: 900, color: "#e8f4ff", fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: "-0.5px" }}>{p.full_name}</div>
-                        <div style={{ fontSize: 11, color: "#4a6a88", fontFamily: "'DM Mono',monospace" }}>{p.team} · {p.position} · OVR {p.overall_rating != null ? Math.round(p.overall_rating) : "—"}</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text-primary)", fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: "-0.5px" }}>{p.full_name}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace" }}>{p.team} · {p.position} · OVR {p.overall_rating != null ? Math.round(p.overall_rating) : "—"}</div>
                       </div>
                       <div style={{ marginLeft: "auto", textAlign: "center" }}>
                         <div style={{ fontSize: 32, fontWeight: 900, color: pctColor(p.overall_rating), fontFamily: "'Barlow Condensed',sans-serif", lineHeight: 1 }}>
                           {p.overall_rating != null ? Math.round(p.overall_rating) : "—"}
                         </div>
-                        <div style={{ fontSize: 9, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>OVR</div>
+                        <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>OVR</div>
                       </div>
                     </div>
                   );

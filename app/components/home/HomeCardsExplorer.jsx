@@ -60,8 +60,8 @@ function parseToi(toi) {
 }
 
 function pctColor(value) {
-  if (value == null || Number.isNaN(Number(value))) return "#58728b";
-  if (value >= 85) return "#2fe0a0";
+  if (value == null || Number.isNaN(Number(value))) return "var(--text-muted)";
+  if (value >= 85) return "var(--accent-teal)";
   if (value >= 70) return "#2fb4ff";
   if (value >= 50) return "#ffbf47";
   return "#ff6b7a";
@@ -165,7 +165,7 @@ function SearchableSelect({
     <div ref={comboRef} style={{ display: "grid", gap: 8, position: "relative" }}>
       <div
         style={{
-          color: "#86a9c6",
+          color: "var(--text-secondary)",
           fontSize: 11,
           fontFamily: "'DM Mono',monospace",
           textTransform: "uppercase",
@@ -178,8 +178,8 @@ function SearchableSelect({
       <div
         style={{
           borderRadius: 18,
-          border: `1px solid ${open ? `${accent}66` : "#1d3347"}`,
-          background: "#0a141f",
+          border: `1px solid ${open ? `${accent}66` : "var(--border-strong)"}`,
+          background: "var(--bg-card)",
           padding: "12px 14px",
           display: "grid",
           gap: 10,
@@ -212,7 +212,7 @@ function SearchableSelect({
             style={{
               border: "none",
               background: "transparent",
-              color: "#7ea3c0",
+              color: "var(--text-secondary)",
               cursor: "pointer",
               fontSize: 12,
               padding: 0,
@@ -225,7 +225,7 @@ function SearchableSelect({
         {!query && selectedLabel ? (
           <div
             style={{
-              color: "#7f97ad",
+              color: "var(--text-muted)",
               fontSize: 12,
               fontFamily: "'DM Mono',monospace",
             }}
@@ -244,7 +244,7 @@ function SearchableSelect({
             right: 0,
             marginTop: 8,
             borderRadius: 18,
-            border: "1px solid #1d3347",
+            border: "1px solid var(--border-strong)",
             background: "rgba(8,13,21,0.98)",
             boxShadow: "0 18px 40px rgba(0,0,0,0.42)",
             maxHeight: 320,
@@ -255,7 +255,7 @@ function SearchableSelect({
           {options.length ? (
             options.map((option) => renderOption(option))
           ) : (
-            <div style={{ padding: 14, color: "#8ba7bf" }}>No matches found.</div>
+            <div style={{ padding: 14, color: "var(--text-secondary)" }}>No matches found.</div>
           )}
         </div>
       ) : null}
@@ -289,7 +289,7 @@ function PlayerPreview({ player }) {
             <div style={{ color: "var(--text-primary)", fontSize: 24, fontWeight: 900, lineHeight: 1 }}>
               {player.full_name}
             </div>
-            <div style={{ color: "#84a4be", fontSize: 13, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ color: "var(--text-secondary)", fontSize: 13, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <span>{player.team} · {TEAM_FULL[player.team] || player.team}</span>
               <span>{player.position || "—"} · {roleLabel(player)}</span>
             </div>
@@ -321,7 +321,7 @@ function PlayerPreview({ player }) {
           <div style={{ color: accent, fontSize: 22, fontWeight: 900, lineHeight: 1.1 }}>
             {player.war_total != null ? `${Number(player.war_total) > 0 ? "+" : ""}${Number(player.war_total).toFixed(1)}` : "—"}
           </div>
-          <div style={{ color: "#8eb4cf", fontSize: 9, fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
+          <div style={{ color: "var(--text-secondary)", fontSize: 9, fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
             {formatPercentileText(profilePct)}
           </div>
         </div>
@@ -330,8 +330,8 @@ function PlayerPreview({ player }) {
       <div
         style={{
           borderRadius: 16,
-          border: "1px solid #1e3143",
-          background: "#101a25",
+          border: "1px solid var(--border-strong)",
+          background: "var(--bg-secondary)",
           padding: 14,
           display: "grid",
           gap: 10,
@@ -339,7 +339,7 @@ function PlayerPreview({ player }) {
       >
         <div
           style={{
-            color: "#6d8aa3",
+            color: "var(--text-muted)",
             fontSize: 10,
             fontFamily: "'DM Mono',monospace",
             textTransform: "uppercase",
@@ -351,7 +351,7 @@ function PlayerPreview({ player }) {
         <div style={{ color: "var(--text-primary)", fontSize: 16, fontWeight: 800 }}>
           {descriptor}
         </div>
-        <div style={{ color: "#90a8bc", fontSize: 13, lineHeight: 1.55 }}>
+        <div style={{ color: "var(--text-secondary)", fontSize: 13, lineHeight: 1.55 }}>
           {profilePct != null ? `${formatPercentileText(profilePct)} overall value signal with a ${roleLabel(player).toLowerCase()} usage profile.` : "Player value signal still building."}
         </div>
         {strengths.length ? (
@@ -361,10 +361,10 @@ function PlayerPreview({ player }) {
                 key={item.label}
                 style={{
                   fontSize: 11,
-                  color: "#dff2ff",
+                  color: "var(--text-primary)",
                   borderRadius: 999,
-                  border: "1px solid #234663",
-                  background: "#0f1b28",
+                  border: "1px solid var(--border-strong)",
+                  background: "var(--bg-card)",
                   padding: "6px 10px",
                 }}
               >
@@ -378,7 +378,7 @@ function PlayerPreview({ player }) {
       <div style={{ display: "grid", gap: 10 }}>
         <div
           style={{
-            color: "#6d8aa3",
+            color: "var(--text-muted)",
             fontSize: 10,
             fontFamily: "'DM Mono',monospace",
             textTransform: "uppercase",
@@ -399,7 +399,7 @@ function PlayerPreview({ player }) {
           gap: 10,
         }}
       >
-        <StatBox label="GP" value={player.gp ?? "—"} valueColor="#dff6ff" />
+        <StatBox label="GP" value={player.gp ?? "—"} valueColor="var(--text-primary)" />
         <StatBox label="OVR" value={player.overall_rating != null ? Math.round(player.overall_rating) : "—"} valueColor="#2fb4ff" />
         <StatBox label="Role" value={player.position || "—"} valueColor={accent} />
       </div>
@@ -409,7 +409,7 @@ function PlayerPreview({ player }) {
 
 function TeamPreview({ team }) {
   if (!team) return null;
-  const accent = TEAM_COLOR[team.abbr] || "#56e0a8";
+  const accent = TEAM_COLOR[team.abbr] || "var(--accent-teal)";
   const recordText = formatRecord(team.record);
   const pointsText = team.record?.points != null ? `${team.record.points} pts` : null;
   const teamStats = [
@@ -452,7 +452,7 @@ function TeamPreview({ team }) {
           <div style={{ color: "var(--text-primary)", fontSize: 24, fontWeight: 900, lineHeight: 1 }}>
             {team.name}
           </div>
-          <div style={{ color: "#84a4be", fontSize: 13, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ color: "var(--text-secondary)", fontSize: 13, display: "flex", gap: 8, flexWrap: "wrap" }}>
             {recordText ? <span>{recordText}</span> : null}
             {pointsText ? <span>{pointsText}</span> : null}
             <span>WAR Rank #{team.rank}</span>
@@ -473,14 +473,14 @@ function TeamPreview({ team }) {
             key={item.label}
             label={item.label}
             value={item.value}
-            valueColor={item.label === "PP%" ? "#34e2a2" : item.label === "Total WAR" ? "#2fb4ff" : "#dff6ff"}
+            valueColor={item.label === "PP%" ? "#34e2a2" : item.label === "Total WAR" ? "#2fb4ff" : "var(--text-primary)"}
           />
         ))}
       </div>
 
       <div
         style={{
-          color: "#6d8aa3",
+          color: "var(--text-muted)",
           fontSize: 10,
           fontFamily: "'DM Mono',monospace",
           textTransform: "uppercase",
@@ -500,7 +500,7 @@ function PercentilePreviewBar({ label, value }) {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
         <span
           style={{
-            color: "#8ba7bf",
+            color: "var(--text-secondary)",
             fontSize: 11,
             fontFamily: "'DM Mono',monospace",
             textTransform: "uppercase",
@@ -513,7 +513,7 @@ function PercentilePreviewBar({ label, value }) {
           {Math.round(Number(value))}
         </span>
       </div>
-      <div style={{ height: 6, borderRadius: 999, background: "#172433", overflow: "hidden" }}>
+      <div style={{ height: 6, borderRadius: 999, background: "var(--bg-secondary)", overflow: "hidden" }}>
         <div
           style={{
             width: `${Math.max(0, Math.min(100, Number(value) || 0))}%`,
@@ -532,7 +532,7 @@ function StatBox({ label, value, valueColor = "var(--text-primary)" }) {
     <div
       style={{
         borderRadius: 16,
-        border: "1px solid #1f3448",
+        border: "1px solid var(--border-strong)",
         background: "rgba(12,19,29,0.88)",
         padding: "10px 12px",
         display: "grid",
@@ -541,7 +541,7 @@ function StatBox({ label, value, valueColor = "var(--text-primary)" }) {
     >
       <div
         style={{
-          color: "#7f9ab1",
+          color: "var(--text-muted)",
           fontSize: 10,
           fontFamily: "'DM Mono',monospace",
           textTransform: "uppercase",
@@ -613,7 +613,7 @@ export default function HomeCardsExplorer({ players = [], teams = [] }) {
   return (
     <section style={{ display: "grid", gap: 16 }}>
       <div style={{ display: "grid", gap: 8 }}>
-        <div style={{ color: "#86a9c6", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+        <div style={{ color: "var(--text-secondary)", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.12em" }}>
           Quick card explorer
         </div>
         <h2 style={{ margin: 0, color: "var(--text-primary)", fontSize: 34, lineHeight: 1, fontWeight: 900 }}>
@@ -626,7 +626,7 @@ export default function HomeCardsExplorer({ players = [], teams = [] }) {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ display: "grid", gap: 4 }}>
               <div style={{ color: "var(--text-primary)", fontSize: 24, fontWeight: 900 }}>Player Cards</div>
-              <div style={{ color: "#8ba7bf", fontSize: 14, lineHeight: 1.5 }}>
+              <div style={{ color: "var(--text-secondary)", fontSize: 14, lineHeight: 1.5 }}>
                 Search the current player pool and preview a card instantly.
               </div>
             </div>
@@ -666,7 +666,7 @@ export default function HomeCardsExplorer({ players = [], teams = [] }) {
                     <span style={{ color: "var(--text-primary)", fontWeight: 800, fontSize: 15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {player.full_name}
                     </span>
-                    <span style={{ color: "#7f9ab1", fontSize: 12 }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
                       {player.team} · {player.position || "—"}
                     </span>
                   </span>
@@ -678,11 +678,11 @@ export default function HomeCardsExplorer({ players = [], teams = [] }) {
           <PlayerPreview player={selectedPlayer} />
         </article>
 
-        <article style={panelShell("#56e0a8")}>
+        <article style={panelShell("var(--accent-teal)")}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ display: "grid", gap: 4 }}>
               <div style={{ color: "var(--text-primary)", fontSize: 24, fontWeight: 900 }}>Team Cards</div>
-              <div style={{ color: "#8ba7bf", fontSize: 14, lineHeight: 1.5 }}>
+              <div style={{ color: "var(--text-secondary)", fontSize: 14, lineHeight: 1.5 }}>
                 Search teams and jump into the current card view without leaving home.
               </div>
             </div>
@@ -696,7 +696,7 @@ export default function HomeCardsExplorer({ players = [], teams = [] }) {
 
           <SearchableSelect
             title="Search teams"
-            accent="#56e0a8"
+            accent="var(--accent-teal)"
             query={teamQuery}
             onQueryChange={setTeamQuery}
             open={teamBox.open}
@@ -722,7 +722,7 @@ export default function HomeCardsExplorer({ players = [], teams = [] }) {
                     <span style={{ color: "var(--text-primary)", fontWeight: 800, fontSize: 15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {team.name}
                     </span>
-                    <span style={{ color: "#7f9ab1", fontSize: 12 }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
                       {team.abbr}
                     </span>
                   </span>
@@ -770,12 +770,12 @@ const optionButtonStyle = {
 };
 
 const ctaStyle = {
-  color: "#dff3ff",
+  color: "var(--text-primary)",
   textDecoration: "none",
   fontSize: 13,
   fontWeight: 800,
   borderRadius: 999,
-  border: "1px solid #274663",
+  border: "1px solid var(--border-strong)",
   padding: "10px 14px",
-  background: "#0e1722",
+  background: "var(--bg-card)",
 };
