@@ -92,7 +92,7 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
             edge: recap.marketHomeEdge,
           },
         ].map((side) => (
-          <div key={side.abbr} style={{ borderRadius: 18, background: "#0d1620", border: "1px solid #182736", padding: "14px 16px", display: "grid", gap: 10 }}>
+          <div key={side.abbr} style={{ borderRadius: 18, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "14px 16px", display: "grid", gap: 10 }}>
             <div style={{ color: side.color, fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>
               {side.abbr}
             </div>
@@ -120,7 +120,7 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
           ["Confidence", recap.confidenceBand ? recap.confidenceBand.toUpperCase() : "—"],
           ["Simulations", recap.simulations != null ? recap.simulations.toLocaleString() : "Logged pregame"],
         ].map(([label, value]) => (
-          <div key={label} style={{ borderRadius: 14, background: "#0d1620", border: "1px solid #182736", padding: "12px 14px" }}>
+          <div key={label} style={{ borderRadius: 14, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "12px 14px" }}>
             <div style={{ color: "#7189a1", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
             <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800, marginTop: 6 }}>{value}</div>
           </div>

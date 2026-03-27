@@ -125,7 +125,7 @@ function RevealWinnerCard({ title, winner, displayTeam, movement, visible }) {
         <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.16em" }}>
           {title}
         </div>
-        <div style={{ color: "#eff8ff", fontSize: 20, fontWeight: 900 }}>
+        <div style={{ color: "var(--text-primary)", fontSize: 20, fontWeight: 900 }}>
           Lottery draw in progress
         </div>
       </div>
@@ -402,13 +402,13 @@ function HistoryRow({ item, index }) {
   );
 }
 
-function SummaryStat({ label, value, accent = "#eff8ff" }) {
+function SummaryStat({ label, value, accent = "var(--text-primary)" }) {
   return (
     <div
       style={{
         borderRadius: 14,
         border: "1px solid #1a2b3d",
-        background: "#0d1620",
+        background: "var(--bg-card)",
         padding: "10px 12px",
         display: "grid",
         gap: 4,
@@ -618,7 +618,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
       className="lottery-page-shell"
       style={{
         minHeight: "100vh",
-        background: "radial-gradient(circle at top left, #0d2136 0%, #060a11 58%, #05090f 100%)",
+        background: "radial-gradient(circle at top left, #0d2136 0%, var(--bg-primary) 58%, var(--bg-primary) 100%)",
         padding: "28px 16px 52px",
       }}
     >
@@ -698,7 +698,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "end", flexWrap: "wrap" }}>
             <div style={{ display: "grid", gap: 8 }}>
-              <h1 className="lottery-hero-title" style={{ margin: 0, color: "#eff8ff", fontSize: 34, lineHeight: 1, letterSpacing: "-0.04em", fontWeight: 900 }}>
+              <h1 className="lottery-hero-title" style={{ margin: 0, color: "var(--text-primary)", fontSize: 34, lineHeight: 1, letterSpacing: "-0.04em", fontWeight: 900 }}>
                 2026 NHL Draft Lottery Simulator
               </h1>
               <div style={{ color: "#86a5c0", fontSize: 13, lineHeight: 1.45 }}>
@@ -779,7 +779,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
               onChange={(event) => setSeedInput(event.target.value)}
               placeholder="Optional seed"
               style={{
-                background: "#0f1823",
+                background: "var(--bg-card)",
                 border: "1px solid #1d3448",
                 borderRadius: 14,
                 color: "#e9f6ff",
@@ -810,7 +810,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                   width: "min(420px, 100vw - 52px)",
                   borderRadius: 16,
                   border: "1px solid #1a2b3d",
-                  background: "#0d1620",
+                  background: "var(--bg-card)",
                   padding: 14,
                   display: "grid",
                   gap: 8,
@@ -834,16 +834,16 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
 
         <section
           style={{
-            border: "1px solid #17283b",
+            border: "1px solid var(--border-strong)",
             borderRadius: 24,
-            background: "#091017",
+            background: "var(--bg-card)",
             overflow: "hidden",
           }}
         >
           <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid #132131", display: "grid", gap: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <div>
-                <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                   Main board
                 </div>
                 <div style={{ fontSize: 26, color: "#f0f8ff", fontWeight: 900, marginTop: 4 }}>
@@ -891,7 +891,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                   style={{
                     borderRadius: 16,
                     border: "1px dashed #244158",
-                    background: "#0d1620",
+                    background: "var(--bg-card)",
                     padding: "16px 14px",
                     color: "#7e98b1",
                     fontSize: 14,
@@ -952,7 +952,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                   }}
                 >
                   <div style={{ display: "grid", gap: 5 }}>
-                    <div style={{ color: isWinner ? "#eef8ff" : "#9dc5e6", fontSize: 18, fontWeight: 900 }}>#{finalPick}</div>
+                    <div style={{ color: isWinner ? "var(--text-primary)" : "#9dc5e6", fontSize: 18, fontWeight: 900 }}>#{finalPick}</div>
                     {isWinner ? (
                       <span style={{ color: "#8ed0ff", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                         Pick winner
@@ -1018,19 +1018,19 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
         {mode === "summary" && (
           <section
             style={{
-              border: "1px solid #17283b",
+              border: "1px solid var(--border-strong)",
               borderRadius: 24,
-              background: "#091017",
+              background: "var(--bg-card)",
               padding: 18,
               display: "grid",
               gap: 14,
             }}
           >
             <div>
-              <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                 Summary simulation
               </div>
-              <div style={{ fontSize: 24, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+              <div style={{ fontSize: 24, color: "var(--text-primary)", fontWeight: 900, marginTop: 4 }}>
                 Outcome distributions
               </div>
             </div>
@@ -1050,32 +1050,32 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         padding: "12px 14px",
                         borderRadius: 16,
                         background: "#0e1620",
-                        border: "1px solid #182736",
+                        border: "1px solid var(--border-strong)",
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                         <TeamLogo abbr={team.currentOwner} size={28} />
                         <div>
-                          <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{team.standings.name}</div>
+                          <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{team.standings.name}</div>
                           <div style={{ color: "#63839f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
                             Base #{team.baseRank}
                           </div>
                         </div>
                       </div>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{formatPercent(team.topPickRate)}</div>
+                        <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{formatPercent(team.topPickRate)}</div>
                         <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Pick #1</div>
                       </div>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{formatPercent(topTwoRate)}</div>
+                        <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{formatPercent(topTwoRate)}</div>
                         <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Top 2</div>
                       </div>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{team.averagePick.toFixed(2)}</div>
+                        <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{team.averagePick.toFixed(2)}</div>
                         <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Avg slot</div>
                       </div>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{commonSlot ? `#${commonSlot}` : "—"}</div>
+                        <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{commonSlot ? `#${commonSlot}` : "—"}</div>
                         <div style={{ color: "#63839f", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Most common</div>
                       </div>
                     </div>
@@ -1087,7 +1087,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                 style={{
                   borderRadius: 18,
                   border: "1px dashed #244158",
-                  background: "#0d1620",
+                  background: "var(--bg-card)",
                   padding: "22px 18px",
                   color: "#7e98b1",
                   fontSize: 14,
@@ -1104,19 +1104,19 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
           <section style={{ display: "grid", gap: 18 }}>
             <div
               style={{
-                border: "1px solid #17283b",
+                border: "1px solid var(--border-strong)",
                 borderRadius: 24,
-                background: "#091017",
+                background: "var(--bg-card)",
                 padding: 18,
                 display: "grid",
                 gap: 16,
               }}
             >
               <div>
-                <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                   2026 Pick Ownership
                 </div>
-                <div style={{ fontSize: 22, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+                <div style={{ fontSize: 22, color: "var(--text-primary)", fontWeight: 900, marginTop: 4 }}>
                   Ownership & protections
                 </div>
               </div>
@@ -1146,7 +1146,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         padding: "12px 14px",
                         borderRadius: 16,
                         background: "#0e1620",
-                        border: "1px solid #182736",
+                        border: "1px solid var(--border-strong)",
                         transition: "background 0.16s ease",
                       }}
                     >
@@ -1159,7 +1159,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                           <div style={{ opacity: row.selectionOwner !== row.originalTeam ? 0.4 : 1, filter: row.selectionOwner !== row.originalTeam ? "grayscale(0.7)" : "none" }}>
                             <TeamLogo abbr={row.originalTeam} size={28} />
                           </div>
-                          <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{row.originalTeam}</div>
+                          <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{row.originalTeam}</div>
                           <ConditionTooltip note={conditionNote || row.notes || ""} />
                         </div>
                       </div>
@@ -1169,7 +1169,7 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 5 }}>
                           <TeamLogo abbr={row.selectionOwner} size={28} />
-                          <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{row.selectionOwner}</div>
+                          <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{row.selectionOwner}</div>
                         </div>
                       </div>
                       <div style={{ display: "grid", justifyItems: "end", gap: 8 }}>
@@ -1250,15 +1250,15 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
 
             <div
               style={{
-                border: "1px solid #17283b",
+                border: "1px solid var(--border-strong)",
                 borderRadius: 24,
-                background: "#091017",
+                background: "var(--bg-card)",
                 padding: 18,
                 display: "grid",
                 gap: 12,
               }}
             >
-              <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                 History
               </div>
               <div style={{ display: "grid", gap: 10 }}>
@@ -1276,19 +1276,19 @@ export default function LotterySimulator({ initialEntries, nonLotteryOrder, pick
           <section style={{ display: "grid", gap: 18 }}>
             <div
               style={{
-                border: "1px solid #17283b",
+                border: "1px solid var(--border-strong)",
                 borderRadius: 24,
-                background: "#091017",
+                background: "var(--bg-card)",
                 padding: 18,
                 display: "grid",
                 gap: 14,
               }}
             >
               <div>
-                <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                   Quick notes
                 </div>
-                <div style={{ fontSize: 22, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+                <div style={{ fontSize: 22, color: "var(--text-primary)", fontWeight: 900, marginTop: 4 }}>
                   How to read the board
                 </div>
               </div>

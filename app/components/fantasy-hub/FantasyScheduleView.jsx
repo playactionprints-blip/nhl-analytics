@@ -59,7 +59,7 @@ export default function FantasyScheduleView({
             style={{
               borderRadius: 999,
               border: "1px solid #213547",
-              background: "#0d1620",
+              background: "var(--bg-card)",
               color: "#d4e9f8",
               padding: "9px 12px",
               cursor: "pointer",
@@ -73,7 +73,7 @@ export default function FantasyScheduleView({
             style={{
               borderRadius: 999,
               border: "1px solid #213547",
-              background: "#0d1620",
+              background: "var(--bg-card)",
               color: "#d4e9f8",
               padding: "9px 12px",
               cursor: "pointer",
@@ -106,8 +106,8 @@ export default function FantasyScheduleView({
                 key={day.date}
                 style={{
                   borderRadius: 16,
-                  border: `1px solid ${day.isOffNight ? "#2c7258" : "#17283b"}`,
-                  background: day.isOffNight ? "rgba(53,227,160,0.08)" : "#0d1620",
+                  border: `1px solid ${day.isOffNight ? "#2c7258" : "var(--border-strong)"}`,
+                  background: day.isOffNight ? "rgba(53,227,160,0.08)" : "var(--bg-card)",
                   padding: "12px 12px 10px",
                   display: "grid",
                   gap: 10,
@@ -151,7 +151,7 @@ export default function FantasyScheduleView({
                 style={{
                   borderRadius: 16,
                   border: "1px solid var(--border-strong)",
-                  background: "#0d1620",
+                  background: "var(--bg-card)",
                   padding: "12px 12px 10px",
                   display: "grid",
                   gap: 6,

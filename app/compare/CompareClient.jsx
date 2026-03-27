@@ -107,16 +107,16 @@ function PlayerPicker({ label, player, onSelect, accent = "#0080FF" }) {
               setOpen(true);
             }}
             onFocus={() => setOpen(true)}
-            style={{ width: "100%", padding: "12px 16px", background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 10, color: "#e8f4ff", fontSize: 14, fontFamily: "'Barlow Condensed',sans-serif", outline: "none", boxSizing: "border-box" }}
+            style={{ width: "100%", padding: "12px 16px", background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 10, color: "#e8f4ff", fontSize: 14, fontFamily: "'Barlow Condensed',sans-serif", outline: "none", boxSizing: "border-box" }}
           />
           {open && (results.length > 0 || loading) && (
-            <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 99, background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 10, overflow: "hidden", boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}>
+            <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 99, background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 10, overflow: "hidden", boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}>
               {loading && <div style={{ padding: "10px 14px", fontSize: 11, color: "#4a6a88", fontFamily: "'DM Mono',monospace" }}>Searching…</div>}
               {results.map(p => (
                 <button key={p.player_id} onClick={() => choose(p)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "none", border: "none", borderBottom: "1px solid #142231", cursor: "pointer", textAlign: "left" }}>
                   <img src={logoUrl(p.team)} alt={p.team} width={22} height={22} style={{ objectFit: "contain" }} />
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#c8dff0", fontFamily: "'Barlow Condensed',sans-serif" }}>{p.full_name}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", fontFamily: "'Barlow Condensed',sans-serif" }}>{p.full_name}</div>
                     <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace" }}>{p.team} · {p.position}</div>
                   </div>
                 </button>
@@ -163,13 +163,13 @@ function CompareTable({ p1, p2 }) {
   const c2 = TEAM_COLOR[p2?.team] || "#e05050";
 
   return (
-    <div style={{ overflowX: "auto", border: "1px solid #1e2d40", borderRadius: 10 }}>
+    <div style={{ overflowX: "auto", border: "1px solid var(--border-strong)", borderRadius: 10 }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'DM Mono',monospace", fontSize: 12 }}>
         <thead>
           <tr style={{ background: "var(--bg-card)" }}>
-            <th style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, color: "#3a5a78", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: "1px solid #1e2d40", width: "28%" }}>Stat</th>
-            <th style={{ padding: "8px 14px", textAlign: "right", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", borderBottom: "1px solid #1e2d40", color: c1, width: "36%" }}>{p1?.full_name || "Player 1"}</th>
-            <th style={{ padding: "8px 14px", textAlign: "right", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", borderBottom: "1px solid #1e2d40", color: c2, width: "36%" }}>{p2?.full_name || "Player 2"}</th>
+            <th style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, color: "#3a5a78", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: "1px solid var(--border-strong)", width: "28%" }}>Stat</th>
+            <th style={{ padding: "8px 14px", textAlign: "right", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", borderBottom: "1px solid var(--border-strong)", color: c1, width: "36%" }}>{p1?.full_name || "Player 1"}</th>
+            <th style={{ padding: "8px 14px", textAlign: "right", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", borderBottom: "1px solid var(--border-strong)", color: c2, width: "36%" }}>{p2?.full_name || "Player 2"}</th>
           </tr>
         </thead>
         <tbody>
@@ -225,7 +225,7 @@ function CompareRadar({ p1, p2 }) {
   }));
 
   return (
-    <div style={{ background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 10, padding: "16px 20px" }}>
+    <div style={{ background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "16px 20px" }}>
       <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Percentile Radar</div>
       <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
         {[p1, p2].map((p, idx) => p && (
@@ -237,12 +237,12 @@ function CompareRadar({ p1, p2 }) {
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <RadarChart data={data} cx="50%" cy="50%" outerRadius="70%">
-          <PolarGrid stroke="#1e2d40" />
+          <PolarGrid stroke="var(--border-strong)" />
           <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10, fill: "#5a7a99", fontFamily: "DM Mono,monospace" }} />
           <Radar dataKey="p1val" stroke={c1} fill={c1} fillOpacity={0.15} strokeWidth={2} dot={{ r: 3, fill: c1 }} name={p1?.full_name || "P1"} />
           <Radar dataKey="p2val" stroke={c2} fill={c2} fillOpacity={0.15} strokeWidth={2} dot={{ r: 3, fill: c2 }} name={p2?.full_name || "P2"} />
           <Tooltip
-            contentStyle={{ background: "var(--bg-card)", border: "1px solid #1e2d40", borderRadius: 6, fontSize: 11, fontFamily: "DM Mono,monospace" }}
+            contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border-strong)", borderRadius: 6, fontSize: 11, fontFamily: "DM Mono,monospace" }}
             formatter={(v, name) => [`${Math.round(v)}th`, name]}
           />
         </RadarChart>
@@ -265,7 +265,7 @@ function WarBars({ p1, p2 }) {
   const maxAbs = allVals.length ? Math.max(...allVals.map(Math.abs), 0.1) : 1;
 
   return (
-    <div style={{ background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 10, padding: "16px 20px" }}>
+    <div style={{ background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "16px 20px" }}>
       <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14 }}>WAR Components</div>
       {bars.map(bar => {
         const v1 = p1?.[bar.k] != null ? Number(p1[bar.k]) : null;
@@ -421,7 +421,7 @@ export default function CompareClient() {
           {/* Player pickers */}
           <div className="compare-player-pickers" style={{ display: "flex", gap: 16, marginBottom: 28, flexWrap: "wrap" }}>
             <PlayerPicker label="Player 1" player={p1} onSelect={p => { setP1(p); }} />
-            <div className="compare-vs-chip" style={{ display: "flex", alignItems: "center", fontSize: 22, fontWeight: 900, color: "#1e2d40", fontFamily: "'Barlow Condensed',sans-serif", paddingTop: 24 }}>vs</div>
+            <div className="compare-vs-chip" style={{ display: "flex", alignItems: "center", fontSize: 22, fontWeight: 900, color: "var(--border-strong)", fontFamily: "'Barlow Condensed',sans-serif", paddingTop: 24 }}>vs</div>
             <PlayerPicker label="Player 2" player={p2} onSelect={p => { setP2(p); }} />
           </div>
 

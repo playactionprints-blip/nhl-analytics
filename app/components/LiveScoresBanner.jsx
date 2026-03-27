@@ -95,7 +95,7 @@ function ScoreCard({ game, dateString }) {
       style={{
         minWidth: 190,
         padding: "10px 14px",
-        borderLeft: "1px solid #183149",
+        borderLeft: "1px solid var(--border-strong)",
         textDecoration: "none",
         display: "grid",
         gap: 10,
@@ -222,7 +222,7 @@ export default function LiveScoresBanner() {
           zIndex: 99,
           width: "100%",
           background: "#101b29",
-          borderBottom: "1px solid #183149",
+          borderBottom: "1px solid var(--border-strong)",
           display: "flex",
           alignItems: "stretch",
           overflowX: "auto",
@@ -233,7 +233,7 @@ export default function LiveScoresBanner() {
           style={{
             minWidth: 96,
             padding: "10px 12px",
-            borderRight: "1px solid #183149",
+            borderRight: "1px solid var(--border-strong)",
             display: "grid",
             placeItems: "center",
             background: "linear-gradient(180deg, rgba(18,32,47,0.98) 0%, rgba(14,24,36,0.98) 100%)",

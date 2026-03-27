@@ -88,7 +88,7 @@ export default function FantasyRosterBuilder({
               width: "100%",
               borderRadius: 14,
               border: "1px solid #213547",
-              background: "#0f1823",
+              background: "var(--bg-card)",
               color: "#e8f5ff",
               padding: "12px 14px",
               fontSize: 14,
@@ -108,7 +108,7 @@ export default function FantasyRosterBuilder({
                     alignItems: "center",
                     borderRadius: 16,
                     border: "1px solid var(--border-strong)",
-                    background: rostered ? "rgba(12,19,29,0.55)" : "#0d1620",
+                    background: rostered ? "rgba(12,19,29,0.55)" : "var(--bg-card)",
                     padding: "10px 12px",
                     opacity: rostered ? 0.56 : 1,
                   }}
@@ -194,7 +194,7 @@ export default function FantasyRosterBuilder({
                         alignItems: "center",
                         borderRadius: 16,
                         border: "1px solid var(--border-strong)",
-                        background: "#0d1620",
+                        background: "var(--bg-card)",
                         padding: "10px 12px",
                       }}
                     >

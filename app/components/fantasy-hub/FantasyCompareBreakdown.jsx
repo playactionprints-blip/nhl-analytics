@@ -89,7 +89,7 @@ export default function FantasyCompareBreakdown({ players }) {
           style={{
             borderRadius: 999,
             border: `1px solid ${showDeltas ? "#2fb4ff" : "#213547"}`,
-            background: showDeltas ? "rgba(47,180,255,0.14)" : "#0d1620",
+            background: showDeltas ? "rgba(47,180,255,0.14)" : "var(--bg-card)",
             color: showDeltas ? "#d6f0ff" : "#8ca8c1",
             padding: "9px 12px",
             fontSize: 11,
@@ -139,7 +139,7 @@ export default function FantasyCompareBreakdown({ players }) {
                     alignItems: "center",
                     borderRadius: 14,
                     border: "1px solid var(--border-strong)",
-                    background: "#0d1620",
+                    background: "var(--bg-card)",
                     padding: "10px 12px",
                   }}
                 >

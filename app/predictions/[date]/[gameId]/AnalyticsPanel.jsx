@@ -84,7 +84,7 @@ export default function AnalyticsPanel({
                 tone: "#d8e9f7",
               },
             ].map((card) => (
-              <div key={card.label} style={{ borderRadius: 18, border: "1px solid #16283a", background: "#0d1620", padding: "14px 16px", display: "grid", gap: 8 }}>
+              <div key={card.label} style={{ borderRadius: 18, border: "1px solid #16283a", background: "var(--bg-card)", padding: "14px 16px", display: "grid", gap: 8 }}>
                 <div style={{ color: "#748ea6", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{card.label}</div>
                 <div style={{ color: card.tone, fontSize: 22, fontWeight: 900 }}>{card.value}</div>
               </div>
@@ -95,7 +95,7 @@ export default function AnalyticsPanel({
             style={{
               borderRadius: 18,
               border: "1px solid #16283a",
-              background: "#0d1620",
+              background: "var(--bg-card)",
               padding: "16px 18px",
               color: "#8ea7bf",
               lineHeight: 1.6,

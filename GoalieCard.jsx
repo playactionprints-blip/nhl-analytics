@@ -70,7 +70,7 @@ function TeamLogo({ abbr, size = 32 }) {
 
 function StatBox({ label, value, highlight }) {
   return (
-    <div style={{ background:highlight?"rgba(0,229,160,0.07)":"#0d1825", border:`1px solid ${highlight?"#00e5a088":"#1e2d40"}`, borderRadius:6, padding:"10px 12px", textAlign:"center" }}>
+    <div style={{ background:highlight?"rgba(0,229,160,0.07)":"var(--bg-secondary)", border:`1px solid ${highlight?"#00e5a088":"var(--border-strong)"}`, borderRadius:6, padding:"10px 12px", textAlign:"center" }}>
       <div style={{ fontSize:22, fontWeight:800, color:highlight?"#00e5a0":"#e8f0f8", fontFamily:"'Barlow Condensed',sans-serif", lineHeight:1 }}>{value ?? "—"}</div>
       <div style={{ fontSize:10, color:"#5a7a99", marginTop:3, fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
     </div>
@@ -106,10 +106,10 @@ function RadarViz({ percentiles, color }) {
   return (
     <ResponsiveContainer width="100%" height={200}>
       <RadarChart data={data} cx="50%" cy="50%" outerRadius="72%">
-        <PolarGrid stroke="#1e2d40" />
+        <PolarGrid stroke="var(--border-strong)" />
         <PolarAngleAxis dataKey="metric" tick={{ fontSize:10, fill:"#5a7a99", fontFamily:"DM Mono,monospace" }} />
         <Radar dataKey="value" stroke={color} fill={color} fillOpacity={0.18} strokeWidth={2} dot={{ r:3, fill:color }} />
-        <Tooltip contentStyle={{ background:"#0a1520", border:`1px solid ${color}44`, borderRadius:6, fontSize:12, fontFamily:"DM Mono,monospace" }} labelStyle={{ color:"#8899aa" }} itemStyle={{ color }} formatter={(v) => [`${v}th pct`,""]} />
+        <Tooltip contentStyle={{ background:"var(--bg-card)", border:`1px solid ${color}44`, borderRadius:6, fontSize:12, fontFamily:"DM Mono,monospace" }} labelStyle={{ color:"#8899aa" }} itemStyle={{ color }} formatter={(v) => [`${v}th pct`,""]} />
       </RadarChart>
     </ResponsiveContainer>
   );
@@ -219,7 +219,7 @@ export function GoalieCard({ player }) {
   const cardWidth = tab === "percentile card" ? 700 : 420;
 
   return (
-    <div className="pc-card" style={{ width:cardWidth, maxWidth:"95vw", background:"linear-gradient(160deg,#0c1a28 0%,#081016 100%)", borderRadius:16, border:"1px solid #1e2d40", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative", transition:"width 0.2s ease" }}>
+    <div className="pc-card" style={{ width:cardWidth, maxWidth:"95vw", background:"linear-gradient(160deg,var(--bg-card) 0%,var(--bg-card) 100%)", borderRadius:16, border:"1px solid var(--border-strong)", overflow:"hidden", boxShadow:`0 0 0 1px var(--bg-card),0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative", transition:"width 0.2s ease" }}>
 
       {/* Top accent bar */}
       <div style={{ height:3, background:`linear-gradient(90deg,${accent},${accent}88,transparent)` }} />
@@ -281,11 +281,11 @@ export function GoalieCard({ player }) {
 
             {/* GP + avg TOI row */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:16 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"var(--bg-secondary)", borderRadius:8, border:"1px solid var(--border-strong)" }}>
                 <span style={{ fontSize:10, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>GP</span>
                 <span style={{ fontSize:18, fontWeight:800, color:accent, fontFamily:"'Barlow Condensed',sans-serif" }}>{player.gp ?? "—"}</span>
               </div>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"var(--bg-secondary)", borderRadius:8, border:"1px solid var(--border-strong)" }}>
                 <span style={{ fontSize:10, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Avg TOI</span>
                 <span style={{ fontSize:18, fontWeight:800, color:accent, fontFamily:"'Barlow Condensed',sans-serif" }}>{player.toi || "—"}</span>
               </div>
@@ -305,14 +305,14 @@ export function GoalieCard({ player }) {
             <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:12 }}>Season Stats</div>
 
             {/* Table header */}
-            <div style={{ display:"grid", gridTemplateColumns:"3fr 2fr 1.5fr 1.5fr 1.5fr 1.5fr 2fr 1.5fr", padding:"6px 10px", background:"#0a1520", borderRadius:"6px 6px 0 0", border:"1px solid #1e2d40", borderBottom:"none" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"3fr 2fr 1.5fr 1.5fr 1.5fr 1.5fr 2fr 1.5fr", padding:"6px 10px", background:"var(--bg-card)", borderRadius:"6px 6px 0 0", border:"1px solid var(--border-strong)", borderBottom:"none" }}>
               {["Season","Team","GP","W","L","GAA","SV%","SO"].map((h,i) => (
                 <div key={h} style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.07em", textAlign:i <= 1 ? "left" : "right" }}>{h}</div>
               ))}
             </div>
 
             {/* Current season row */}
-            <div style={{ display:"grid", gridTemplateColumns:"3fr 2fr 1.5fr 1.5fr 1.5fr 1.5fr 2fr 1.5fr", padding:"8px 10px", background:"#080e17", border:"1px solid #1e2d40", borderRadius:"0 0 6px 6px" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"3fr 2fr 1.5fr 1.5fr 1.5fr 1.5fr 2fr 1.5fr", padding:"8px 10px", background:"var(--bg-primary)", border:"1px solid var(--border-strong)", borderRadius:"0 0 6px 6px" }}>
               {[
                 "25–26",
                 player.team || "—",
@@ -344,7 +344,7 @@ export function GoalieCard({ player }) {
                   <StatBox label="SV% Above Exp" value={svAboveExpected} highlight={player.save_pct_above_expected > 0} />
                 </div>
               ) : (
-                <div style={{ padding:"10px 12px", background:"#0a1520", border:"1px solid #1e2d40", borderRadius:6, textAlign:"center" }}>
+                <div style={{ padding:"10px 12px", background:"var(--bg-card)", border:"1px solid var(--border-strong)", borderRadius:6, textAlign:"center" }}>
                   <span style={{ fontSize:10, color:"#2a4060", fontFamily:"'DM Mono',monospace" }}>GSAx: Insufficient data</span>
                 </div>
               )}
@@ -356,7 +356,7 @@ export function GoalieCard({ player }) {
         {tab === "ratings" && (
           <div>
             {/* Big overall rating */}
-            <div style={{ textAlign:"center", marginBottom:20, padding:"14px 14px 10px", background:"#0d1825", borderRadius:10, border:`1px solid ${accent}44` }}>
+            <div style={{ textAlign:"center", marginBottom:20, padding:"14px 14px 10px", background:"var(--bg-secondary)", borderRadius:10, border:`1px solid ${accent}44` }}>
               <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:6 }}>Overall Goalie Rating</div>
               <div style={{ fontSize:56, fontWeight:900, color: player.overall_rating != null ? pctColor(player.overall_rating) : "#2a4060", lineHeight:1, fontFamily:"'Barlow Condensed',sans-serif" }}>
                 {player.overall_rating != null ? Math.round(player.overall_rating) : "—"}
@@ -443,7 +443,7 @@ export function GoalieCard({ player }) {
                 </div>
 
                 {/* Raw stat sidebar */}
-                <div style={{ background: "#0a1520", border: "1px solid #1e2d40", borderRadius: 16, padding: "14px 16px" }}>
+                <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-strong)", borderRadius: 16, padding: "14px 16px" }}>
                   <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
                     Raw Stats
                   </div>
@@ -466,7 +466,7 @@ export function GoalieCard({ player }) {
               </div>
 
               {/* Section 3 — Percentile bars */}
-              <div style={{ background: "#0a1520", border: "1px solid #1e2d40", borderRadius: 14, padding: "16px 18px", marginBottom: 20 }}>
+              <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-strong)", borderRadius: 14, padding: "16px 18px", marginBottom: 20 }}>
                 <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14 }}>
                   Percentile Rankings
                 </div>

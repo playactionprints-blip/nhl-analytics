@@ -162,7 +162,7 @@ export default function TopNav() {
           >
             NHL Analytics
           </Link>
-          <div className="top-nav-divider" style={{ width: 1, height: 20, background: "#1e2d40", flexShrink: 0 }} />
+          <div className="top-nav-divider" style={{ width: 1, height: 20, background: "var(--border-strong)", flexShrink: 0 }} />
           <div className="top-nav-links">
             {NAV_ITEMS.map((item) => {
               const active = item.href === "/" ? pathname === "/" : pathname?.startsWith(item.href);

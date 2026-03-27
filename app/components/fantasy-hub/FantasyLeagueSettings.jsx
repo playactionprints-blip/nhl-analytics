@@ -30,7 +30,7 @@ const INPUT_STYLE = {
   width: "100%",
   borderRadius: 12,
   border: "1px solid #213547",
-  background: "#0f1823",
+  background: "var(--bg-card)",
   color: "#e8f5ff",
   padding: "10px 12px",
   fontSize: 14,
@@ -166,7 +166,7 @@ function ToggleInput({ label, path, checked, onUpdate }) {
         gap: 12,
         borderRadius: 14,
         border: "1px solid var(--border-strong)",
-        background: "#0d1620",
+        background: "var(--bg-card)",
         padding: "10px 12px",
       }}
     >
@@ -249,7 +249,7 @@ export default function FantasyLeagueSettings({ state, onStateChange }) {
               style={{
                 borderRadius: 999,
                 border: `1px solid ${advancedOpen ? "#2fb4ff" : "#213547"}`,
-                background: advancedOpen ? "rgba(47,180,255,0.14)" : "#0d1620",
+                background: advancedOpen ? "rgba(47,180,255,0.14)" : "var(--bg-card)",
                 color: advancedOpen ? "#d6f0ff" : "#8ca8c1",
                 padding: "7px 10px",
                 fontSize: 10,
@@ -330,7 +330,7 @@ export default function FantasyLeagueSettings({ state, onStateChange }) {
           style={{
             borderRadius: 999,
             border: `1px solid ${collapsed ? "#213547" : "#2fb4ff"}`,
-            background: collapsed ? "#0d1620" : "rgba(47,180,255,0.14)",
+            background: collapsed ? "var(--bg-card)" : "rgba(47,180,255,0.14)",
             color: collapsed ? "#8ca8c1" : "#d6f0ff",
             padding: "10px 14px",
             fontSize: 11,
@@ -394,7 +394,7 @@ export default function FantasyLeagueSettings({ state, onStateChange }) {
                 style={{
                   borderRadius: 999,
                   border: `1px solid ${state.settings.leagueType === value ? "#2fb4ff" : "#213547"}`,
-                  background: state.settings.leagueType === value ? "rgba(47,180,255,0.14)" : "#0d1620",
+                  background: state.settings.leagueType === value ? "rgba(47,180,255,0.14)" : "var(--bg-card)",
                   color: state.settings.leagueType === value ? "#d6f0ff" : "#8ca8c1",
                   padding: "9px 12px",
                   fontSize: 12,

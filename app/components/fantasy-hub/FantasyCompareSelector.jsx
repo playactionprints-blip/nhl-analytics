@@ -79,7 +79,7 @@ export default function FantasyCompareSelector({
           width: "100%",
           borderRadius: 14,
           border: "1px solid #213547",
-          background: "#0f1823",
+          background: "var(--bg-card)",
           color: "#e8f5ff",
           padding: "12px 14px",
           fontSize: 14,
@@ -97,7 +97,7 @@ export default function FantasyCompareSelector({
               gap: 8,
               borderRadius: 999,
               border: "1px solid #224057",
-              background: "#0d1620",
+              background: "var(--bg-card)",
               padding: "8px 10px",
             }}
           >
@@ -145,7 +145,7 @@ export default function FantasyCompareSelector({
             style={{
               border: "1px solid var(--border-strong)",
               borderRadius: 16,
-              background: "#0d1620",
+              background: "var(--bg-card)",
               padding: "10px 12px",
               display: "grid",
               gridTemplateColumns: "auto minmax(0, 1fr) auto",

@@ -65,7 +65,7 @@ export default function PlayerLeaders({ leaders, awayColor, homeColor, awayAbbr,
 
       <div className="player-leaders-grid">
         {listCards.map((card) => (
-          <div key={card.title} style={{ borderRadius: 18, background: "#0d1620", border: "1px solid #182736", padding: "14px 16px", display: "grid", gap: 10 }}>
+          <div key={card.title} style={{ borderRadius: 18, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "14px 16px", display: "grid", gap: 10 }}>
             <div style={{ color: "#8eb9db", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>
               {card.title}
             </div>
@@ -86,7 +86,7 @@ export default function PlayerLeaders({ leaders, awayColor, homeColor, awayAbbr,
         ))}
       </div>
 
-      <div style={{ borderRadius: 18, background: "#0d1620", border: "1px solid #182736", padding: "14px 16px", display: "grid", gap: 10 }}>
+      <div style={{ borderRadius: 18, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "14px 16px", display: "grid", gap: 10 }}>
         <div style={{ color: "#8eb9db", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>
           Goalie summary
         </div>

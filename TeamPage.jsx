@@ -115,7 +115,7 @@ function MiniAvatar({ player }) {
 // ── Stat diff indicator ───────────────────────────────────────────────────────
 function StatBox({ label, value, sub, subColor }) {
   return (
-    <div style={{ background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 10,
+    <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-strong)", borderRadius: 10,
       padding: "14px 18px", textAlign: "center", flex: 1 }}>
       <div style={{ fontSize: 26, fontWeight: 900, color: "#e8f4ff",
         fontFamily: "'Barlow Condensed',sans-serif", lineHeight: 1 }}>
@@ -159,8 +159,8 @@ function TeamSeasonTooltip({ active, payload, label, formatter }) {
 function SeasonTrendCard({ label, data, dataKey, accent, mutedColor, formatter, showLeagueReference = false }) {
   return (
     <div style={{
-      background: "#060b12",
-      border: "1px solid #1e2d40",
+      background: "var(--bg-primary)",
+      border: "1px solid var(--border-strong)",
       borderRadius: 16,
       padding: "16px 18px 14px",
     }}>
@@ -226,7 +226,7 @@ function PlayerRow({ player, rank, onSelect, isGoalie = false, displayWar, warLa
       style={{
         display: "flex", alignItems: "center", gap: 12,
         padding: "8px 14px",
-        background: hovered ? "#0d1825" : rank % 2 === 0 ? "#080e17" : "#060b12",
+        background: hovered ? "var(--bg-secondary)" : rank % 2 === 0 ? "var(--bg-primary)" : "var(--bg-primary)",
         borderBottom: "1px solid #0a1218",
         cursor: "pointer", transition: "background 0.15s",
       }}>
@@ -456,7 +456,7 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
       />
       <div className="team-page-shell" style={{
         minHeight: "100vh",
-        background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)",
+        background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,var(--bg-primary) 60%)",
         padding: "32px 20px 60px",
         fontFamily: "'Barlow Condensed',sans-serif",
       }}>
@@ -505,7 +505,7 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
                 )}
                 {ptsStr && (
                   <>
-                    <span style={{ color: "#1e2d40" }}>·</span>
+                    <span style={{ color: "var(--border-strong)" }}>·</span>
                     <span style={{ fontSize: 14, color: "#5a7a99",
                       fontFamily: "'DM Mono',monospace" }}>
                       {ptsStr}
@@ -514,10 +514,10 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
                 )}
                 {warRank && (
                   <>
-                    <span style={{ color: "#1e2d40" }}>·</span>
+                    <span style={{ color: "var(--border-strong)" }}>·</span>
                     <span style={{ fontSize: 12, padding: "2px 8px",
-                      background: warRank <= 10 ? "#00e5a022" : "#0d1825",
-                      border: `1px solid ${warRank <= 10 ? "#00e5a055" : "#1e2d40"}`,
+                      background: warRank <= 10 ? "#00e5a022" : "var(--bg-secondary)",
+                      border: `1px solid ${warRank <= 10 ? "#00e5a055" : "var(--border-strong)"}`,
                       borderRadius: 20, color: warRank <= 10 ? "#00e5a0" : "#4a6a88",
                       fontFamily: "'DM Mono',monospace" }}>
                       WAR Rank #{warRank}
@@ -580,8 +580,8 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
 
           {/* ── Roster tabs ── */}
           <div style={{ marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-            <div style={{ display: "flex", gap: 0, background: "#0d1825",
-              border: "1px solid #1e2d40", borderRadius: 10, overflow: "hidden",
+            <div style={{ display: "flex", gap: 0, background: "var(--bg-secondary)",
+              border: "1px solid var(--border-strong)", borderRadius: 10, overflow: "hidden",
               width: "fit-content" }}>
               {[
                 ["forwards", `Forwards (${forwards.length})`],
@@ -614,7 +614,7 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
                   <button key={mode} onClick={() => setWarMode(mode)} style={{
                     padding: "4px 10px",
                     background: warMode === mode ? `${color}33` : "transparent",
-                    border: `1px solid ${warMode === mode ? color : "#1e2d40"}`,
+                    border: `1px solid ${warMode === mode ? color : "var(--border-strong)"}`,
                     borderRadius: 20,
                     color: warMode === mode ? color : "#4a6a88",
                     fontSize: 10, fontWeight: warMode === mode ? 700 : 400,
@@ -629,14 +629,14 @@ export default function TeamPage({ teamCode, players, record, teamStats, seasonC
           </div>
 
           {/* ── Roster table ── */}
-          <div className="team-roster-shell" style={{ border: "1px solid #1e2d40", borderRadius: "0 10px 10px 10px",
-            overflow: "hidden", background: "#060b12" }}>
+          <div className="team-roster-shell" style={{ border: "1px solid var(--border-strong)", borderRadius: "0 10px 10px 10px",
+            overflow: "hidden", background: "var(--bg-primary)" }}>
             <div className="team-roster-min" style={{ minWidth: 760 }}>
 
             {/* Column header */}
             <div style={{ display: "flex", alignItems: "center", gap: 12,
-              padding: "7px 14px", background: "#0a1520",
-              borderBottom: "1px solid #1e2d40" }}>
+              padding: "7px 14px", background: "var(--bg-card)",
+              borderBottom: "1px solid var(--border-strong)" }}>
               <div style={{ width: 22 }} />
               <div style={{ width: 40, flexShrink: 0 }} />
               <div style={{ flex: "0 0 180px", fontSize: 9, color: "#2a4060",

@@ -49,7 +49,7 @@ export default function ScoringSummary({ periods = [], compact = false }) {
 
       <div style={{ display: "grid", gap: 12 }}>
         {rows.map((period) => (
-          <div key={period.periodDescriptor?.number ?? period.period} style={{ borderRadius: 18, background: "#0d1620", border: "1px solid #182736", padding: "14px 16px", display: "grid", gap: 10 }}>
+          <div key={period.periodDescriptor?.number ?? period.period} style={{ borderRadius: 18, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "14px 16px", display: "grid", gap: 10 }}>
             <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>
               {periodLabel(period.periodDescriptor)}
             </div>

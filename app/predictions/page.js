@@ -45,7 +45,7 @@ function ModelAccuracySection({ accuracy }) {
             Historical performance
           </div>
         </div>
-        <div style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "16px 18px", color: "#7f9ab5", fontSize: 14, lineHeight: 1.5 }}>
+        <div style={{ borderRadius: 16, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "16px 18px", color: "#7f9ab5", fontSize: 14, lineHeight: 1.5 }}>
           Accuracy tracking started today — check back after tonight&apos;s games complete.
         </div>
       </section>
@@ -69,7 +69,7 @@ function ModelAccuracySection({ accuracy }) {
           ["Overall", pctLabel(overall?.pct), `${overall?.correct ?? 0}/${overall?.total ?? 0} games`],
           ["Last 7 days", pctLabel(rolling7?.pct), `${rolling7?.correct ?? 0}/${rolling7?.total ?? 0} games`],
         ].map(([label, value, sub]) => (
-          <div key={label} style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "12px 14px" }}>
+          <div key={label} style={{ borderRadius: 16, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "12px 14px" }}>
             <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
             <div style={{ color: "var(--text-primary)", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{value}</div>
             <div style={{ color: "#567894", fontSize: 11, marginTop: 2 }}>{sub}</div>
@@ -78,7 +78,7 @@ function ModelAccuracySection({ accuracy }) {
         {["high", "medium", "low"].map((band) => {
           const s = byConfidence?.[band] || { correct: 0, total: 0, pct: null };
           return (
-            <div key={band} style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "12px 14px" }}>
+            <div key={band} style={{ borderRadius: 16, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "12px 14px" }}>
               <div style={{ color: bandColors[band], fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>{band} conf.</div>
               <div style={{ color: "var(--text-primary)", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{pctLabel(s.pct)}</div>
               <div style={{ color: "#567894", fontSize: 11, marginTop: 2 }}>{s.correct}/{s.total} games</div>
@@ -87,7 +87,7 @@ function ModelAccuracySection({ accuracy }) {
         })}
       </div>
       {units?.bets > 0 && (
-        <div style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "16px 18px" }}>
+        <div style={{ borderRadius: 16, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "16px 18px" }}>
           <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
             Unit tracker · 1u flat per predicted game at book odds
           </div>
@@ -110,7 +110,7 @@ function ModelAccuracySection({ accuracy }) {
         </div>
       )}
       {last10?.length > 0 && (
-        <div style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "12px 14px" }}>
+        <div style={{ borderRadius: 16, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "12px 14px" }}>
           <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Last 10 tracked games</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {last10.map((row) => (
@@ -901,8 +901,8 @@ export default async function PredictionsPage({ searchParams }) {
                           key={label}
                           style={{
                             borderRadius: 16,
-                            background: "#0d1620",
-                            border: "1px solid #182736",
+                            background: "var(--bg-card)",
+                            border: "1px solid var(--border-strong)",
                             padding: "12px 14px",
                           }}
                         >
@@ -917,8 +917,8 @@ export default async function PredictionsPage({ searchParams }) {
                     <div
                       style={{
                         borderRadius: 18,
-                        background: "#0d1620",
-                        border: "1px solid #182736",
+                        background: "var(--bg-card)",
+                        border: "1px solid var(--border-strong)",
                         padding: "14px 16px",
                         display: "grid",
                         gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
@@ -960,8 +960,8 @@ export default async function PredictionsPage({ searchParams }) {
                     <div
                       style={{
                         borderRadius: 18,
-                        background: "#0d1620",
-                        border: "1px solid #182736",
+                        background: "var(--bg-card)",
+                        border: "1px solid var(--border-strong)",
                         padding: "14px 16px",
                         display: "grid",
                         gap: 10,
@@ -997,8 +997,8 @@ export default async function PredictionsPage({ searchParams }) {
                       <div
                         style={{
                           borderRadius: 18,
-                          background: "#0d1620",
-                          border: "1px solid #182736",
+                          background: "var(--bg-card)",
+                          border: "1px solid var(--border-strong)",
                           padding: "14px 16px",
                           display: "grid",
                           gridTemplateColumns: "1fr 1fr",

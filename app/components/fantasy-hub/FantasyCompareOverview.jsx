@@ -76,13 +76,13 @@ export default function FantasyCompareOverview({ players, timeframeLabel, verdic
               </div>
 
               <div className="fantasy-compare-kpis" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-                <div style={{ borderRadius: 14, background: "#0d1620", border: "1px solid var(--border-strong)", padding: "10px 12px" }}>
+                <div style={{ borderRadius: 14, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "10px 12px" }}>
                   <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     Games
                   </div>
                   <div style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 900, marginTop: 4 }}>{player.gamesInSpan}</div>
                 </div>
-                <div style={{ borderRadius: 14, background: "#0d1620", border: "1px solid var(--border-strong)", padding: "10px 12px" }}>
+                <div style={{ borderRadius: 14, background: "var(--bg-card)", border: "1px solid var(--border-strong)", padding: "10px 12px" }}>
                   <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     Off-Nights
                   </div>

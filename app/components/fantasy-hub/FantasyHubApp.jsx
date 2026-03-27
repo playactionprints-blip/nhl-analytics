@@ -45,7 +45,7 @@ const SELECT_INPUT_STYLE = {
   width: "100%",
   borderRadius: 12,
   border: "1px solid #213547",
-  background: "#0f1823",
+  background: "var(--bg-card)",
   color: "#e8f5ff",
   padding: "10px 12px",
   fontSize: 14,

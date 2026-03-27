@@ -97,9 +97,9 @@ export function BreadcrumbBar() {
         position: "sticky",
         top: "var(--top-nav-height)",
         zIndex: 95,
-        background: "rgba(5,9,15,0.88)",
+        background: "var(--nav-bg)",
         backdropFilter: "blur(8px)",
-        borderBottom: "1px solid #142232",
+        borderBottom: "1px solid var(--border-strong)",
         padding: "10px 24px",
       }}
     >
@@ -113,18 +113,18 @@ export function BreadcrumbBar() {
           gap: 8,
           flexWrap: "wrap",
           fontSize: 12,
-          color: "#6f879f",
+          color: "var(--text-muted)",
           fontFamily: "'DM Mono',monospace",
           letterSpacing: "0.02em",
         }}
       >
         {resolvedItems.map((item, index) => (
           <div key={`${item.href}-${item.label}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {index > 0 && <span style={{ color: "#3e5872" }}>›</span>}
+            {index > 0 && <span style={{ color: "var(--text-muted)" }}>›</span>}
             <Link
               href={item.href}
               style={{
-                color: index === resolvedItems.length - 1 ? "#a9c1d7" : "#7d96ad",
+                color: index === resolvedItems.length - 1 ? "var(--text-secondary)" : "var(--text-muted)",
                 textDecoration: "none",
               }}
             >

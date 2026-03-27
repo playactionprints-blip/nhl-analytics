@@ -52,7 +52,7 @@ function logoUrl(teamAbbr) {
 
 // ── Utility ──────────────────────────────────────────────────────────────────
 function pctColor(v) {
-  if (v == null) return "#3a5570";
+  if (v == null) return "var(--text-muted)";
   if (v >= 80) return "#35e3a0";
   if (v >= 60) return "#2fb4ff";
   if (v >= 40) return "#f0c040";
@@ -361,7 +361,7 @@ function percentileTilePalette(value) {
     return {
       bg: "#0d1825",
       border: "#1e2d40",
-      text: "#2a4060",
+      text: "var(--text-muted)",
       label: "#5a7a99",
     };
   }
@@ -455,7 +455,7 @@ function TrendPanel({ title, subtitle, data, lines, accent }) {
       <div style={{ fontSize: 11, color: "#717780", fontFamily: "'DM Mono',monospace", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>
         {title}
       </div>
-      <div style={{ fontSize: 15, color: "#f1efe9", fontWeight: 700, marginBottom: 10 }}>
+      <div style={{ fontSize: 15, color: "var(--text-primary)", fontWeight: 700, marginBottom: 10 }}>
         {subtitle}
       </div>
       <ResponsiveContainer width="100%" height={160}>
@@ -525,7 +525,7 @@ function RankedBar({ label, value, color, valueColor, bg = "#1a2028" }) {
       <div style={{ height: 8, background: bg, borderRadius: 999, overflow: "hidden" }}>
         <div style={{ width: `${clamp(value || 0, 0, 100)}%`, height: "100%", background: color, borderRadius: 999 }} />
       </div>
-      <div style={{ fontSize: 16, color: valueColor || "#f1efe9", fontWeight: 800, textAlign: "right" }}>
+      <div style={{ fontSize: 16, color: valueColor || "var(--text-primary)", fontWeight: 800, textAlign: "right" }}>
         {value != null ? Math.round(value) : "—"}
       </div>
     </div>
@@ -542,7 +542,7 @@ function SummaryMetricTile({ label, value, subtitle, color }) {
       minHeight: 108,
     }}>
       <div style={{ fontSize: 14, color: "#7e838a", fontWeight: 600, marginBottom: 10 }}>{label}</div>
-      <div style={{ fontSize: 26, color: color || "#f1efe9", fontWeight: 900, lineHeight: 1, marginBottom: 8 }}>
+      <div style={{ fontSize: 26, color: color || "var(--text-primary)", fontWeight: 900, lineHeight: 1, marginBottom: 8 }}>
         {value ?? "—"}
       </div>
       <div style={{ fontSize: 13, color: "#7d838b", fontFamily: "'DM Mono',monospace" }}>{subtitle}</div>
@@ -603,7 +603,7 @@ function CompactPercentileSummary({ player }) {
 
   if (!summaryStats.length) {
     return (
-      <div style={{ background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 10, padding: "14px 16px" }}>
+      <div style={{ background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "14px 16px" }}>
         <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
           Percentile Snapshot
         </div>
@@ -613,7 +613,7 @@ function CompactPercentileSummary({ player }) {
   }
 
   return (
-    <div style={{ background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 10, padding: "14px 16px" }}>
+    <div style={{ background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "14px 16px" }}>
       <div style={{ fontSize: 10, color: "#3a5a78", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
         Percentile Snapshot
       </div>
@@ -667,7 +667,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
   const impactTrend = player.impactTrend || [];
 
   const pc = (v) => {
-    if (v == null) return "#3a5570";
+    if (v == null) return "var(--text-muted)";
     if (v >= 80) return "#35e3a0";
     if (v >= 60) return "#2fb4ff";
     if (v >= 40) return "#f0c040";
@@ -676,7 +676,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
 
   const dividerStyle = { height: 1, background: "rgba(255,255,255,0.05)", margin: "10px 0" };
   const sectionLabelStyle = {
-    fontSize: 9, color: "#3a5570", letterSpacing: "0.12em",
+    fontSize: 9, color: "var(--text-muted)", letterSpacing: "0.12em",
     textTransform: "uppercase", marginBottom: 8, fontFamily: "'DM Mono',monospace",
   };
 
@@ -702,11 +702,11 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
 
   return (
     <div style={{
-      background: "#05090f",
-      border: "1px solid rgba(255,255,255,0.08)",
+      background: "var(--bg-primary)",
+      border: "1px solid var(--border-color)",
       borderRadius: 18,
       padding: "16px 20px",
-      color: "#f1efe9",
+      color: "var(--text-primary)",
       fontFamily: "system-ui, -apple-system, sans-serif",
     }}>
       {/* ── Body: 55% left / 45% right ───────────────────────────────────── */}
@@ -719,11 +719,11 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
           <div style={sectionLabelStyle}>WAR Components</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 10 }}>
             {warTiles.map((tile) => {
-              const tileColor = tile.na ? "#3a5570" : pc(tile.value);
+              const tileColor = tile.na ? "var(--text-muted)" : pc(tile.value);
               const tileDisplay = tile.na ? "N/A" : (tile.value != null ? Math.round(tile.value) : "\u2014");
               return (
                 <div key={tile.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 11, color: "#7a9ab5", width: 110, flexShrink: 0 }}>{tile.label}</span>
+                  <span style={{ fontSize: 11, color: "var(--text-secondary)", width: 110, flexShrink: 0 }}>{tile.label}</span>
                   <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
                     <div style={{ height: "100%", width: tile.na ? "0%" : `${tile.value ?? 0}%`, background: tileColor, borderRadius: 2 }} />
                   </div>
@@ -742,7 +742,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 10 }}>
             {productionBars.map((bar) => (
               <div key={bar.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 11, color: "#7a9ab5", width: 110, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bar.label}</span>
+                <span style={{ fontSize: 11, color: "var(--text-secondary)", width: 110, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bar.label}</span>
                 <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
                   <div style={{ height: "100%", width: `${bar.value ?? 0}%`, background: pc(bar.value), borderRadius: 2 }} />
                 </div>
@@ -773,7 +773,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
                 } else {
                   displayVal = "\u2014";
                   barWidth = 0;
-                  barColor = "#3a5570";
+                  barColor = "var(--text-muted)";
                 }
               } else {
                 displayVal = bar.value != null ? Math.round(bar.value) : "\u2014";
@@ -782,7 +782,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
               }
               return (
                 <div key={bar.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 11, color: "#7a9ab5", width: 110, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bar.label}</span>
+                  <span style={{ fontSize: 11, color: "var(--text-secondary)", width: 110, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bar.label}</span>
                   <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${barWidth}%`, background: barColor, borderRadius: 2 }} />
                   </div>
@@ -795,7 +795,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
           </div>
 
           {/* Footnotes */}
-          <div style={{ marginTop: 14, fontSize: 10, color: "#3a5570", fontFamily: "'DM Mono',monospace", lineHeight: 1.7 }}>
+          <div style={{ marginTop: 14, fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", lineHeight: 1.7 }}>
             {"* Deployment context \u2014 less stable than WAR or EV impact."}
             {isCenter ? " \u2746 FO% shown as raw value when percentile not yet computed." : ""}
           </div>
@@ -809,7 +809,7 @@ function PercentileCardView({ player, accent, age, teamAbbr, teamFull }) {
             title=""
             subtitle="WAR Percentile"
             data={warTrend}
-            lines={[{ key: "war", label: "WAR", color: "#f1efe9" }]}
+            lines={[{ key: "war", label: "WAR", color: "var(--text-primary)" }]}
             accent={accent}
           />
           <TrendPanel
@@ -892,7 +892,7 @@ function RadarViz({ percentiles, color, detailed = false }) {
   const entries = preferredEntries.length ? preferredEntries : allEntries.slice(0, 8);
   if (!entries.length) return (
     <div style={{ height:detailed ? 320 : 120, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <span style={{ fontSize:11, color:"#2a4060", fontFamily:"'DM Mono',monospace" }}>No percentile data yet</span>
+      <span style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"'DM Mono',monospace" }}>No percentile data yet</span>
     </div>
   );
 
@@ -934,8 +934,8 @@ function RadarViz({ percentiles, color, detailed = false }) {
     const point = payload[0]?.payload;
     if (!point) return null;
     return (
-      <div style={{ background:"#0a1520", border:`1px solid ${color}44`, borderRadius:8, padding:"8px 10px", boxShadow:"0 8px 24px rgba(0,0,0,0.35)" }}>
-        <div style={{ color:"#dce7f2", fontSize:12, fontWeight:700, fontFamily:"'DM Mono',monospace" }}>{point.metric}</div>
+      <div style={{ background:"var(--bg-card)", border:`1px solid ${color}44`, borderRadius:8, padding:"8px 10px", boxShadow:"0 8px 24px rgba(0,0,0,0.35)" }}>
+        <div style={{ color:"var(--text-primary)", fontSize:12, fontWeight:700, fontFamily:"'DM Mono',monospace" }}>{point.metric}</div>
         <div style={{ color:color, fontSize:12, marginTop:2, fontFamily:"'DM Mono',monospace" }}>{Math.round(point.value)}th percentile</div>
       </div>
     );
@@ -953,7 +953,7 @@ function RadarViz({ percentiles, color, detailed = false }) {
           axisLine={false}
         />
         <PolarAngleAxis dataKey="metric" tick={renderAngleTick} />
-        <Radar dataKey="value" stroke={color} fill={color} fillOpacity={detailed ? 0.22 : 0.18} strokeWidth={2.5} dot={{ r:detailed ? 4 : 3, fill:color, stroke:"#081016", strokeWidth:1 }} />
+        <Radar dataKey="value" stroke={color} fill={color} fillOpacity={detailed ? 0.22 : 0.18} strokeWidth={2.5} dot={{ r:detailed ? 4 : 3, fill:color, stroke:"var(--bg-card)", strokeWidth:1 }} />
         <Tooltip content={renderTooltip} />
       </RadarChart>
     </ResponsiveContainer>
@@ -1036,7 +1036,7 @@ function GoalieContent({ player, accent }) {
           </div>
         </div>
       )}
-      <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px" }}>
+      <div style={{ background:"#0d1825", border:"1px solid var(--border-strong)", borderRadius:8, padding:"12px 14px" }}>
         <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6 }}>About Goalie Metrics</div>
         <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>
           GSAx = Goals Saved Above Expected, using shot-level expected goals against from NHL play-by-play. xSV% is the save percentage an average goalie would have on those shots. GAA = Goals Against Average · SV% = Save Percentage · SO = Shutouts.
@@ -1192,7 +1192,7 @@ function PlayerCard({ player }) {
   };
 
   return (
-    <div className="pc-card" style={{ width:cardWidth, background:"#05090f", borderRadius:18, border:"1px solid rgba(255,255,255,0.08)", overflow:"hidden", boxShadow:`0 0 0 1px #0a1520,0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
+    <div className="pc-card" style={{ width:cardWidth, background:"var(--bg-primary)", borderRadius:18, border:"1px solid var(--border-color)", overflow:"hidden", boxShadow:`0 0 0 1px var(--bg-card),0 24px 60px rgba(0,0,0,0.6),0 0 80px ${accent}15`, fontFamily:"'Barlow Condensed',sans-serif", position:"relative" }}>
       {/* Top accent bar */}
       <div style={{ height:3, background:`linear-gradient(90deg,${accent},${accent}88,transparent)` }} />
 
@@ -1240,11 +1240,11 @@ function PlayerCard({ player }) {
           {tab === "percentile card" && !isGoalie && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, flexShrink:0 }}>
               {headerSeasonStats.map((stat) => (
-                <div key={stat.label} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:8, padding:"6px 10px", textAlign:"center", minWidth:64 }}>
-                  <div style={{ fontSize:16, fontWeight:800, color:stat.color||"#f1efe9", lineHeight:1, fontFamily:"'DM Mono',monospace" }}>
+                <div key={stat.label} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid var(--border-color)", borderRadius:8, padding:"6px 10px", textAlign:"center", minWidth:64 }}>
+                  <div style={{ fontSize:16, fontWeight:800, color:stat.color||"var(--text-primary)", lineHeight:1, fontFamily:"'DM Mono',monospace" }}>
                     {stat.value}
                   </div>
-                  <div style={{ fontSize:8, color:"#3a5570", textTransform:"uppercase", letterSpacing:"0.1em", marginTop:4 }}>
+                  <div style={{ fontSize:8, color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.1em", marginTop:4 }}>
                     {stat.label}
                   </div>
                 </div>
@@ -1290,7 +1290,7 @@ function PlayerCard({ player }) {
 
         {!isGoalie && tab === "overview" && (
           <div>
-            <div style={{ marginBottom: 14, padding: "12px 14px", background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 12 }}>
+            <div style={{ marginBottom: 14, padding: "12px 14px", background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 12 }}>
               <div style={{ fontSize: 10, color: "#5a7a99", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
                 At a glance
               </div>
@@ -1314,11 +1314,11 @@ function PlayerCard({ player }) {
               <StatBox label="xG/Game" value={ixgPerGameOverview != null ? ixgPerGameOverview.toFixed(2) : null} />
             </div>
             <div style={{ display:"grid", gap:8, marginBottom:12 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid var(--border-strong)" }}>
                 <span style={{ fontSize:11, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Usage</span>
                 <span style={{ fontSize:14, fontWeight:800, color:accent, textAlign:"right" }}>{usage}</span>
               </div>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid var(--border-strong)" }}>
                 <span style={{ fontSize:11, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Average TOI</span>
                 <span style={{ fontSize:20, fontWeight:800, color:accent }}>{player.toi || "—"}</span>
               </div>
@@ -1326,13 +1326,13 @@ function PlayerCard({ player }) {
             {((player.toi_pp > 0) || (player.toi_pk > 0)) && (player.gp > 0) && (
               <div style={{ display:"grid", gridTemplateColumns:(player.toi_pp > 0 && player.toi_pk > 0) ? "1fr 1fr" : "1fr", gap:8, marginBottom:player.contract_info?.cap_hit ? 8 : 16 }}>
                 {player.toi_pp > 0 && (
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"#0d1825", borderRadius:8, border:"1px solid var(--border-strong)" }}>
                     <span style={{ fontSize:10, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>PP TOI</span>
                     <span style={{ fontSize:14, fontWeight:800, color:"#38bdf8", fontFamily:"'Barlow Condensed',sans-serif" }}>{fmtMinSec(player.toi_pp / player.gp)} per game</span>
                   </div>
                 )}
                 {player.toi_pk > 0 && (
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"#0d1825", borderRadius:8, border:"1px solid var(--border-strong)" }}>
                     <span style={{ fontSize:10, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>PK TOI</span>
                     <span style={{ fontSize:14, fontWeight:800, color:"#818cf8", fontFamily:"'Barlow Condensed',sans-serif" }}>{fmtMinSec(player.toi_pk / player.gp)} per game</span>
                   </div>
@@ -1340,7 +1340,7 @@ function PlayerCard({ player }) {
               </div>
             )}
             {player.contract_info?.cap_hit && (
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid #1e2d40" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, padding:"10px 14px", background:"#0d1825", borderRadius:8, border:"1px solid var(--border-strong)" }}>
                 <span style={{ fontSize:11, color:"#5a7a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>Cap Hit</span>
                 <div style={{ textAlign:"right" }}>
                   <span style={{ fontSize:20, fontWeight:800, color:accent }}>${(player.contract_info.cap_hit / 1_000_000).toFixed(2)}M</span>
@@ -1484,10 +1484,10 @@ function PlayerCard({ player }) {
                   const per60  = tpp > 0 && xgfpp != null ? xgfpp / tpp * 60 : null;
                   const C      = "#38bdf8";
                   return (
-                    <div style={{ background:"#0a1520", border:`1px solid ${C}22`, borderRadius:8, padding:"10px 12px" }}>
+                    <div style={{ background:"var(--bg-card)", border:`1px solid ${C}22`, borderRadius:8, padding:"10px 12px" }}>
                       <div style={{ fontSize:10, color:C, fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>⚡ Power Play</div>
                       {tpp == null || tpp < 20 ? (
-                        <div style={{ fontSize:11, color:tpp == null ? "#2a4060" : "#3a5a78", fontFamily:"'DM Mono',monospace", padding:"4px 0" }}>
+                        <div style={{ fontSize:11, color:tpp == null ? "var(--text-muted)" : "#3a5a78", fontFamily:"'DM Mono',monospace", padding:"4px 0" }}>
                           {tpp == null ? "Not deployed" : "Limited PP time"}
                         </div>
                       ) : (
@@ -1540,10 +1540,10 @@ function PlayerCard({ player }) {
                   const per60  = tpk > 0 && xgapk != null ? xgapk / tpk * 60 : null;
                   const C      = "#818cf8";
                   return (
-                    <div style={{ background:"#0a1520", border:`1px solid ${C}22`, borderRadius:8, padding:"10px 12px" }}>
+                    <div style={{ background:"var(--bg-card)", border:`1px solid ${C}22`, borderRadius:8, padding:"10px 12px" }}>
                       <div style={{ fontSize:10, color:C, fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>🛡 Penalty Kill</div>
                       {tpk == null || tpk < 20 ? (
-                        <div style={{ fontSize:11, color:tpk == null ? "#2a4060" : "#3a5a78", fontFamily:"'DM Mono',monospace", padding:"4px 0" }}>
+                        <div style={{ fontSize:11, color:tpk == null ? "var(--text-muted)" : "#3a5a78", fontFamily:"'DM Mono',monospace", padding:"4px 0" }}>
                           {tpk == null ? "Not deployed" : "Limited PK time"}
                         </div>
                       ) : (
@@ -1628,13 +1628,13 @@ function PlayerCard({ player }) {
               <RapmBox label="RAPM OFF" value={player.rapm_off} pct={player.rapm_off_pct} subtitle="xG/60 above avg" />
               <RapmBox label="RAPM DEF" value={player.rapm_def} pct={player.rapm_def_pct} subtitle="xG/60 above avg" />
             </div>
-            <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px", marginBottom:16 }}>
+            <div style={{ background:"#0d1825", border:"1px solid var(--border-strong)", borderRadius:8, padding:"12px 14px", marginBottom:16 }}>
               <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>About These Metrics</div>
               <p style={{ fontSize:11, color:"#5a7a99", lineHeight:1.6, margin:0, fontFamily:"'DM Mono',monospace" }}>WAR (Wins Above Replacement) is shown here as a 3-year weighted card value, combining 5v5, power play, penalty kill, shooting, and penalties to reduce one-season noise. RAPM (Regularized Adjusted Plus-Minus) measures individual impact in xG per 60 minutes at 5v5, controlling for teammates and opponents. Both metrics are custom public-data models and still evolving.</p>
             </div>
             <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
               {["Natural Stat Trick","NHL API","Custom RAPM Model"].map(src => (
-                <span key={src} style={{ fontSize:9, padding:"3px 8px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:20, color:"#3a5a78", fontFamily:"'DM Mono',monospace" }}>{src}</span>
+                <span key={src} style={{ fontSize:9, padding:"3px 8px", background:"#0d1825", border:"1px solid var(--border-strong)", borderRadius:20, color:"#3a5a78", fontFamily:"'DM Mono',monospace" }}>{src}</span>
               ))}
             </div>
           </div>
@@ -1662,7 +1662,7 @@ function PlayerCard({ player }) {
                   {/* Career totals */}
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:16 }}>
                     {[["GP",totalGP],["G",totalG],["A",totalA],["Pts",totalPts]].map(([label, val]) => (
-                      <div key={label} style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"10px 0", textAlign:"center" }}>
+                      <div key={label} style={{ background:"#0d1825", border:"1px solid var(--border-strong)", borderRadius:8, padding:"10px 0", textAlign:"center" }}>
                         <div style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
                         <div style={{ fontSize:22, fontWeight:700, color:"#e8f4ff", fontFamily:"'Barlow Condensed',sans-serif" }}>{val}</div>
                       </div>
@@ -1670,7 +1670,7 @@ function PlayerCard({ player }) {
                   </div>
 
                   {/* Pts/82 bar chart */}
-                  <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px", marginBottom:16 }}>
+                  <div style={{ background:"#0d1825", border:"1px solid var(--border-strong)", borderRadius:8, padding:"12px 14px", marginBottom:16 }}>
                     <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:10 }}>Points / 82 Games by Season</div>
                     <ResponsiveContainer width="100%" height={160}>
                       <BarChart data={careerStats} margin={{ top:4, right:4, left:-20, bottom:0 }}>
@@ -1678,7 +1678,7 @@ function PlayerCard({ player }) {
                         <XAxis dataKey="season" tick={{ fontSize:8, fill:"#5a7a99", fontFamily:"DM Mono,monospace" }} interval="preserveStartEnd" />
                         <YAxis tick={{ fontSize:8, fill:"#5a7a99", fontFamily:"DM Mono,monospace" }} />
                         <Tooltip
-                          contentStyle={{ background:"#0a1520", border:"1px solid #1e2d40", borderRadius:6, fontSize:11, fontFamily:"DM Mono,monospace" }}
+                          contentStyle={{ background:"var(--bg-card)", border:"1px solid var(--border-strong)", borderRadius:6, fontSize:11, fontFamily:"DM Mono,monospace" }}
                           formatter={(value, _name, props) => [`${value} (${props.payload.team})`, "Pts/82"]}
                           labelStyle={{ color:"#8899aa" }}
                         />
@@ -1692,10 +1692,10 @@ function PlayerCard({ player }) {
                   </div>
 
                   {/* Season-by-season table */}
-                  <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, overflow:"hidden" }}>
+                  <div style={{ background:"#0d1825", border:"1px solid var(--border-strong)", borderRadius:8, overflow:"hidden" }}>
                     <div style={{ display:"grid", gridTemplateColumns:"58px 42px 32px 32px 32px 42px" }}>
                       {["Season","Team","GP","G","A","Pts"].map(h => (
-                        <div key={h} style={{ padding:"6px 8px", fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", borderBottom:"1px solid #1e2d40" }}>{h}</div>
+                        <div key={h} style={{ padding:"6px 8px", fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", borderBottom:"1px solid var(--border-strong)" }}>{h}</div>
                       ))}
                       {careerStats.map((row, i) => {
                         const tc = TEAM_COLOR[row.team] || "#4a6a88";
@@ -1772,7 +1772,7 @@ function PlayerCard({ player }) {
 
             {/* Season trend chart */}
             {(player.ratings_trend?.length > 1) && (
-              <div style={{ background:"#0d1825", border:"1px solid #1e2d40", borderRadius:8, padding:"12px 14px", marginTop:8 }}>
+              <div style={{ background:"#0d1825", border:"1px solid var(--border-strong)", borderRadius:8, padding:"12px 14px", marginTop:8 }}>
                 <div style={{ fontSize:10, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:10 }}>3-Season Trend</div>
                 <div style={{ display:"flex", gap:14, marginBottom:8 }}>
                   {[["Overall","#e8f4ff"],["Offensive","#00e5a0"],["Defensive","#f08040"]].map(([l,c]) => (
@@ -1787,7 +1787,7 @@ function PlayerCard({ player }) {
                     <CartesianGrid stroke="#1e2d40" strokeDasharray="3 3" />
                     <XAxis dataKey="season" tick={{ fontSize:9, fill:"#5a7a99", fontFamily:"DM Mono,monospace" }} />
                     <YAxis domain={[0, 100]} tick={{ fontSize:9, fill:"#5a7a99", fontFamily:"DM Mono,monospace" }} />
-                    <Tooltip contentStyle={{ background:"#0a1520", border:"1px solid #1e2d40", borderRadius:6, fontSize:11, fontFamily:"DM Mono,monospace" }} labelStyle={{ color:"#8899aa" }} itemStyle={{ padding:1 }} />
+                    <Tooltip contentStyle={{ background:"var(--bg-card)", border:"1px solid var(--border-strong)", borderRadius:6, fontSize:11, fontFamily:"DM Mono,monospace" }} labelStyle={{ color:"#8899aa" }} itemStyle={{ padding:1 }} />
                     <Line type="monotone" dataKey="overall"  stroke="#e8f4ff" strokeWidth={2} dot={{ r:3, fill:"#e8f4ff" }} name="Overall" />
                     <Line type="monotone" dataKey="off"      stroke="#00e5a0" strokeWidth={2} dot={{ r:3, fill:"#00e5a0" }} name="Offensive" />
                     <Line type="monotone" dataKey="def"      stroke="#f08040" strokeWidth={2} dot={{ r:3, fill:"#f08040" }} name="Defensive" />
@@ -1801,14 +1801,14 @@ function PlayerCard({ player }) {
 
       {/* Footer */}
       <div style={{ borderTop:"1px solid #1a2535", padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ fontSize:9, color:"#2a4060", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>2024–25 Regular Season</span>
+        <span style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>2024–25 Regular Season</span>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           <Link href={`/compare?p1=${player.player_id}`}
             style={{ fontSize:9, color:"#3a6a99", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", textDecoration:"none", padding:"3px 8px", border:"1px solid #1e3a55", borderRadius:4 }}>
             Compare ↗
           </Link>
           <ShareCardBtn playerId={player.player_id} />
-          <span style={{ fontSize:9, color:"#2a4060", fontFamily:"'DM Mono',monospace" }}>hockeystats.dev</span>
+          <span style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"'DM Mono',monospace" }}>hockeystats.dev</span>
         </div>
       </div>
     </div>
@@ -1828,8 +1828,8 @@ function TeamGrid({ onSelectTeam, selectedTeam }) {
             <TeamLogo abbr={abbr} size={24} />
             <span style={{ fontSize:11, fontWeight:700, color:selectedTeam===abbr?TEAM_COLOR[abbr]:"#4a6a88", fontFamily:"'Barlow Condensed',sans-serif" }}>{abbr}</span>
           </button>
-          <Link href={`/team/${abbr}`} title={`${TEAM_FULL[abbr]} team page`} style={{ padding:"6px 7px", background:"#0a1218", border:`1px solid #1e2d40`, borderLeft:"none", borderRadius:"0 8px 8px 0", display:"flex", alignItems:"center", textDecoration:"none" }}>
-            <span style={{ fontSize:11, color:"#2a4060" }}>↗</span>
+          <Link href={`/team/${abbr}`} title={`${TEAM_FULL[abbr]} team page`} style={{ padding:"6px 7px", background:"#0a1218", border:`1px solid var(--border-strong)`, borderLeft:"none", borderRadius:"0 8px 8px 0", display:"flex", alignItems:"center", textDecoration:"none" }}>
+            <span style={{ fontSize:11, color:"var(--text-muted)" }}>↗</span>
           </Link>
         </div>
       ))}
@@ -1929,10 +1929,10 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
 
   function cellColor(p, col) {
     const v = p[col.key];
-    if (v == null) return '#2a4060';
+    if (v == null) return 'var(--text-muted)';
     if (col.pctStat) return statColor(v);
     if (col.rating) return pctColor(v);
-    if (col.key === 'full_name') return '#c8dff0';
+    if (col.key === 'full_name') return 'var(--text-primary)';
     if (col.key === 'team') return TEAM_COLOR[v] || '#4a6a88';
     if (col.key === 'rapm_off' || col.key === 'rapm_def') return typeof v === 'number' ? (v >= 0 ? '#00e5a0' : '#e05050') : '#6a8aaa';
     return '#6a8aaa';
@@ -1943,7 +1943,7 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
       <div style={{ display:'flex', gap:12, marginBottom:14, alignItems:'center', flexWrap:'wrap' }}>
         <input type="text" placeholder="Filter players or teams..." value={tableSearch}
           onChange={e => setTableSearch(e.target.value)}
-          style={{ padding:'8px 16px', background:'#0d1825', border:'1px solid #1e2d40', borderRadius:8, color:'#e8f4ff', fontSize:14, fontFamily:"'Barlow Condensed',sans-serif", outline:'none', width:260 }} />
+          style={{ padding:'8px 16px', background:'#0d1825', border:'1px solid var(--border-strong)', borderRadius:8, color:'#e8f4ff', fontSize:14, fontFamily:"'Barlow Condensed',sans-serif", outline:'none', width:260 }} />
         <div style={{ display:'flex', gap:4 }}>
           {[['S','Skaters'],['F','Forwards'],['D','Defense'],['G','Goalies'],['All','All']].map(([v,l]) => (
             <button key={v} onClick={() => setPosFilter(v)}
@@ -1956,7 +1956,7 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
         <div style={{ display:'flex', gap:4 }}>
           {[['players','Current'],['25-26','25–26'],['24-25','24–25'],['23-24','23–24']].map(([v,l]) => (
             <button key={v} onClick={() => { setSelectedSeason(v); setSortKey(v==='players'?'pts':'pts'); }}
-              style={{ padding:'6px 12px', background:selectedSeason===v?'#334466':'#0d1825', border:`1px solid ${selectedSeason===v?'#5577aa':'#1e2d40'}`, borderRadius:6, color:selectedSeason===v?'#c8dff0':'#4a6a88', fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer', transition:'all 0.2s' }}>
+              style={{ padding:'6px 12px', background:selectedSeason===v?'#334466':'#0d1825', border:`1px solid ${selectedSeason===v?'#5577aa':'#1e2d40'}`, borderRadius:6, color:selectedSeason===v?'var(--text-primary)':'#4a6a88', fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer', transition:'all 0.2s' }}>
               {l}
             </button>
           ))}
@@ -1964,11 +1964,11 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
         {/* Column picker */}
         <div style={{ position:'relative' }}>
           <button onClick={() => setShowColPicker(v => !v)}
-            style={{ padding:'6px 12px', background:showColPicker?'#334466':'#0d1825', border:`1px solid ${showColPicker?'#5577aa':'#1e2d40'}`, borderRadius:6, color:showColPicker?'#c8dff0':'#4a6a88', fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer' }}>
+            style={{ padding:'6px 12px', background:showColPicker?'#334466':'#0d1825', border:`1px solid ${showColPicker?'#5577aa':'#1e2d40'}`, borderRadius:6, color:showColPicker?'var(--text-primary)':'#4a6a88', fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer' }}>
             Columns ⚙
           </button>
           {showColPicker && (
-            <div style={{ position:'absolute', top:'calc(100% + 6px)', left:0, zIndex:50, background:'#0d1825', border:'1px solid #1e2d40', borderRadius:10, padding:'10px 14px', minWidth:200, boxShadow:'0 14px 34px rgba(0,0,0,0.4)' }}>
+            <div style={{ position:'absolute', top:'calc(100% + 6px)', left:0, zIndex:50, background:'#0d1825', border:'1px solid var(--border-strong)', borderRadius:10, padding:'10px 14px', minWidth:200, boxShadow:'0 14px 34px rgba(0,0,0,0.4)' }}>
               <div style={{ fontSize:10, color:'#3a5a78', fontFamily:"'DM Mono',monospace", textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:8 }}>Toggle Columns</div>
               {ALL_COLS.filter(c => !c.alwaysVisible).map(col => (
                 <label key={col.key} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, cursor:'pointer' }}>
@@ -1984,25 +1984,25 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
               ))}
               <div style={{ marginTop:8, display:'flex', gap:6 }}>
                 <button onClick={() => setVisibleCols(DEFAULT_TABLE_COLS)}
-                  style={{ flex:1, padding:'4px 8px', background:'#0a1218', border:'1px solid #1e2d40', borderRadius:5, color:'#4a6a88', fontSize:10, fontFamily:"'DM Mono',monospace", cursor:'pointer' }}>Reset</button>
+                  style={{ flex:1, padding:'4px 8px', background:'#0a1218', border:'1px solid var(--border-strong)', borderRadius:5, color:'#4a6a88', fontSize:10, fontFamily:"'DM Mono',monospace", cursor:'pointer' }}>Reset</button>
                 <button onClick={() => setVisibleCols(new Set(ALL_COLS.map(c => c.key)))}
-                  style={{ flex:1, padding:'4px 8px', background:'#0a1218', border:'1px solid #1e2d40', borderRadius:5, color:'#4a6a88', fontSize:10, fontFamily:"'DM Mono',monospace", cursor:'pointer' }}>All</button>
+                  style={{ flex:1, padding:'4px 8px', background:'#0a1218', border:'1px solid var(--border-strong)', borderRadius:5, color:'#4a6a88', fontSize:10, fontFamily:"'DM Mono',monospace", cursor:'pointer' }}>All</button>
               </div>
             </div>
           )}
         </div>
-        <span style={{ fontSize:11, color:'#2a4060', fontFamily:"'DM Mono',monospace" }}>{filtered.length} players</span>
+        <span style={{ fontSize:11, color:'var(--text-muted)', fontFamily:"'DM Mono',monospace" }}>{filtered.length} players</span>
       </div>
 
-      <div style={{ overflowX:'auto', border:'1px solid #1e2d40', borderRadius:10, maxHeight:720, overflowY:'auto' }}>
+      <div style={{ overflowX:'auto', border:'1px solid var(--border-strong)', borderRadius:10, maxHeight:720, overflowY:'auto' }}>
         <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:"'DM Mono',monospace", fontSize:12, minWidth:900 }}>
           <thead style={{ position:'sticky', top:0, zIndex:10 }}>
-            <tr style={{ background:'#0a1520' }}>
-              <th style={{ padding:'9px 8px', color:'#2a4060', fontSize:10, fontWeight:400, width:36, borderBottom:'1px solid #1e2d40', textAlign:'center', background:'#0a1520' }}>#</th>
+            <tr style={{ background:'var(--bg-card)' }}>
+              <th style={{ padding:'9px 8px', color:'var(--text-muted)', fontSize:10, fontWeight:400, width:36, borderBottom:'1px solid var(--border-strong)', textAlign:'center', background:'var(--bg-card)' }}>#</th>
               {COLS.map(col => (
                 <th key={col.key} onClick={() => handleSort(col.sortKey)}
                   className={col.mobileHide ? "tbl-col-hide" : ""}
-                  style={{ padding:'9px 10px', textAlign:col.align, borderBottom:'1px solid #1e2d40', color:sortKey===col.sortKey?'#c8dff0':'#3a5a78', fontSize:10, fontWeight:700, letterSpacing:'0.07em', textTransform:'uppercase', cursor:'pointer', whiteSpace:'nowrap', userSelect:'none', background:sortKey===col.sortKey?'#0d1825':'#0a1520' }}>
+                  style={{ padding:'9px 10px', textAlign:col.align, borderBottom:'1px solid var(--border-strong)', color:sortKey===col.sortKey?'var(--text-primary)':'#3a5a78', fontSize:10, fontWeight:700, letterSpacing:'0.07em', textTransform:'uppercase', cursor:'pointer', whiteSpace:'nowrap', userSelect:'none', background:sortKey===col.sortKey?'#0d1825':'var(--bg-card)' }}>
                   {col.label}{sortKey===col.sortKey ? (sortDir==='desc'?' ↓':' ↑') : ''}
                 </th>
               ))}
@@ -2015,10 +2015,10 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
               const teamAccent = TEAM_COLOR[p.team] || '#4a6a88';
               return (
                 <tr key={p.player_id} onClick={() => onSelectPlayer(p)}
-                  style={{ borderBottom:'1px solid #0a1218', cursor:'pointer', background: isSelected ? '#0d2a1a' : i%2===0 ? '#080e17' : '#060b12', borderLeft: isTop10 ? `3px solid ${teamAccent}` : '3px solid transparent' }}
+                  style={{ borderBottom:'1px solid #0a1218', cursor:'pointer', background: isSelected ? '#0d2a1a' : i%2===0 ? 'var(--bg-primary)' : '#060b12', borderLeft: isTop10 ? `3px solid ${teamAccent}` : '3px solid transparent' }}
                   onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#0d1825'; }}
-                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? '#0d2a1a' : i%2===0 ? '#080e17' : '#060b12'; }}>
-                  <td style={{ padding:'6px 8px', textAlign:'center', color: isTop10 ? teamAccent : '#2a4060', fontSize:10, fontWeight: isTop10 ? 700 : 400 }}>{i+1}</td>
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? '#0d2a1a' : i%2===0 ? 'var(--bg-primary)' : '#060b12'; }}>
+                  <td style={{ padding:'6px 8px', textAlign:'center', color: isTop10 ? teamAccent : 'var(--text-muted)', fontSize:10, fontWeight: isTop10 ? 700 : 400 }}>{i+1}</td>
                   {COLS.map(col => (
                     <td key={col.key} className={col.mobileHide ? "tbl-col-hide" : ""} style={{ padding:'6px 10px', textAlign:col.align, color:cellColor(p,col), fontWeight:col.bold && p[col.key] != null ? 700 : 400, whiteSpace:col.key==='full_name'?'nowrap':'normal', fontSize:col.key==='full_name'?13:12, fontFamily:col.key==='full_name'?"'Barlow Condensed',sans-serif":"'DM Mono',monospace" }}>
                       {fmtCell(p, col)}
@@ -2240,8 +2240,8 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing:border-box; margin:0; padding:0; }
-        body { background:#05090f; }
-        input::placeholder { color:#2a4060; }
+        body { background:var(--bg-primary); }
+        input::placeholder { color:var(--text-muted); }
         button:hover { opacity:0.85; }
         ::-webkit-scrollbar { width:4px; }
         ::-webkit-scrollbar-track { background:#0d1825; }
@@ -2275,10 +2275,10 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
         }
       `}</style>
 
-      <div className="app-outer" style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)", display:"flex", flexDirection:"column", alignItems:"center", padding:"40px 20px", fontFamily:"'Barlow Condensed',sans-serif" }}>
+      <div className="app-outer" style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 20% 20%,#0d1e30 0%,var(--bg-primary) 60%)", display:"flex", flexDirection:"column", alignItems:"center", padding:"40px 20px", fontFamily:"'Barlow Condensed',sans-serif" }}>
 
         {/* Mode toggle */}
-        <div className="app-mode-toggle" style={{ display:"flex", gap:0, marginBottom:20, background:"#0d1825", border:"1px solid #1e2d40", borderRadius:10, overflow:"hidden" }}>
+        <div className="app-mode-toggle" style={{ display:"flex", gap:0, marginBottom:20, background:"#0d1825", border:"1px solid var(--border-strong)", borderRadius:10, overflow:"hidden" }}>
           {[["search","🔍 Search Players"],["teams","🏒 Browse by Team"],["table","📊 Stats Table"]].map(([mode,label]) => (
             <button key={mode} onClick={() => setBrowseMode(mode)} className="app-mode-btn" style={{ padding:"10px 24px", background:browseMode===mode?"#0080FF":"transparent", border:"none", color:browseMode===mode?"white":"#4a6a88", fontSize:13, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer", transition:"all 0.2s", letterSpacing:"0.03em" }}>
               {label}
@@ -2293,7 +2293,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
               <div style={{
                 padding: "18px 18px 16px",
                 borderRadius: 22,
-                border: "1px solid #1d344d",
+                border: "1px solid var(--border-strong)",
                 background: "linear-gradient(180deg, rgba(10,20,31,0.98) 0%, rgba(9,15,24,0.98) 100%)",
                 boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 22px 58px rgba(0,0,0,0.34)",
               }}>
@@ -2305,10 +2305,10 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
                   placeholder="Search any player..."
                   value={search}
                   onChange={e => { setSearch(e.target.value); setSelectedPlayer(null); }}
-                  style={{ width:"100%", padding:"14px 20px", background:"#0d1825", border:"1px solid #22374d", borderRadius:14, color:"#e8f4ff", fontSize:17, fontFamily:"'Barlow Condensed',sans-serif", outline:"none", letterSpacing:"0.03em", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.04)" }}
+                  style={{ width:"100%", padding:"14px 20px", background:"#0d1825", border:"1px solid var(--border-strong)", borderRadius:14, color:"#e8f4ff", fontSize:17, fontFamily:"'Barlow Condensed',sans-serif", outline:"none", letterSpacing:"0.03em", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.04)" }}
                 />
                 {/* Search filters */}
-                <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:8, padding:"12px 14px", background:"#080e17", border:"1px solid #1b2a3b", borderRadius:14 }}>
+                <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:8, padding:"12px 14px", background:"var(--bg-primary)", border:"1px solid var(--border-strong)", borderRadius:14 }}>
                   {/* Position row */}
                   <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
                     <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.08em", marginRight:4 }}>Pos</span>
@@ -2322,7 +2322,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
                   {/* Team + Rating + WAR row */}
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
                     <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)}
-                      style={{ padding:"4px 8px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:999, color:filterTeam?"#c8dff0":"#3a5a78", fontSize:11, fontFamily:"'DM Mono',monospace", cursor:"pointer", outline:"none" }}>
+                      style={{ padding:"4px 8px", background:"#0d1825", border:"1px solid var(--border-strong)", borderRadius:999, color:filterTeam?"var(--text-primary)":"#3a5a78", fontSize:11, fontFamily:"'DM Mono',monospace", cursor:"pointer", outline:"none" }}>
                       <option value="">All Teams</option>
                       {ALL_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
@@ -2330,13 +2330,13 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
                       <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>OVR≥</span>
                       <input type="number" min={0} max={100} value={filterRatingMin}
                         onChange={e => setFilterRatingMin(Number(e.target.value))}
-                        style={{ width:48, padding:"4px 6px", background:"#0d1825", border:"1px solid #1e2d40", borderRadius:7, color:"#c8dff0", fontSize:11, fontFamily:"'DM Mono',monospace", outline:"none" }} />
+                        style={{ width:48, padding:"4px 6px", background:"#0d1825", border:"1px solid var(--border-strong)", borderRadius:7, color:"var(--text-primary)", fontSize:11, fontFamily:"'DM Mono',monospace", outline:"none" }} />
                     </div>
                     <div style={{ display:"flex", gap:4, alignItems:"center" }}>
                       <span style={{ fontSize:9, color:"#3a5a78", fontFamily:"'DM Mono',monospace", textTransform:"uppercase", letterSpacing:"0.06em" }}>WAR</span>
                       {[null, 0, 1, 2, 3].map(v => (
                         <button key={v ?? "any"} onClick={() => setFilterWarMin(v)}
-                          style={{ padding:"4px 8px", background:filterWarMin===v?"#334466":"#0d1825", border:`1px solid ${filterWarMin===v?"#5577aa":"#1e2d40"}`, borderRadius:999, color:filterWarMin===v?"#c8dff0":"#4a6a88", fontSize:10, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer" }}>
+                          style={{ padding:"4px 8px", background:filterWarMin===v?"#334466":"#0d1825", border:`1px solid ${filterWarMin===v?"#5577aa":"#1e2d40"}`, borderRadius:999, color:filterWarMin===v?"var(--text-primary)":"#4a6a88", fontSize:10, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:"pointer" }}>
                           {v == null ? "Any" : `>${v}`}
                         </button>
                       ))}
@@ -2355,7 +2355,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
                 </div>
               </div>
 
-              <div style={{ marginTop: 10, background: "#0d1825", border: "1px solid #1e2d40", borderRadius: 18, overflow: "hidden", boxShadow: "0 14px 34px rgba(0,0,0,0.26)" }}>
+              <div style={{ marginTop: 10, background: "#0d1825", border: "1px solid var(--border-strong)", borderRadius: 18, overflow: "hidden", boxShadow: "0 14px 34px rgba(0,0,0,0.26)" }}>
               {!searchLoading && (
                 <div style={{
                   padding: "11px 14px",
@@ -2465,7 +2465,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
                   border:`1px solid ${isSelected?color:"#1e2d40"}`,
                   borderLeft:`3px solid ${color}`,
                   borderRadius:999,
-                  color:isSelected?"#eef8ff":"#c9deef",
+                  color:isSelected?"var(--text-primary)":"#c9deef",
                   fontSize:12,
                   fontWeight:700,
                   fontFamily:"'Barlow Condensed',sans-serif",
@@ -2523,7 +2523,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
         )}
 
         {browseMode === "teams" && visiblePlayers.length === 0 && (
-          <div style={{ color:"#2a4060", fontFamily:"'DM Mono',monospace", fontSize:13, marginTop:40 }}>
+          <div style={{ color:"var(--text-muted)", fontFamily:"'DM Mono',monospace", fontSize:13, marginTop:40 }}>
             No players found. Try a different search.
           </div>
         )}
