@@ -175,7 +175,7 @@ export default function TeamComparison({
           <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Team Stats
           </div>
-          <div style={{ color: "#eff8ff", fontSize: compact ? 22 : 26, fontWeight: 900, marginTop: 4 }}>{title}</div>
+          <div style={{ color: "var(--text-primary)", fontSize: compact ? 22 : 26, fontWeight: 900, marginTop: 4 }}>{title}</div>
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           {[{ label: awayAbbr, color: awayColor }, { label: homeAbbr, color: homeColor }].map((item) => (

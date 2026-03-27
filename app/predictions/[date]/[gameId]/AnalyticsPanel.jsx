@@ -40,7 +40,7 @@ export default function AnalyticsPanel({
           <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Game Analytics
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 30, fontWeight: 900, marginTop: 4 }}>Single-game flow and chance quality</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 30, fontWeight: 900, marginTop: 4 }}>Single-game flow and chance quality</div>
         </div>
         <div style={{ color: "#7c95ac", fontSize: 13, maxWidth: 360, lineHeight: 1.5 }}>
           Win probability, chance quality, and shot-driven flow are derived from gamecenter play-by-play and refreshed into a single postgame view.
@@ -106,21 +106,21 @@ export default function AnalyticsPanel({
               <div style={{ color: "#8ea7bf", fontFamily: "'DM Mono',monospace", fontSize: 12 }}>Loading postgame analytics…</div>
             ) : error ? (
               <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ color: "#eff8ff", fontWeight: 800, fontSize: 18 }}>Game analytics are temporarily unavailable</div>
+                <div style={{ color: "var(--text-primary)", fontWeight: 800, fontSize: 18 }}>Game analytics are temporarily unavailable</div>
                 <div>
                   The play-by-play layer did not load for this game, so advanced flow visuals like win probability and shot-quality breakdowns are unavailable right now.
                 </div>
               </div>
             ) : !hasAnalytics || totalXg < 0.01 ? (
               <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ color: "#eff8ff", fontWeight: 800, fontSize: 18 }}>Limited postgame event data</div>
+                <div style={{ color: "var(--text-primary)", fontWeight: 800, fontSize: 18 }}>Limited postgame event data</div>
                 <div>
                   This game does not currently have enough shot-level data to render the full analytics suite, but the scoring summary and team comparison panels below are still available.
                 </div>
               </div>
             ) : (
               <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ color: "#eff8ff", fontWeight: 800, fontSize: 18 }}>What shaped this game</div>
+                <div style={{ color: "var(--text-primary)", fontWeight: 800, fontSize: 18 }}>What shaped this game</div>
                 <div>
                   {homeAbbr} finished with {analytics.totalHomeXG.toFixed(2)} xG on {homeShots || "—"} shots, while {awayAbbr} generated {analytics.totalAwayXG.toFixed(2)} xG on {awayShots || "—"} shots.
                   {deserved ? ` Shot-quality replaying slightly favored ${deserved.home >= deserved.away ? homeAbbr : awayAbbr}.` : ""}

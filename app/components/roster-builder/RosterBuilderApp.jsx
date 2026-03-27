@@ -599,7 +599,7 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
     <div
       style={{
         minHeight: "100vh",
-        background: "radial-gradient(circle at top left, #0d2136 0%, #060a11 58%, #05090f 100%)",
+        background: "radial-gradient(circle at top left, #0d2136 0%, var(--bg-primary) 58%, var(--bg-primary) 100%)",
         padding: "32px 20px 60px",
       }}
     >
@@ -692,7 +692,7 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
 
             {/* Load Team Roster */}
             <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 10, color: "#5e7b98", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
+              <div style={{ fontSize: 10, color: "var(--text-secondary)", fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
                 Load Team Roster
               </div>
               <div className="rb-load-row" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 8 }}>
@@ -701,9 +701,9 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
                   onChange={(e) => setLoadTeamCode(e.target.value)}
                   style={{
                     flex: 1,
-                    background: "#0d1926",
+                    background: "var(--bg-card-hover)",
                     border: "1px solid #1e3048",
-                    color: "#eff8ff",
+                    color: "var(--text-primary)",
                     borderRadius: 10,
                     padding: "6px 10px",
                     fontSize: 12,
@@ -851,7 +851,7 @@ export default function RosterBuilderApp({ initialRosterParam = "" }) {
                   background: "transparent",
                   border: "none",
                   outline: "none",
-                  color: "#eff8ff",
+                  color: "var(--text-primary)",
                   fontSize: 34,
                   fontWeight: 900,
                   fontFamily: "'Barlow Condensed',sans-serif",

@@ -67,8 +67,8 @@ export default function FantasyCompareBreakdown({ players }) {
     <section
       style={{
         borderRadius: 22,
-        border: "1px solid #17283b",
-        background: "#091017",
+        border: "1px solid var(--border-strong)",
+        background: "var(--bg-card)",
         padding: "16px 16px 14px",
         display: "grid",
         gap: 14,
@@ -79,7 +79,7 @@ export default function FantasyCompareBreakdown({ players }) {
           <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Side-by-Side Breakdown
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900, marginTop: 4 }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 22, fontWeight: 900, marginTop: 4 }}>
             Production, schedule, and category edges
           </div>
         </div>
@@ -138,7 +138,7 @@ export default function FantasyCompareBreakdown({ players }) {
                     gap: 10,
                     alignItems: "center",
                     borderRadius: 14,
-                    border: "1px solid #17283b",
+                    border: "1px solid var(--border-strong)",
                     background: "#0d1620",
                     padding: "10px 12px",
                   }}

@@ -36,8 +36,8 @@ function fmtPct(pct) {
 // ── Style constants ───────────────────────────────────────────────────────────
 
 const CARD = {
-  background: "#091017",
-  border: "1px solid #17283b",
+  background: "var(--bg-card)",
+  border: "1px solid var(--border-strong)",
   borderRadius: 20,
   overflow: "hidden",
 };
@@ -67,7 +67,7 @@ function ColHeaderRow() {
           className={i === 9 || i === 10 ? "hide-sm" : ""}
           style={{
             fontSize: 9,
-            color: "#3a5570",
+            color: "var(--text-muted)",
             fontFamily: "'DM Mono',monospace",
             textTransform: "uppercase",
             letterSpacing: "0.08em",
@@ -122,7 +122,7 @@ function TeamRow({ team, simResults, cutlineAfter = false }) {
         <div style={{ display: "flex", alignItems: "center", gap: 5, overflow: "hidden" }}>
           <span
             style={{
-              color: "#eff8ff",
+              color: "var(--text-primary)",
               fontSize: 13,
               fontWeight: 700,
               fontFamily: "'Barlow Condensed',sans-serif",
@@ -159,8 +159,8 @@ function TeamRow({ team, simResults, cutlineAfter = false }) {
         <div style={STAT}>{team.wins ?? "—"}</div>
         <div style={STAT}>{team.losses ?? "—"}</div>
         <div style={STAT}>{team.otLosses ?? "—"}</div>
-        <div style={{ ...STAT, color: "#eff8ff", fontWeight: 800 }}>{currentPts}</div>
-        <div style={{ ...STAT, color: projHigher ? "#9fd8ff" : "#5e7b98", fontWeight: 600 }}>
+        <div style={{ ...STAT, color: "var(--text-primary)", fontWeight: 800 }}>{currentPts}</div>
+        <div style={{ ...STAT, color: projHigher ? "#9fd8ff" : "var(--text-secondary)", fontWeight: 600 }}>
           {projPts}
         </div>
 
@@ -239,7 +239,7 @@ function TeamRow({ team, simResults, cutlineAfter = false }) {
               style={{ width: 26, height: 26, objectFit: "contain" }}
             />
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {name}
               </div>
               <div style={{ color: "#6d89a3", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -257,9 +257,9 @@ function TeamRow({ team, simResults, cutlineAfter = false }) {
               ["Proj", projPts],
               ["Cup", fmtPct(sim.cupOdds ?? 0)],
             ].map(([label, value]) => (
-              <div key={label} style={{ borderRadius: 12, border: "1px solid #162736", background: "#091017", padding: "8px 10px", textAlign: "center" }}>
+              <div key={label} style={{ borderRadius: 12, border: "1px solid #162736", background: "var(--bg-card)", padding: "8px 10px", textAlign: "center" }}>
                 <div style={{ color: "#5f7b95", fontSize: 9, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
-                <div style={{ color: "#eef8ff", fontSize: 14, fontWeight: 800, marginTop: 4 }}>{value}</div>
+                <div style={{ color: "var(--text-primary)", fontSize: 14, fontWeight: 800, marginTop: 4 }}>{value}</div>
               </div>
             ))}
           </div>
@@ -277,7 +277,7 @@ function DivisionCard({ divName, teams, simResults }) {
       <div
         style={{
           padding: "10px 14px",
-          borderBottom: "1px solid #17283b",
+          borderBottom: "1px solid var(--border-strong)",
           background: "#060d14",
         }}
       >
@@ -285,7 +285,7 @@ function DivisionCard({ divName, teams, simResults }) {
           style={{
             fontSize: 11,
             fontWeight: 700,
-            color: "#5e7b98",
+            color: "var(--text-secondary)",
             fontFamily: "'DM Mono',monospace",
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -310,7 +310,7 @@ function ConferenceCard({ confName, teams, simResults }) {
       <div
         style={{
           padding: "10px 14px",
-          borderBottom: "1px solid #17283b",
+          borderBottom: "1px solid var(--border-strong)",
           background: "#060d14",
         }}
       >
@@ -418,7 +418,7 @@ function LeagueView({ sortedStandings, simResults }) {
       <div
         style={{
           padding: "10px 14px",
-          borderBottom: "1px solid #17283b",
+          borderBottom: "1px solid var(--border-strong)",
           background: "#060d14",
         }}
       >
@@ -426,7 +426,7 @@ function LeagueView({ sortedStandings, simResults }) {
           style={{
             fontSize: 11,
             fontWeight: 700,
-            color: "#5e7b98",
+            color: "var(--text-secondary)",
             fontFamily: "'DM Mono',monospace",
             textTransform: "uppercase",
             letterSpacing: "0.1em",
@@ -458,7 +458,7 @@ function FilterToggle({ filter, setFilter }) {
         display: "flex",
         gap: 3,
         background: "#060d14",
-        border: "1px solid #17283b",
+        border: "1px solid var(--border-strong)",
         borderRadius: 10,
         padding: 3,
       }}
@@ -509,7 +509,7 @@ function Legend() {
           <span
             style={{
               fontSize: 10,
-              color: "#5e7b98",
+              color: "var(--text-secondary)",
               fontFamily: "'DM Mono',monospace",
             }}
           >
@@ -550,7 +550,7 @@ export default function PlayoffOddsClient({ standings, simResults }) {
   }, [standings]);
 
   return (
-    <div className="playoff-page-shell" style={{ minHeight: "100vh", background: "#05090f", padding: "28px 20px 64px" }}>
+    <div className="playoff-page-shell" style={{ minHeight: "100vh", background: "var(--bg-primary)", padding: "28px 20px 64px" }}>
       <style>{`
         .team-grid {
           display: grid;
@@ -600,7 +600,7 @@ export default function PlayoffOddsClient({ standings, simResults }) {
           <div>
             <h1
               style={{
-                color: "#eff8ff",
+                color: "var(--text-primary)",
                 fontFamily: "'Barlow Condensed',sans-serif",
                 fontSize: 34,
                 fontWeight: 900,
@@ -612,7 +612,7 @@ export default function PlayoffOddsClient({ standings, simResults }) {
             </h1>
             <p
               style={{
-                color: "#5e7b98",
+                color: "var(--text-secondary)",
                 fontFamily: "'DM Mono',monospace",
                 fontSize: 11,
                 margin: "6px 0 0",

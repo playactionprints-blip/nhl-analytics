@@ -9,7 +9,7 @@ export default function FantasyHubLayout({ activeTab, onTabChange, header, conte
     <div
       style={{
         minHeight: "100vh",
-        background: "radial-gradient(circle at top left, #0d2136 0%, #060a11 58%, #05090f 100%)",
+        background: "radial-gradient(circle at top left, #0d2136 0%, var(--bg-primary) 58%, var(--bg-primary) 100%)",
         padding: "28px 16px 52px",
       }}
     >

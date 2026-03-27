@@ -11,8 +11,8 @@ const COLLAPSE_STORAGE_KEY = "nhl-analytics:fantasy-hub:settings-collapsed";
 
 const SECTION_STYLE = {
   borderRadius: 20,
-  border: "1px solid #17283b",
-  background: "#091017",
+  border: "1px solid var(--border-strong)",
+  background: "var(--bg-card)",
   padding: "16px 16px 14px",
   display: "grid",
   gap: 14,
@@ -165,7 +165,7 @@ function ToggleInput({ label, path, checked, onUpdate }) {
         justifyContent: "space-between",
         gap: 12,
         borderRadius: 14,
-        border: "1px solid #17283b",
+        border: "1px solid var(--border-strong)",
         background: "#0d1620",
         padding: "10px 12px",
       }}
@@ -316,7 +316,7 @@ export default function FantasyLeagueSettings({ state, onStateChange }) {
           <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Step 1: Configure Your League
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900, lineHeight: 1.05 }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 28, fontWeight: 900, lineHeight: 1.05 }}>
             League settings
           </div>
           <div style={{ color: "#86a5c0", fontSize: 14, lineHeight: 1.6 }}>
@@ -348,19 +348,19 @@ export default function FantasyLeagueSettings({ state, onStateChange }) {
       <div className="fantasy-league-overview-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
         <div style={{ borderRadius: 16, border: "1px solid #1b3347", background: "#0c141d", padding: "12px 12px 10px", display: "grid", gap: 6 }}>
           <div style={LABEL_STYLE}>League Type</div>
-          <div style={{ color: "#eff8ff", fontSize: 18, fontWeight: 900 }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 900 }}>
             {pointsMode ? "Points League" : "Categories League"}
           </div>
         </div>
         <div style={{ borderRadius: 16, border: "1px solid #1b3347", background: "#0c141d", padding: "12px 12px 10px", display: "grid", gap: 6 }}>
           <div style={LABEL_STYLE}>Roster Slots</div>
-          <div style={{ color: "#eff8ff", fontSize: 16, fontWeight: 900 }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 16, fontWeight: 900 }}>
             {rosterSlotSummary}
           </div>
         </div>
         <div style={{ borderRadius: 16, border: "1px solid #1b3347", background: "#0c141d", padding: "12px 12px 10px", display: "grid", gap: 6 }}>
           <div style={LABEL_STYLE}>Scoring Focus</div>
-          <div style={{ color: "#eff8ff", fontSize: 16, fontWeight: 900 }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 16, fontWeight: 900 }}>
             {pointsMode ? "Weighted fantasy points" : "Category win volume"}
           </div>
         </div>
@@ -413,7 +413,7 @@ export default function FantasyLeagueSettings({ state, onStateChange }) {
       </div>
 
       <div style={SECTION_STYLE}>
-        <div style={{ color: "#eff8ff", fontSize: 18, fontWeight: 900 }}>League settings</div>
+        <div style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 900 }}>League settings</div>
 
         {pointsMode ? (
           <>
@@ -425,7 +425,7 @@ export default function FantasyLeagueSettings({ state, onStateChange }) {
       </div>
 
       <div style={SECTION_STYLE}>
-        <div style={{ color: "#eff8ff", fontSize: 18, fontWeight: 900 }}>Roster slots</div>
+        <div style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 900 }}>Roster slots</div>
         <div className="fantasy-settings-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
           <WeightInput label="Forwards" path={["settings", "rosterSlots", "forwards"]} value={state.settings.rosterSlots.forwards} step="1" onUpdate={update} />
           <WeightInput label="Defense" path={["settings", "rosterSlots", "defense"]} value={state.settings.rosterSlots.defense} step="1" onUpdate={update} />

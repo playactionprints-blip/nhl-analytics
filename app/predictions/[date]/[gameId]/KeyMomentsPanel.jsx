@@ -49,7 +49,7 @@ export default function KeyMomentsPanel({ moments = [], compact = false }) {
         <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Highlights
         </div>
-        <div style={{ color: "#eff8ff", fontSize: compact ? 22 : 26, fontWeight: 900, marginTop: 4 }}>Key moments</div>
+        <div style={{ color: "var(--text-primary)", fontSize: compact ? 22 : 26, fontWeight: 900, marginTop: 4 }}>Key moments</div>
       </div>
 
       <div style={{ display: "grid", gap: 12 }}>
@@ -77,7 +77,7 @@ export default function KeyMomentsPanel({ moments = [], compact = false }) {
                   style={{ width: 52, height: 52, borderRadius: 12, objectFit: "cover", background: "#101a24", border: `1px solid ${hexToRgba(teamColor, 0.3)}` }}
                 />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ color: "#eff8ff", fontSize: 17, fontWeight: 900, lineHeight: 1.1 }}>{moment.displayName}</div>
+                  <div style={{ color: "var(--text-primary)", fontSize: 17, fontWeight: 900, lineHeight: 1.1 }}>{moment.displayName}</div>
                   <div style={{ color: "#8aa3bc", fontSize: 12, marginTop: 4 }}>{periodLabel(moment.periodDescriptor)} · {moment.timeInPeriod}</div>
                 </div>
                 <div
@@ -106,7 +106,7 @@ export default function KeyMomentsPanel({ moments = [], compact = false }) {
                 ].map(([label, value]) => (
                   <div key={`${moment.eventId}-${label}`} style={{ borderRadius: 14, background: "#0f1822", border: "1px solid #1b2c3f", padding: "10px 12px" }}>
                     <div style={{ color: "#728ca5", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
-                    <div style={{ color: label === "Swing" ? teamColor : "#eff8ff", fontSize: 15, fontWeight: 800, marginTop: 6 }}>{value}</div>
+                    <div style={{ color: label === "Swing" ? teamColor : "var(--text-primary)", fontSize: 15, fontWeight: 800, marginTop: 6 }}>{value}</div>
                   </div>
                 ))}
               </div>

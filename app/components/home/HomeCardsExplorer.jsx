@@ -200,7 +200,7 @@ function SearchableSelect({
               background: "transparent",
               border: "none",
               outline: "none",
-              color: "#eef8ff",
+              color: "var(--text-primary)",
               fontSize: 15,
               fontWeight: 700,
               fontFamily: "'Barlow Condensed',sans-serif",
@@ -286,7 +286,7 @@ function PlayerPreview({ player }) {
         <div style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
           <img src={logoUrl(player.team)} alt={player.team} style={{ width: 42, height: 42, objectFit: "contain", flexShrink: 0 }} />
           <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
-            <div style={{ color: "#eff8ff", fontSize: 24, fontWeight: 900, lineHeight: 1 }}>
+            <div style={{ color: "var(--text-primary)", fontSize: 24, fontWeight: 900, lineHeight: 1 }}>
               {player.full_name}
             </div>
             <div style={{ color: "#84a4be", fontSize: 13, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -348,7 +348,7 @@ function PlayerPreview({ player }) {
         >
           Percentile card preview
         </div>
-        <div style={{ color: "#eef8ff", fontSize: 16, fontWeight: 800 }}>
+        <div style={{ color: "var(--text-primary)", fontSize: 16, fontWeight: 800 }}>
           {descriptor}
         </div>
         <div style={{ color: "#90a8bc", fontSize: 13, lineHeight: 1.55 }}>
@@ -449,7 +449,7 @@ function TeamPreview({ team }) {
           <div style={{ color: accent, fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.14em" }}>
             {team.abbr}
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 24, fontWeight: 900, lineHeight: 1 }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 24, fontWeight: 900, lineHeight: 1 }}>
             {team.name}
           </div>
           <div style={{ color: "#84a4be", fontSize: 13, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -527,7 +527,7 @@ function PercentilePreviewBar({ label, value }) {
   );
 }
 
-function StatBox({ label, value, valueColor = "#eef8ff" }) {
+function StatBox({ label, value, valueColor = "var(--text-primary)" }) {
   return (
     <div
       style={{
@@ -616,7 +616,7 @@ export default function HomeCardsExplorer({ players = [], teams = [] }) {
         <div style={{ color: "#86a9c6", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.12em" }}>
           Quick card explorer
         </div>
-        <h2 style={{ margin: 0, color: "#eef8ff", fontSize: 34, lineHeight: 1, fontWeight: 900 }}>
+        <h2 style={{ margin: 0, color: "var(--text-primary)", fontSize: 34, lineHeight: 1, fontWeight: 900 }}>
           Jump straight into player and team cards
         </h2>
       </div>
@@ -625,7 +625,7 @@ export default function HomeCardsExplorer({ players = [], teams = [] }) {
         <article style={panelShell("#2fb4ff")}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ display: "grid", gap: 4 }}>
-              <div style={{ color: "#eef8ff", fontSize: 24, fontWeight: 900 }}>Player Cards</div>
+              <div style={{ color: "var(--text-primary)", fontSize: 24, fontWeight: 900 }}>Player Cards</div>
               <div style={{ color: "#8ba7bf", fontSize: 14, lineHeight: 1.5 }}>
                 Search the current player pool and preview a card instantly.
               </div>
@@ -663,7 +663,7 @@ export default function HomeCardsExplorer({ players = [], teams = [] }) {
                 <span style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
                   <img src={logoUrl(player.team)} alt={player.team} style={{ width: 24, height: 24, objectFit: "contain", flexShrink: 0 }} />
                   <span style={{ display: "grid", gap: 2, minWidth: 0, textAlign: "left" }}>
-                    <span style={{ color: "#eef8ff", fontWeight: 800, fontSize: 15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <span style={{ color: "var(--text-primary)", fontWeight: 800, fontSize: 15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {player.full_name}
                     </span>
                     <span style={{ color: "#7f9ab1", fontSize: 12 }}>
@@ -681,7 +681,7 @@ export default function HomeCardsExplorer({ players = [], teams = [] }) {
         <article style={panelShell("#56e0a8")}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ display: "grid", gap: 4 }}>
-              <div style={{ color: "#eef8ff", fontSize: 24, fontWeight: 900 }}>Team Cards</div>
+              <div style={{ color: "var(--text-primary)", fontSize: 24, fontWeight: 900 }}>Team Cards</div>
               <div style={{ color: "#8ba7bf", fontSize: 14, lineHeight: 1.5 }}>
                 Search teams and jump into the current card view without leaving home.
               </div>
@@ -719,7 +719,7 @@ export default function HomeCardsExplorer({ players = [], teams = [] }) {
                 <span style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
                   <img src={logoUrl(team.abbr)} alt={team.abbr} style={{ width: 24, height: 24, objectFit: "contain", flexShrink: 0 }} />
                   <span style={{ display: "grid", gap: 2, minWidth: 0, textAlign: "left" }}>
-                    <span style={{ color: "#eef8ff", fontWeight: 800, fontSize: 15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <span style={{ color: "var(--text-primary)", fontWeight: 800, fontSize: 15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {team.name}
                     </span>
                     <span style={{ color: "#7f9ab1", fontSize: 12 }}>

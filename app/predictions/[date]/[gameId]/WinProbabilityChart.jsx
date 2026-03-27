@@ -79,7 +79,7 @@ export default function WinProbabilityChart({
           <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Game Flow
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900, marginTop: 4 }}>Win probability over time</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 28, fontWeight: 900, marginTop: 4 }}>Win probability over time</div>
         </div>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
           {[

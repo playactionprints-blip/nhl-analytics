@@ -33,7 +33,7 @@ export default function FantasyTeamContextBar({ state, summary }) {
           <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Fantasy Hub
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900 }}>{state.teamName}</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 28, fontWeight: 900 }}>{state.teamName}</div>
         </div>
         <div style={{ color: "#84a3be", fontSize: 14, maxWidth: 620 }}>
           Customize league scoring, track your roster, and build rankings that reflect your format instead of one-size-fits-all stats.
@@ -56,7 +56,7 @@ export default function FantasyTeamContextBar({ state, summary }) {
             <div style={{ color: "#6f8aa6", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
               {item.label}
             </div>
-            <div style={{ color: "#eff8ff", fontSize: 18, fontWeight: 900 }}>{item.value}</div>
+            <div style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 900 }}>{item.value}</div>
           </div>
         ))}
       </div>

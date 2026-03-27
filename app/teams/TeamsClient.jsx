@@ -270,7 +270,7 @@ export default function TeamsClient({
     <div
       style={{
         minHeight: "100vh",
-        background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)",
+        background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,var(--bg-primary) 60%)",
         padding: "32px 20px 60px",
         fontFamily: "'Barlow Condensed',sans-serif",
       }}
@@ -326,7 +326,7 @@ export default function TeamsClient({
             <div
               style={{
                 fontSize: 12,
-                color: "#2a4060",
+                color: "var(--text-muted)",
                 fontFamily: "'DM Mono',monospace",
                 marginTop: 6,
               }}
@@ -357,8 +357,8 @@ export default function TeamsClient({
             <div
               style={{
                 borderRadius: 16,
-                border: "1px solid #17283b",
-                background: "#091017",
+                border: "1px solid var(--border-strong)",
+                background: "var(--bg-card)",
                 padding: "14px 16px",
                 display: "flex",
                 alignItems: "center",
@@ -414,7 +414,7 @@ export default function TeamsClient({
                     style={{
                       width: 24,
                       fontSize: 11,
-                      color: topTen ? team.color : "#2a4060",
+                      color: topTen ? team.color : "var(--text-muted)",
                       fontFamily: "'DM Mono',monospace",
                       fontWeight: 700,
                       textAlign: "right",

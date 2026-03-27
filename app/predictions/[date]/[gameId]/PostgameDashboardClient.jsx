@@ -17,7 +17,7 @@ function SectionBlock({ id, label, title, children, noTitle = false }) {
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 12, alignItems: "center" }}>
           <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>{label}</div>
           <div style={{ height: 1, background: "linear-gradient(90deg, rgba(115,141,165,0.55) 0%, rgba(23,40,59,0.4) 100%)" }} />
-          <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900 }}>{title}</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 28, fontWeight: 900 }}>{title}</div>
         </div>
       ) : null}
       {children}
@@ -153,7 +153,7 @@ export default function PostgameDashboardClient({
             <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
               Resources
             </div>
-            <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900 }}>Game report tools</div>
+            <div style={{ color: "var(--text-primary)", fontSize: 22, fontWeight: 900 }}>Game report tools</div>
             <div style={{ color: "#88a3bb", lineHeight: 1.6, fontSize: 14 }}>
               Use the sections above to move between the scoring log, flow charts, and postgame model recap. Highlight links appear on key moments when clips are available from the NHL feed.
             </div>

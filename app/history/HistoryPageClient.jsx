@@ -455,6 +455,7 @@ export default function HistoryPageClient({ players }) {
   const [playerData, setPlayerData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [histTab, setHistTab] = useState("overview");
 
   useEffect(() => {
     if (!selectedPlayerId) return;

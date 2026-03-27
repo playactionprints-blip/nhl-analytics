@@ -31,11 +31,11 @@ export default async function PlayoffOddsPage() {
       <div
         style={{
           minHeight: "100vh",
-          background: "#05090f",
+          background: "var(--bg-primary)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          color: "#5e7b98",
+          color: "var(--text-secondary)",
           fontFamily: "'DM Mono',monospace",
           fontSize: 13,
         }}

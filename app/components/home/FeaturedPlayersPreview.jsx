@@ -9,7 +9,7 @@ export default function FeaturedPlayersPreview({ players = [] }) {
           <div style={{ color: "#86a9c6", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.12em" }}>
             Featured players
           </div>
-          <h2 style={{ margin: 0, color: "#eef8ff", fontSize: 34, lineHeight: 1, fontWeight: 900 }}>
+          <h2 style={{ margin: 0, color: "var(--text-primary)", fontSize: 34, lineHeight: 1, fontWeight: 900 }}>
             Current WAR leaders
           </h2>
         </div>

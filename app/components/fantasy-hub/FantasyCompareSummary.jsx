@@ -30,7 +30,7 @@ function SummaryCard({ label, player, value, accent = "#2fb4ff" }) {
           style={{ width: 26, height: 26, objectFit: "contain" }}
         />
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: "#eff8ff", fontSize: 14, fontWeight: 900 }}>{player.player_name}</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 14, fontWeight: 900 }}>{player.player_name}</div>
           <div style={{ color: "#89d4ff", fontSize: 12, fontWeight: 700 }}>{value}</div>
         </div>
       </div>
@@ -45,7 +45,7 @@ export default function FantasyCompareSummary({ summary }) {
         <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
           Edge Summary
         </div>
-        <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>
+        <div style={{ color: "var(--text-primary)", fontSize: 26, fontWeight: 900, marginTop: 4 }}>
           Who wins in your format?
         </div>
       </div>
@@ -61,13 +61,13 @@ export default function FantasyCompareSummary({ summary }) {
         style={{
           borderRadius: 18,
           border: "1px solid #17344a",
-          background: "#091017",
+          background: "var(--bg-card)",
           padding: "14px 16px",
           display: "grid",
           gap: 6,
         }}
       >
-        <div style={{ color: "#eff8ff", fontSize: 16, fontWeight: 900 }}>
+        <div style={{ color: "var(--text-primary)", fontSize: 16, fontWeight: 900 }}>
           Best fit for your settings: {summary.bestFit?.player?.player_name || "—"}
         </div>
         <div style={{ color: "#86a5c0", fontSize: 13, lineHeight: 1.5 }}>

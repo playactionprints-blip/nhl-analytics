@@ -24,7 +24,7 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
         <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Model
         </div>
-        <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900 }}>Pregame model recap not captured</div>
+        <div style={{ color: "var(--text-primary)", fontSize: 22, fontWeight: 900 }}>Pregame model recap not captured</div>
         <div style={{ color: "#88a3bb", lineHeight: 1.6, fontSize: 14 }}>
           This game doesn’t have a stored pregame snapshot in the model log, so market-vs-model review is unavailable here. The rest of the postgame report still reflects live gamecenter and play-by-play data.
         </div>
@@ -54,7 +54,7 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
           <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Model
           </div>
-          <div style={{ color: "#eff8ff", fontSize: compact ? 22 : 26, fontWeight: 900, marginTop: 4 }}>Pregame recap</div>
+          <div style={{ color: "var(--text-primary)", fontSize: compact ? 22 : 26, fontWeight: 900, marginTop: 4 }}>Pregame recap</div>
         </div>
         <div
           style={{
@@ -96,7 +96,7 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
             <div style={{ color: side.color, fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>
               {side.abbr}
             </div>
-            <div style={{ color: "#eff8ff", fontSize: 30, fontWeight: 900 }}>{pct(side.winPct)}</div>
+            <div style={{ color: "var(--text-primary)", fontSize: 30, fontWeight: 900 }}>{pct(side.winPct)}</div>
             <div className="model-mini-grid">
               {[
                 ["Fair line", signedOdds(side.fairOdds)],
@@ -105,7 +105,7 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
               ].map(([label, value]) => (
                 <div key={`${side.abbr}-${label}`} style={{ borderRadius: 14, background: "#101a25", border: "1px solid #1a3044", padding: "10px 12px" }}>
                   <div style={{ color: "#7189a1", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
-                  <div style={{ color: label === "Edge" && side.edge != null ? (side.edge >= 0 ? "#35e3a0" : "#ff8d9b") : "#eff8ff", fontSize: 15, fontWeight: 800, marginTop: 6 }}>{value}</div>
+                  <div style={{ color: label === "Edge" && side.edge != null ? (side.edge >= 0 ? "#35e3a0" : "#ff8d9b") : "var(--text-primary)", fontSize: 15, fontWeight: 800, marginTop: 6 }}>{value}</div>
                 </div>
               ))}
             </div>
@@ -122,7 +122,7 @@ export default function ModelRecap({ recap, awayColor, homeColor, awayAbbr, home
         ].map(([label, value]) => (
           <div key={label} style={{ borderRadius: 14, background: "#0d1620", border: "1px solid #182736", padding: "12px 14px" }}>
             <div style={{ color: "#7189a1", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
-            <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800, marginTop: 6 }}>{value}</div>
+            <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800, marginTop: 6 }}>{value}</div>
           </div>
         ))}
       </div>

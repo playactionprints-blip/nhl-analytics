@@ -243,7 +243,7 @@ export default function LiveScoresBanner() {
           <div style={{ fontSize: 12, color: "#64a7e3", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             {dateBadge.month}
           </div>
-          <div style={{ fontSize: 20, color: "#eef8ff", fontWeight: 900, lineHeight: 1.1 }}>
+          <div style={{ fontSize: 20, color: "var(--text-primary)", fontWeight: 900, lineHeight: 1.1 }}>
             {dateBadge.day}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>

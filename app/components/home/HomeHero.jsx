@@ -101,7 +101,7 @@ export default function HomeHero({ quickLinks = [] }) {
               <div style={{ color: item.accent, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                 {item.kicker}
               </div>
-              <div style={{ color: "#eff8ff", fontSize: 20, fontWeight: 900 }}>{item.title}</div>
+              <div style={{ color: "var(--text-primary)", fontSize: 20, fontWeight: 900 }}>{item.title}</div>
               <div style={{ color: "#89a6be", lineHeight: 1.5, fontSize: 14 }}>{item.description}</div>
             </Link>
           ))}

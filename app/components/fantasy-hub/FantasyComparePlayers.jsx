@@ -156,8 +156,8 @@ export default function FantasyComparePlayers({ players, state, scheduleData }) 
       <section
         style={{
           borderRadius: 22,
-          border: "1px solid #17283b",
-          background: "#091017",
+          border: "1px solid var(--border-strong)",
+          background: "var(--bg-card)",
           padding: "16px 16px 14px",
           display: "grid",
           gap: 10,
@@ -188,15 +188,15 @@ export default function FantasyComparePlayers({ players, state, scheduleData }) 
         <section
           style={{
             borderRadius: 22,
-            border: "1px solid #17283b",
-            background: "#091017",
+            border: "1px solid var(--border-strong)",
+            background: "var(--bg-card)",
             padding: "26px 20px",
             display: "grid",
             gap: 8,
             justifyItems: "start",
           }}
         >
-          <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900 }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 22, fontWeight: 900 }}>
             Start with two players
           </div>
           <div style={{ color: "#7d95ab", fontSize: 14, lineHeight: 1.6, maxWidth: 720 }}>

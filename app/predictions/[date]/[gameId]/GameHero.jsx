@@ -72,7 +72,7 @@ export default function GameHero({
           <div style={{ color: awayColor, fontSize: 12, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>
             {awayTeam.abbr}
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 34, fontWeight: 900, lineHeight: 0.95 }}>{awayTeam.name}</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 34, fontWeight: 900, lineHeight: 0.95 }}>{awayTeam.name}</div>
           <div style={{ color: awayColor, fontSize: 76, fontWeight: 900, lineHeight: 0.9 }}>{awayScore}</div>
         </div>
 
@@ -96,7 +96,7 @@ export default function GameHero({
           >
             {statusLabel}
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 21, fontWeight: 800 }}>{metaLabel}</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 21, fontWeight: 800 }}>{metaLabel}</div>
           <div className="postgame-meta-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
             {[
               arenaLabel ? { label: arenaLabel } : null,
@@ -133,7 +133,7 @@ export default function GameHero({
           <div style={{ color: homeColor, fontSize: 12, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>
             {homeTeam.abbr}
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 34, fontWeight: 900, lineHeight: 0.95 }}>{homeTeam.name}</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 34, fontWeight: 900, lineHeight: 0.95 }}>{homeTeam.name}</div>
           <div style={{ color: homeColor, fontSize: 76, fontWeight: 900, lineHeight: 0.9 }}>{homeScore}</div>
         </div>
       </div>

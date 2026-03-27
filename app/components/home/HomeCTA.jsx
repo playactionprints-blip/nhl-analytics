@@ -29,7 +29,7 @@ export default function HomeCTA() {
           <div style={{ color: "#86a9c6", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.12em" }}>
             Start here
           </div>
-          <h2 style={{ margin: 0, color: "#eef8ff", fontSize: 34, lineHeight: 1, fontWeight: 900 }}>
+          <h2 style={{ margin: 0, color: "var(--text-primary)", fontSize: 34, lineHeight: 1, fontWeight: 900 }}>
             Start exploring the NHL through analytics.
           </h2>
           <div style={{ color: "#8ba7bf", fontSize: 16, lineHeight: 1.7, maxWidth: 760 }}>

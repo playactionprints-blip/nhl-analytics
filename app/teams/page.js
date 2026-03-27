@@ -104,7 +104,7 @@ function TeamsClientFallback() {
     <div
       style={{
         minHeight: "100vh",
-        background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)",
+        background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,var(--bg-primary) 60%)",
         padding: "32px 20px 60px",
         fontFamily: "'Barlow Condensed',sans-serif",
       }}

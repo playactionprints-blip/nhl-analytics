@@ -315,7 +315,7 @@ export default async function HomePage() {
       style={{
         minHeight: "100vh",
         background:
-          "radial-gradient(circle at top center, rgba(17,61,94,0.24) 0%, rgba(5,9,15,0) 32%), linear-gradient(180deg, #05090f 0%, #04070d 100%)",
+          "radial-gradient(circle at top center, rgba(17,61,94,0.24) 0%, rgba(5,9,15,0) 32%), linear-gradient(180deg, var(--bg-primary) 0%, #04070d 100%)",
         padding: "32px 22px 72px",
       }}
     >

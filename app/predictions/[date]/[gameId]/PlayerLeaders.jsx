@@ -60,7 +60,7 @@ export default function PlayerLeaders({ leaders, awayColor, homeColor, awayAbbr,
         <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Players
         </div>
-        <div style={{ color: "#eff8ff", fontSize: compact ? 22 : 26, fontWeight: 900, marginTop: 4 }}>Player leaders</div>
+        <div style={{ color: "var(--text-primary)", fontSize: compact ? 22 : 26, fontWeight: 900, marginTop: 4 }}>Player leaders</div>
       </div>
 
       <div className="player-leaders-grid">
@@ -72,7 +72,7 @@ export default function PlayerLeaders({ leaders, awayColor, homeColor, awayAbbr,
             {card.rows.length ? card.rows.map((row) => (
               <div key={row.key} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ color: "#eff8ff", fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.name}</div>
+                  <div style={{ color: "var(--text-primary)", fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.name}</div>
                   <div style={{ color: teamColor(row.teamAbbr), fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
                     {row.teamAbbr} · {row.sub}
                   </div>
@@ -94,7 +94,7 @@ export default function PlayerLeaders({ leaders, awayColor, homeColor, awayAbbr,
           data.goalieSummary.map((goalie) => (
             <div key={`${goalie.teamAbbr}-${goalie.name}`} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
               <div>
-                <div style={{ color: "#eff8ff", fontWeight: 800 }}>{goalie.name}</div>
+                <div style={{ color: "var(--text-primary)", fontWeight: 800 }}>{goalie.name}</div>
                 <div style={{ color: teamColor(goalie.teamAbbr), fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
                   {goalie.teamAbbr} · {goalie.toi}
                 </div>

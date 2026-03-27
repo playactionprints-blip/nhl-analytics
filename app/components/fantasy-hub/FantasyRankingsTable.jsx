@@ -219,7 +219,7 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
           <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Custom Rankings
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 26, fontWeight: 900, marginTop: 4 }}>
             {ranked.length} players
           </div>
         </div>
@@ -248,7 +248,7 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
         </div>
       </div>
 
-      <div className="fantasy-rankings-shell" style={{ borderRadius: 22, border: "1px solid #17283b", background: "#091017", overflow: "hidden" }}>
+      <div className="fantasy-rankings-shell" style={{ borderRadius: 22, border: "1px solid var(--border-strong)", background: "var(--bg-card)", overflow: "hidden" }}>
         <div className="fantasy-rankings-head" style={{ display: "grid", gridTemplateColumns: "56px minmax(220px, 1.3fr) 90px repeat(8, minmax(64px, 1fr))", gap: 10, padding: "12px 16px", borderBottom: "1px solid #142433", color: "#62809d", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
           <div>Rank</div>
           <div>Player</div>
@@ -319,7 +319,7 @@ export default function FantasyRankingsTable({ players, state, timeframe, filter
                   style={{ width: 28, height: 28, objectFit: "contain" }}
                 />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{player.player_name}</div>
+                  <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{player.player_name}</div>
                   <div style={{ color: "#67849e", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
                     {player.team} · {player.position} {player.isRostered ? "· rostered" : ""}
                   </div>

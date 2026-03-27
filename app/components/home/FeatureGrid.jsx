@@ -7,7 +7,7 @@ export default function FeatureGrid({ items = [] }) {
         <div style={{ color: "#86a9c6", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.12em" }}>
           Platform overview
         </div>
-        <h2 style={{ margin: 0, color: "#eef8ff", fontSize: 34, lineHeight: 1, fontWeight: 900 }}>
+        <h2 style={{ margin: 0, color: "var(--text-primary)", fontSize: 34, lineHeight: 1, fontWeight: 900 }}>
           Explore the full toolkit
         </h2>
       </div>
@@ -51,7 +51,7 @@ export default function FeatureGrid({ items = [] }) {
                 {item.kicker}
               </div>
             </div>
-            <div style={{ color: "#eef8ff", fontSize: 24, fontWeight: 900 }}>{item.title}</div>
+            <div style={{ color: "var(--text-primary)", fontSize: 24, fontWeight: 900 }}>{item.title}</div>
             <div style={{ color: "#87a6bf", lineHeight: 1.65, fontSize: 14 }}>{item.description}</div>
             <div style={{ marginTop: "auto", color: "#d8efff", fontSize: 13, fontWeight: 800 }}>
               Open {item.title}

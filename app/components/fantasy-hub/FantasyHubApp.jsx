@@ -26,8 +26,8 @@ import {
 
 const FILTER_SHELL = {
   borderRadius: 22,
-  border: "1px solid #17283b",
-  background: "#091017",
+  border: "1px solid var(--border-strong)",
+  background: "var(--bg-card)",
   padding: "16px 16px 14px",
   display: "grid",
   gap: 14,
@@ -166,7 +166,7 @@ export default function FantasyHubApp() {
       <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
         NHL Analytics · Fantasy
       </div>
-      <div style={{ color: "#eff8ff", fontSize: 34, fontWeight: 900, lineHeight: 1 }}>
+      <div style={{ color: "var(--text-primary)", fontSize: 34, fontWeight: 900, lineHeight: 1 }}>
         Fantasy Hub
       </div>
       <div style={{ color: "#86a5c0", fontSize: 14, lineHeight: 1.5, maxWidth: 860 }}>
@@ -180,7 +180,7 @@ export default function FantasyHubApp() {
   if (loading) {
     content = (
       <div style={FILTER_SHELL}>
-        <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900 }}>Loading Fantasy Hub…</div>
+        <div style={{ color: "var(--text-primary)", fontSize: 22, fontWeight: 900 }}>Loading Fantasy Hub…</div>
         <div style={{ color: "#7d95ab", fontSize: 14 }}>
           Pulling current-season players and the latest schedule context.
         </div>
@@ -189,7 +189,7 @@ export default function FantasyHubApp() {
   } else if (error) {
     content = (
       <div style={FILTER_SHELL}>
-        <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900 }}>Fantasy Hub unavailable</div>
+        <div style={{ color: "var(--text-primary)", fontSize: 22, fontWeight: 900 }}>Fantasy Hub unavailable</div>
         <div style={{ color: "#ff9aa4", fontSize: 14 }}>{error}</div>
       </div>
     );
@@ -202,7 +202,7 @@ export default function FantasyHubApp() {
             <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
               Step 2: Build My Team
             </div>
-            <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>
+            <div style={{ color: "var(--text-primary)", fontSize: 26, fontWeight: 900, marginTop: 4 }}>
               Add players and shape your roster
             </div>
             <div style={{ color: "#7d95ab", fontSize: 14, lineHeight: 1.6, maxWidth: 760, marginTop: 6 }}>

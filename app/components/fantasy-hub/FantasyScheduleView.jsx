@@ -47,7 +47,7 @@ export default function FantasyScheduleView({
           <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Weekly Schedule
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 26, fontWeight: 900, marginTop: 4 }}>
             Fantasy schedule planning
           </div>
         </div>
@@ -92,14 +92,14 @@ export default function FantasyScheduleView({
         <section
           style={{
             borderRadius: 22,
-            border: "1px solid #17283b",
-            background: "#091017",
+            border: "1px solid var(--border-strong)",
+            background: "var(--bg-card)",
             padding: "16px 16px 14px",
             display: "grid",
             gap: 12,
           }}
         >
-          <div style={{ color: "#eff8ff", fontSize: 18, fontWeight: 900 }}>Games by day</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 900 }}>Games by day</div>
           <div className="fantasy-week-days" style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 10 }}>
             {weekDays.map((day) => (
               <div
@@ -114,7 +114,7 @@ export default function FantasyScheduleView({
                 }}
               >
                 <div>
-                  <div style={{ color: "#eff8ff", fontSize: 14, fontWeight: 800 }}>{dayLabel(day.date)}</div>
+                  <div style={{ color: "var(--text-primary)", fontSize: 14, fontWeight: 800 }}>{dayLabel(day.date)}</div>
                   <div style={{ color: day.isOffNight ? "#47e8aa" : "#7d95ab", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 4 }}>
                     {day.isOffNight ? "Off-night" : `${day.numberOfGames} games`}
                   </div>
@@ -136,21 +136,21 @@ export default function FantasyScheduleView({
         <section
           style={{
             borderRadius: 22,
-            border: "1px solid #17283b",
-            background: "#091017",
+            border: "1px solid var(--border-strong)",
+            background: "var(--bg-card)",
             padding: "16px 16px 14px",
             display: "grid",
             gap: 12,
           }}
         >
-          <div style={{ color: "#eff8ff", fontSize: 18, fontWeight: 900 }}>Weekly games summary</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 900 }}>Weekly games summary</div>
           <div style={{ display: "grid", gap: 10 }}>
             {visibleTeams.length ? visibleTeams.map(([team, meta]) => (
               <div
                 key={team}
                 style={{
                   borderRadius: 16,
-                  border: "1px solid #17283b",
+                  border: "1px solid var(--border-strong)",
                   background: "#0d1620",
                   padding: "12px 12px 10px",
                   display: "grid",
@@ -158,7 +158,7 @@ export default function FantasyScheduleView({
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                  <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{team}</div>
+                  <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{team}</div>
                   <div style={{ color: "#8fd6ff", fontSize: 14, fontWeight: 900 }}>{meta.games} games</div>
                 </div>
                 <div style={{ color: "#7d95ab", fontSize: 12 }}>

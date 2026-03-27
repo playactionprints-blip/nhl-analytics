@@ -31,17 +31,17 @@ export const metadata = {
 const DEFAULT_CONFIDENCE_TOOLTIP =
   "Confidence is based on available team data quality, recency of goaltender info, and home/away sample size. LOW = less reliable inputs.";
 
-const SECTION_STYLE = { border: "1px solid #17283b", borderRadius: 24, background: "#091017", padding: 20, display: "grid", gap: 14 };
+const SECTION_STYLE = { border: "1px solid var(--border-strong)", borderRadius: 24, background: "var(--bg-card)", padding: 20, display: "grid", gap: 14 };
 
 function ModelAccuracySection({ accuracy }) {
   if (!accuracy) {
     return (
       <section style={SECTION_STYLE}>
         <div>
-          <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
             Model accuracy
           </div>
-          <div style={{ fontSize: 22, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+          <div style={{ fontSize: 22, color: "var(--text-primary)", fontWeight: 900, marginTop: 4 }}>
             Historical performance
           </div>
         </div>
@@ -57,10 +57,10 @@ function ModelAccuracySection({ accuracy }) {
   return (
     <section style={SECTION_STYLE}>
       <div>
-        <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+        <div style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
           Model accuracy
         </div>
-        <div style={{ fontSize: 22, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+        <div style={{ fontSize: 22, color: "var(--text-primary)", fontWeight: 900, marginTop: 4 }}>
           Historical performance
         </div>
       </div>
@@ -71,7 +71,7 @@ function ModelAccuracySection({ accuracy }) {
         ].map(([label, value, sub]) => (
           <div key={label} style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "12px 14px" }}>
             <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
-            <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{value}</div>
+            <div style={{ color: "var(--text-primary)", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{value}</div>
             <div style={{ color: "#567894", fontSize: 11, marginTop: 2 }}>{sub}</div>
           </div>
         ))}
@@ -80,7 +80,7 @@ function ModelAccuracySection({ accuracy }) {
           return (
             <div key={band} style={{ borderRadius: 16, background: "#0d1620", border: "1px solid #182736", padding: "12px 14px" }}>
               <div style={{ color: bandColors[band], fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>{band} conf.</div>
-              <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{pctLabel(s.pct)}</div>
+              <div style={{ color: "var(--text-primary)", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{pctLabel(s.pct)}</div>
               <div style={{ color: "#567894", fontSize: 11, marginTop: 2 }}>{s.correct}/{s.total} games</div>
             </div>
           );
@@ -227,7 +227,7 @@ export default async function PredictionsPage({ searchParams }) {
       className="predictions-page-shell"
       style={{
         minHeight: "100vh",
-        background: "radial-gradient(circle at top left, #0d2136 0%, #060a11 58%, #05090f 100%)",
+        background: "radial-gradient(circle at top left, #0d2136 0%, var(--bg-primary) 58%, var(--bg-primary) 100%)",
         padding: "36px 20px 64px",
       }}
     >
@@ -323,7 +323,7 @@ export default async function PredictionsPage({ searchParams }) {
                 <div style={{ fontSize: 11, color: "#4d82af", fontFamily: "'DM Mono',monospace", letterSpacing: "0.16em", textTransform: "uppercase" }}>
                   NHL Analytics · Game Model
                 </div>
-                <h1 className="predictions-hero-headline" style={{ margin: 0, color: "#eff8ff", fontSize: 46, lineHeight: 0.95, letterSpacing: "-0.04em", fontWeight: 900 }}>
+                <h1 className="predictions-hero-headline" style={{ margin: 0, color: "var(--text-primary)", fontSize: 46, lineHeight: 0.95, letterSpacing: "-0.04em", fontWeight: 900 }}>
                   {formatHeadlineDate(selectedDateString)} Predictions
                 </h1>
                 <p className="predictions-hero-copy" style={{ margin: 0, maxWidth: 860, color: "#86a5c0", fontSize: 18, lineHeight: 1.35 }}>
@@ -371,7 +371,7 @@ export default async function PredictionsPage({ searchParams }) {
                   style={{
                     textDecoration: "none",
                     borderRadius: 14,
-                    border: "1px solid #1d3c56",
+                    border: "1px solid var(--border-strong)",
                     background: "#101a25",
                     padding: "10px 14px",
                     color: "#dff2ff",
@@ -398,7 +398,7 @@ export default async function PredictionsPage({ searchParams }) {
                     defaultValue={selectedDateString}
                     style={{
                       borderRadius: 14,
-                      border: "1px solid #1d3c56",
+                      border: "1px solid var(--border-strong)",
                       background: "#101a25",
                       color: "#eaf7ff",
                       padding: "10px 12px",
@@ -429,7 +429,7 @@ export default async function PredictionsPage({ searchParams }) {
                   style={{
                     textDecoration: "none",
                     borderRadius: 14,
-                    border: "1px solid #1d3c56",
+                    border: "1px solid var(--border-strong)",
                     background: "#101a25",
                     padding: "10px 14px",
                     color: "#dff2ff",
@@ -444,7 +444,7 @@ export default async function PredictionsPage({ searchParams }) {
                 </Link>
               </div>
               <div style={{ color: "#87a3bb", fontSize: 13 }}>
-                Viewing <span style={{ color: "#eff8ff", fontWeight: 800 }}>{formatHeadlineDate(selectedDateString)}</span>
+                Viewing <span style={{ color: "var(--text-primary)", fontWeight: 800 }}>{formatHeadlineDate(selectedDateString)}</span>
               </div>
             </div>
 
@@ -467,7 +467,7 @@ export default async function PredictionsPage({ searchParams }) {
                   style={{
                     textDecoration: "none",
                     borderRadius: 999,
-                    border: quickDate.active ? "1px solid #2fb4ff" : "1px solid #1d3c56",
+                    border: quickDate.active ? "1px solid #2fb4ff" : "1px solid var(--border-strong)",
                     background: quickDate.active ? "rgba(47,180,255,0.14)" : "#101a25",
                     padding: "8px 12px",
                     color: quickDate.active ? "#dff5ff" : "#a9c1d7",
@@ -502,9 +502,9 @@ export default async function PredictionsPage({ searchParams }) {
         {predictions.length === 0 ? (
           <section
             style={{
-              border: "1px solid #17283b",
+              border: "1px solid var(--border-strong)",
               borderRadius: 24,
-              background: "#091017",
+              background: "var(--bg-card)",
               padding: 24,
               color: "#86a5c0",
             }}
@@ -515,9 +515,9 @@ export default async function PredictionsPage({ searchParams }) {
           <>
             <section
               style={{
-                border: "1px solid #17283b",
+                border: "1px solid var(--border-strong)",
                 borderRadius: 24,
-                background: "#091017",
+                background: "var(--bg-card)",
                 padding: 18,
                 display: "grid",
                 gap: 14,
@@ -525,10 +525,10 @@ export default async function PredictionsPage({ searchParams }) {
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                 <div>
-                  <div style={{ fontSize: 11, color: "#5e7b98", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                     Slate overview
                   </div>
-                  <div style={{ fontSize: 26, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+                  <div style={{ fontSize: 26, color: "var(--text-primary)", fontWeight: 900, marginTop: 4 }}>
                     Tonight&apos;s edge board
                   </div>
                 </div>
@@ -567,9 +567,9 @@ export default async function PredictionsPage({ searchParams }) {
                         <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={logoUrl(game.awayTeam.abbr)} alt={game.awayTeam.abbr} width={28} height={28} style={{ width: 28, height: 28, objectFit: "contain" }} />
-                          <div style={{ fontSize: 28, fontWeight: 900, color: homeWon ? "#4a6a88" : "#eff8ff" }}>{awayScore ?? "—"}</div>
+                          <div style={{ fontSize: 28, fontWeight: 900, color: homeWon ? "#4a6a88" : "var(--text-primary)" }}>{awayScore ?? "—"}</div>
                           <div style={{ color: "#2e4a65", fontSize: 18, fontFamily: "'DM Mono',monospace" }}>–</div>
-                          <div style={{ fontSize: 28, fontWeight: 900, color: !homeWon ? "#4a6a88" : "#eff8ff" }}>{homeScore ?? "—"}</div>
+                          <div style={{ fontSize: 28, fontWeight: 900, color: !homeWon ? "#4a6a88" : "var(--text-primary)" }}>{homeScore ?? "—"}</div>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={logoUrl(game.homeTeam.abbr)} alt={game.homeTeam.abbr} width={28} height={28} style={{ width: 28, height: 28, objectFit: "contain" }} />
                         </div>
@@ -628,11 +628,11 @@ export default async function PredictionsPage({ searchParams }) {
                     key={game.id}
                     className="prediction-card"
                     href={predictionHref(selectedDateString, game.id)}
-                    style={{ display: "block", textDecoration: "none", border: "1px solid #17283b", borderRadius: 24, background: "#091017", transition: "transform 0.18s ease, box-shadow 0.18s ease" }}
+                    style={{ display: "block", textDecoration: "none", border: "1px solid var(--border-strong)", borderRadius: 24, background: "var(--bg-card)", transition: "transform 0.18s ease, box-shadow 0.18s ease" }}
                   >
                     <div style={{ padding: 18, borderBottom: "1px solid #132131", background: `linear-gradient(135deg, ${hexToRgba(awayColor, 0.22)} 0%, rgba(9,16,23,0.94) 38%, rgba(9,16,23,0.94) 62%, ${hexToRgba(homeColor, 0.22)} 100%)` }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 20 }}>
-                        <div style={{ display: "inline-flex", padding: "3px 10px", borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid #2a3d50", color: "#8db9dc", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>
+                        <div style={{ display: "inline-flex", padding: "3px 10px", borderRadius: 999, background: "var(--border-color)", border: "1px solid #2a3d50", color: "#8db9dc", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>
                           Final
                         </div>
                         <div style={{ fontSize: 11, color: "#4a6a88", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em" }}>
@@ -644,8 +644,8 @@ export default async function PredictionsPage({ searchParams }) {
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={logoUrl(game.awayTeam.abbr)} alt={game.awayTeam.abbr} width={48} height={48} style={{ width: 48, height: 48, objectFit: "contain" }} />
                           <div>
-                            <div style={{ color: "#eff8ff", fontSize: 13, fontWeight: 800 }}>{game.awayTeam.abbr}</div>
-                            <div style={{ color: homeWon ? "#4a6a88" : "#eff8ff", fontSize: 42, fontWeight: 900, lineHeight: 1 }}>{awayScore ?? "—"}</div>
+                            <div style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 800 }}>{game.awayTeam.abbr}</div>
+                            <div style={{ color: homeWon ? "#4a6a88" : "var(--text-primary)", fontSize: 42, fontWeight: 900, lineHeight: 1 }}>{awayScore ?? "—"}</div>
                           </div>
                         </div>
                         <div style={{ color: "#2e4a65", fontSize: 24, fontFamily: "'DM Mono',monospace" }}>—</div>
@@ -653,8 +653,8 @@ export default async function PredictionsPage({ searchParams }) {
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={logoUrl(game.homeTeam.abbr)} alt={game.homeTeam.abbr} width={48} height={48} style={{ width: 48, height: 48, objectFit: "contain" }} />
                           <div style={{ textAlign: "right" }}>
-                            <div style={{ color: "#eff8ff", fontSize: 13, fontWeight: 800 }}>{game.homeTeam.abbr}</div>
-                            <div style={{ color: !homeWon ? "#4a6a88" : "#eff8ff", fontSize: 42, fontWeight: 900, lineHeight: 1 }}>{homeScore ?? "—"}</div>
+                            <div style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 800 }}>{game.homeTeam.abbr}</div>
+                            <div style={{ color: !homeWon ? "#4a6a88" : "var(--text-primary)", fontSize: 42, fontWeight: 900, lineHeight: 1 }}>{homeScore ?? "—"}</div>
                           </div>
                         </div>
                       </div>
@@ -692,9 +692,9 @@ export default async function PredictionsPage({ searchParams }) {
                   style={{
                     display: "block",
                     textDecoration: "none",
-                    border: "1px solid #17283b",
+                    border: "1px solid var(--border-strong)",
                     borderRadius: 24,
-                    background: "#091017",
+                    background: "var(--bg-card)",
                     transition: "transform 0.18s ease, box-shadow 0.18s ease",
                   }}
                 >
@@ -710,7 +710,7 @@ export default async function PredictionsPage({ searchParams }) {
                         <div style={{ fontSize: 11, color: "#7db8e5", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                           {formatStartTime(game.startTimeUTC)} · {game.gameState}
                         </div>
-                        <div style={{ fontSize: 22, color: "#eff8ff", fontWeight: 900, marginTop: 4 }}>
+                        <div style={{ fontSize: 22, color: "var(--text-primary)", fontWeight: 900, marginTop: 4 }}>
                           {game.awayTeam.abbr} at {game.homeTeam.abbr}
                         </div>
                       </div>
@@ -799,7 +799,7 @@ export default async function PredictionsPage({ searchParams }) {
                                 style={{ width: 56, height: 56, objectFit: "contain", flexShrink: 0 }}
                               />
                               <div style={{ minWidth: 0 }}>
-                                <div style={{ color: "#eff8ff", fontSize: 28, fontWeight: 900, lineHeight: 0.95 }}>{Math.round(teamRow.winPct * 100)}%</div>
+                                <div style={{ color: "var(--text-primary)", fontSize: 28, fontWeight: 900, lineHeight: 0.95 }}>{Math.round(teamRow.winPct * 100)}%</div>
                                 <div style={{ color: teamRow.meta.color, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                   {teamRow.side} win probability
                                 </div>
@@ -828,7 +828,7 @@ export default async function PredictionsPage({ searchParams }) {
                                 </div>
                               )}
                             </div>
-                            <div style={{ width: "100%", maxWidth: 240, height: 10, borderRadius: 999, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                            <div style={{ width: "100%", maxWidth: 240, height: 10, borderRadius: 999, background: "var(--border-color)", overflow: "hidden" }}>
                               <div
                                 style={{
                                   width: `${teamRow.winPct * 100}%`,
@@ -872,7 +872,7 @@ export default async function PredictionsPage({ searchParams }) {
                               <div style={{ color: "#89a8c1", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                                 {prediction.modelDiagnostics.simulationCount.toLocaleString()} sims
                               </div>
-                              <div style={{ color: "#eff8ff", fontSize: 16, fontWeight: 900 }}>
+                              <div style={{ color: "var(--text-primary)", fontSize: 16, fontWeight: 900 }}>
                                 xG {prediction.expectedAwayGoals.toFixed(2)} - {prediction.expectedHomeGoals.toFixed(2)}
                               </div>
                             </div>
@@ -909,7 +909,7 @@ export default async function PredictionsPage({ searchParams }) {
                           <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                             {label}
                           </div>
-                          <div style={{ color: "#eff8ff", fontSize: 20, fontWeight: 900, marginTop: 6 }}>{value}</div>
+                          <div style={{ color: "var(--text-primary)", fontSize: 20, fontWeight: 900, marginTop: 6 }}>{value}</div>
                         </div>
                       ))}
                     </div>
@@ -946,11 +946,11 @@ export default async function PredictionsPage({ searchParams }) {
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 10 }}>
                             <div>
                               <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>Expected goals</div>
-                              <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{row.xg.toFixed(2)}</div>
+                              <div style={{ color: "var(--text-primary)", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{row.xg.toFixed(2)}</div>
                             </div>
                             <div style={{ textAlign: "right" }}>
                               <div style={{ color: "#6f879f", fontSize: 10, fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>Expected shots</div>
-                              <div style={{ color: "#eff8ff", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{row.shots.toFixed(1)}</div>
+                              <div style={{ color: "var(--text-primary)", fontSize: 26, fontWeight: 900, marginTop: 4 }}>{row.shots.toFixed(1)}</div>
                             </div>
                           </div>
                         </div>

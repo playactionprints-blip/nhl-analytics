@@ -77,7 +77,7 @@ function SkaterGrid({ players, abbr, color, playerXGMap }) {
                 </span>
               </div>
               <div style={{ ...VL, color: "#5a7a96" }}>{p.toi ?? "—"}</div>
-              <div style={{ ...VL, color: "#eff8ff", fontWeight: 800 }}>{p.points ?? 0}</div>
+              <div style={{ ...VL, color: "var(--text-primary)", fontWeight: 800 }}>{p.points ?? 0}</div>
               <div style={VL}>{goals}</div>
               <div style={VL}>{p.assists ?? 0}</div>
               <div style={{ ...VL, color: pm > 0 ? "#35e3a0" : pm < 0 ? "#ff8d9b" : "#8db9dc" }}>
@@ -183,7 +183,7 @@ export default function BoxscorePanel({ homeAbbr, awayAbbr, homeColor, awayColor
       {tab !== "goalies" && (
         <div style={{ display: "grid", gap: 16 }}>
           {away && (
-            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(awayColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
+            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(awayColor, 0.28)}`, background: "var(--bg-card)", padding: "16px 20px" }}>
               <SkaterGrid
                 players={tab === "forwards" ? (away.forwards || []) : (away.defense || [])}
                 abbr={awayAbbr}
@@ -193,7 +193,7 @@ export default function BoxscorePanel({ homeAbbr, awayAbbr, homeColor, awayColor
             </div>
           )}
           {home && (
-            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(homeColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
+            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(homeColor, 0.28)}`, background: "var(--bg-card)", padding: "16px 20px" }}>
               <SkaterGrid
                 players={tab === "forwards" ? (home.forwards || []) : (home.defense || [])}
                 abbr={homeAbbr}
@@ -208,12 +208,12 @@ export default function BoxscorePanel({ homeAbbr, awayAbbr, homeColor, awayColor
       {tab === "goalies" && (
         <div style={{ display: "grid", gap: 16 }}>
           {(away?.goalies?.length ?? 0) > 0 && (
-            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(awayColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
+            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(awayColor, 0.28)}`, background: "var(--bg-card)", padding: "16px 20px" }}>
               <GoalieGrid goalies={away.goalies} abbr={awayAbbr} color={awayColor} />
             </div>
           )}
           {(home?.goalies?.length ?? 0) > 0 && (
-            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(homeColor, 0.28)}`, background: "#091017", padding: "16px 20px" }}>
+            <div className="boxscore-team-card" style={{ borderRadius: 20, border: `1px solid ${hexToRgba(homeColor, 0.28)}`, background: "var(--bg-card)", padding: "16px 20px" }}>
               <GoalieGrid goalies={home.goalies} abbr={homeAbbr} color={homeColor} />
             </div>
           )}

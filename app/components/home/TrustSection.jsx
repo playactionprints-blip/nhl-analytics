@@ -24,7 +24,7 @@ export default function TrustSection() {
         <div style={{ color: "#86a9c6", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.12em" }}>
           Why this platform
         </div>
-        <h2 style={{ margin: 0, color: "#eef8ff", fontSize: 34, lineHeight: 1, fontWeight: 900 }}>
+        <h2 style={{ margin: 0, color: "var(--text-primary)", fontSize: 34, lineHeight: 1, fontWeight: 900 }}>
           Built for serious hockey fans
         </h2>
       </div>
@@ -45,7 +45,7 @@ export default function TrustSection() {
             <div style={{ color: "#2fb4ff", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
               0{index + 1}
             </div>
-            <div style={{ color: "#eef8ff", fontSize: 22, fontWeight: 900 }}>{item.title}</div>
+            <div style={{ color: "var(--text-primary)", fontSize: 22, fontWeight: 900 }}>{item.title}</div>
             <div style={{ color: "#87a6bf", lineHeight: 1.65, fontSize: 14 }}>{item.description}</div>
           </div>
         ))}

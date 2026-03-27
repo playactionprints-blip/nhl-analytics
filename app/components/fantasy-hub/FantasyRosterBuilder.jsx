@@ -71,14 +71,14 @@ export default function FantasyRosterBuilder({
         <section
           style={{
             borderRadius: 22,
-            border: "1px solid #17283b",
-            background: "#091017",
+            border: "1px solid var(--border-strong)",
+            background: "var(--bg-card)",
             padding: "16px 16px 14px",
             display: "grid",
             gap: 12,
           }}
         >
-          <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900 }}>Player search</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 22, fontWeight: 900 }}>Player search</div>
           <input
             type="text"
             value={search}
@@ -107,7 +107,7 @@ export default function FantasyRosterBuilder({
                     gap: 12,
                     alignItems: "center",
                     borderRadius: 16,
-                    border: "1px solid #17283b",
+                    border: "1px solid var(--border-strong)",
                     background: rostered ? "rgba(12,19,29,0.55)" : "#0d1620",
                     padding: "10px 12px",
                     opacity: rostered ? 0.56 : 1,
@@ -123,7 +123,7 @@ export default function FantasyRosterBuilder({
                   />
                   <div style={{ minWidth: 0, display: "grid", gap: 5 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
-                      <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800, minWidth: 0 }}>{player.player_name}</div>
+                      <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800, minWidth: 0 }}>{player.player_name}</div>
                       <PositionBadge value={player.position} />
                     </div>
                     <div style={{ color: "#7f97ad", fontSize: 12 }}>
@@ -165,15 +165,15 @@ export default function FantasyRosterBuilder({
               key={sectionKey}
               style={{
                 borderRadius: 22,
-                border: "1px solid #17283b",
-                background: "#091017",
+                border: "1px solid var(--border-strong)",
+                background: "var(--bg-card)",
                 padding: "16px 16px 14px",
                 display: "grid",
                 gap: 12,
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                <div style={{ color: "#eff8ff", fontSize: 18, fontWeight: 900 }}>{meta.label}</div>
+                <div style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 900 }}>{meta.label}</div>
                 <div style={{ color: "#7d95ab", fontSize: 11, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                   {sectionPlayers.length}/{meta.slots}
                 </div>
@@ -193,7 +193,7 @@ export default function FantasyRosterBuilder({
                         gap: 12,
                         alignItems: "center",
                         borderRadius: 16,
-                        border: "1px solid #17283b",
+                        border: "1px solid var(--border-strong)",
                         background: "#0d1620",
                         padding: "10px 12px",
                       }}
@@ -208,7 +208,7 @@ export default function FantasyRosterBuilder({
                       />
                       <div style={{ minWidth: 0, display: "grid", gap: 5 }}>
                         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                          <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{player.player_name}</div>
+                          <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{player.player_name}</div>
                           <PositionBadge value={player.position} />
                         </div>
                         <div style={{ color: "#7f97ad", fontSize: 12 }}>

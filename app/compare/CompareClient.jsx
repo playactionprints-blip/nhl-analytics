@@ -166,7 +166,7 @@ function CompareTable({ p1, p2 }) {
     <div style={{ overflowX: "auto", border: "1px solid #1e2d40", borderRadius: 10 }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'DM Mono',monospace", fontSize: 12 }}>
         <thead>
-          <tr style={{ background: "#0a1520" }}>
+          <tr style={{ background: "var(--bg-card)" }}>
             <th style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, color: "#3a5a78", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: "1px solid #1e2d40", width: "28%" }}>Stat</th>
             <th style={{ padding: "8px 14px", textAlign: "right", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", borderBottom: "1px solid #1e2d40", color: c1, width: "36%" }}>{p1?.full_name || "Player 1"}</th>
             <th style={{ padding: "8px 14px", textAlign: "right", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", borderBottom: "1px solid #1e2d40", color: c2, width: "36%" }}>{p2?.full_name || "Player 2"}</th>
@@ -181,7 +181,7 @@ function CompareTable({ p1, p2 }) {
             const bothPresent = n1 != null && n2 != null;
             const p1Better = bothPresent && (row.higherBetter ? n1 > n2 : n1 < n2);
             const p2Better = bothPresent && (row.higherBetter ? n2 > n1 : n2 < n1);
-            const bgColor = i % 2 === 0 ? "#080e17" : "#060b12";
+            const bgColor = i % 2 === 0 ? "var(--bg-primary)" : "#060b12";
             return (
               <tr key={row.label} style={{ background: bgColor, borderBottom: "1px solid #0a1218" }}>
                 <td style={{ padding: "7px 14px", color: "#5a7a99", fontSize: 11, fontFamily: "'DM Mono',monospace", fontWeight: row.bold ? 700 : 400 }}>{row.label}</td>
@@ -242,7 +242,7 @@ function CompareRadar({ p1, p2 }) {
           <Radar dataKey="p1val" stroke={c1} fill={c1} fillOpacity={0.15} strokeWidth={2} dot={{ r: 3, fill: c1 }} name={p1?.full_name || "P1"} />
           <Radar dataKey="p2val" stroke={c2} fill={c2} fillOpacity={0.15} strokeWidth={2} dot={{ r: 3, fill: c2 }} name={p2?.full_name || "P2"} />
           <Tooltip
-            contentStyle={{ background: "#0a1520", border: "1px solid #1e2d40", borderRadius: 6, fontSize: 11, fontFamily: "DM Mono,monospace" }}
+            contentStyle={{ background: "var(--bg-card)", border: "1px solid #1e2d40", borderRadius: 6, fontSize: 11, fontFamily: "DM Mono,monospace" }}
             formatter={(v, name) => [`${Math.round(v)}th`, name]}
           />
         </RadarChart>
@@ -282,7 +282,7 @@ function WarBars({ p1, p2 }) {
                   )}
                   <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: "#2a3d55" }} />
                 </div>
-                <div style={{ fontSize: 11, color: v != null ? (v >= 0 ? c : "#e05050") : "#2a4060", fontFamily: "'DM Mono',monospace", fontWeight: 700, width: 40, textAlign: "right" }}>
+                <div style={{ fontSize: 11, color: v != null ? (v >= 0 ? c : "#e05050") : "var(--text-muted)", fontFamily: "'DM Mono',monospace", fontWeight: 700, width: 40, textAlign: "right" }}>
                   {v != null ? `${v >= 0 ? "+" : ""}${v.toFixed(bar.digits)}` : "—"}
                 </div>
               </div>
@@ -374,8 +374,8 @@ export default function CompareClient() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing:border-box; margin:0; padding:0; }
-        body { background:#05090f; }
-        input::placeholder { color:#2a4060; }
+        body { background:var(--bg-primary); }
+        input::placeholder { color:var(--text-muted); }
         ::-webkit-scrollbar { width:4px; }
         ::-webkit-scrollbar-track { background:#0d1825; }
         ::-webkit-scrollbar-thumb { background:#1e2d40; border-radius:2px; }
@@ -409,13 +409,13 @@ export default function CompareClient() {
         }
       `}</style>
 
-      <div className="compare-page-shell" style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,#05090f 60%)", padding: "40px 24px", fontFamily: "'Barlow Condensed',sans-serif" }}>
+      <div className="compare-page-shell" style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 20% 20%,#0d1e30 0%,var(--bg-primary) 60%)", padding: "40px 24px", fontFamily: "'Barlow Condensed',sans-serif" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           {/* Page header */}
           <div style={{ marginBottom: 32 }}>
             <div style={{ fontSize: 11, color: "#2a5070", letterSpacing: "0.2em", textTransform: "uppercase", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>NHL Analytics</div>
             <h1 className="compare-page-title" style={{ fontSize: 38, fontWeight: 900, color: "#e8f4ff", letterSpacing: "-1px", lineHeight: 1 }}>Player Compare</h1>
-            <div style={{ fontSize: 12, color: "#2a4060", fontFamily: "'DM Mono',monospace", marginTop: 6 }}>Select two skaters to compare stats, ratings, and percentiles</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", marginTop: 6 }}>Select two skaters to compare stats, ratings, and percentiles</div>
           </div>
 
           {/* Player pickers */}
@@ -426,7 +426,7 @@ export default function CompareClient() {
           </div>
 
           {!ready && (
-            <div style={{ textAlign: "center", padding: "60px 24px", color: "#2a4060", fontFamily: "'DM Mono',monospace", fontSize: 13 }}>
+            <div style={{ textAlign: "center", padding: "60px 24px", color: "var(--text-muted)", fontFamily: "'DM Mono',monospace", fontSize: 13 }}>
               {!p1 && !p2 ? "Search for two players to compare" : !p1 ? "Select Player 1" : "Select Player 2"}
             </div>
           )}

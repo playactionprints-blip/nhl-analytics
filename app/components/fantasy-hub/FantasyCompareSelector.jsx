@@ -49,8 +49,8 @@ export default function FantasyCompareSelector({
     <section
       style={{
         borderRadius: 22,
-        border: "1px solid #17283b",
-        background: "#091017",
+        border: "1px solid var(--border-strong)",
+        background: "var(--bg-card)",
         padding: "16px 16px 14px",
         display: "grid",
         gap: 14,
@@ -61,7 +61,7 @@ export default function FantasyCompareSelector({
           <div style={{ color: "#6caede", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Player Selector
           </div>
-          <div style={{ color: "#eff8ff", fontSize: 22, fontWeight: 900, marginTop: 4 }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 22, fontWeight: 900, marginTop: 4 }}>
             Compare 2 to 4 players
           </div>
         </div>
@@ -143,7 +143,7 @@ export default function FantasyCompareSelector({
             onClick={() => onAddPlayer(player.player_id)}
             disabled={selectedPlayers.length >= 4}
             style={{
-              border: "1px solid #17283b",
+              border: "1px solid var(--border-strong)",
               borderRadius: 16,
               background: "#0d1620",
               padding: "10px 12px",
@@ -164,7 +164,7 @@ export default function FantasyCompareSelector({
               style={{ width: 28, height: 28, objectFit: "contain" }}
             />
             <div style={{ minWidth: 0, display: "grid", gap: 4, textAlign: "left" }}>
-              <div style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{player.player_name}</div>
+              <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{player.player_name}</div>
               <div style={{ color: "#7d95ab", fontSize: 12 }}>
                 {player.team} · {player.position}
               </div>

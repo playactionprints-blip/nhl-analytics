@@ -44,7 +44,7 @@ export default function ScoringSummary({ periods = [], compact = false }) {
         <div style={{ color: "#8eb9db", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Scoring
         </div>
-        <div style={{ color: "#eff8ff", fontSize: compact ? 22 : 26, fontWeight: 900, marginTop: 4 }}>Scoring summary</div>
+        <div style={{ color: "var(--text-primary)", fontSize: compact ? 22 : 26, fontWeight: 900, marginTop: 4 }}>Scoring summary</div>
       </div>
 
       <div style={{ display: "grid", gap: 12 }}>
@@ -63,7 +63,7 @@ export default function ScoringSummary({ periods = [], compact = false }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                       <span style={{ color: teamColor, fontSize: 10, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{goal.teamAbbrev?.default}</span>
-                      <span style={{ color: "#eff8ff", fontSize: 15, fontWeight: 800 }}>{goal.name?.default}</span>
+                      <span style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 800 }}>{goal.name?.default}</span>
                       {goal.goalNumber != null ? (
                         <span style={{ color: "#6f879f", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>({goal.goalNumber})</span>
                       ) : null}
