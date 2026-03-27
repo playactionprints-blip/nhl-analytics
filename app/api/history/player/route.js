@@ -219,8 +219,29 @@ export async function GET(request) {
       return { ...s, age };
     });
 
+    // Fetch historical percentile ranks for season card
+    const { data: histPercentiles } = await supabase
+      .from("historical_percentiles")
+      .select("season,rapm_off_pct,rapm_def_pct,war_total_pct,pts82_pct,goals_pct,ixg_pct")
+      .eq("player_id", playerId);
+
+    const pctMap = {};
+    for (const row of (histPercentiles || [])) {
+      pctMap[row.season] = row;
+    }
+
+    const seasonsWithPct = seasonsWithAge.map((s) => ({
+      ...s,
+      rapm_off_pct:  pctMap[s.season]?.rapm_off_pct  ?? null,
+      rapm_def_pct:  pctMap[s.season]?.rapm_def_pct  ?? null,
+      war_total_pct: pctMap[s.season]?.war_total_pct ?? null,
+      pts82_pct:     pctMap[s.season]?.pts82_pct     ?? null,
+      goals_pct:     pctMap[s.season]?.goals_pct     ?? null,
+      ixg_pct:       pctMap[s.season]?.ixg_pct       ?? null,
+    }));
+
     return jsonWithCache(
-      { player: playerInfo, seasons: seasonsWithAge, birthYear },
+      { player: playerInfo, seasons: seasonsWithPct, birthYear },
       300
     );
   } catch (error) {

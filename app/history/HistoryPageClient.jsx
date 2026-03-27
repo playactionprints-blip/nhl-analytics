@@ -450,11 +450,21 @@ function SeasonTable({ seasons }) {
 
 // ── historical season card ────────────────────────────────────────────────────
 
+// Color by raw WAR value (for PP/PK bars that have no percentile)
 function warColor(val) {
   if (val == null) return "rgba(255,255,255,0.25)";
   if (val > 1.5) return "#35e3a0";
   if (val > 0.5) return "#2fb4ff";
   if (val >= 0) return "#f0c040";
+  return "#ff6b6b";
+}
+
+// Color by percentile rank 0-100 — matches PlayerCard pc() function
+function pc(v) {
+  if (v == null) return "#3a5570";
+  if (v >= 80) return "#35e3a0";
+  if (v >= 60) return "#2fb4ff";
+  if (v >= 40) return "#f0c040";
   return "#ff6b6b";
 }
 
@@ -473,27 +483,13 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
   const age = birthYear ? startYear - birthYear : null;
   const accent = TEAM_COLOR[season.team] || TEAM_COLOR[player?.team] || "#2fb4ff";
 
+  // Peak WAR for scaling raw PP/PK bars
   const peakWAR = Math.max(1, ...seasons.map((s) => Math.abs(s.war_total || 0)));
-
   function warBarWidth(val) {
     return Math.min(100, Math.max(0, (Math.abs(val || 0) / peakWAR) * 100));
   }
 
-  const isDefenseman = player?.position === "D";
-
-  function pts82Color(v) {
-    if (v == null) return "rgba(255,255,255,0.25)";
-    if (isDefenseman) {
-      if (v > 50) return "#35e3a0";
-      if (v > 35) return "#2fb4ff";
-      if (v > 22) return "#f0c040";
-      return "#ff6b6b";
-    }
-    if (v > 82) return "#35e3a0";
-    if (v > 60) return "#2fb4ff";
-    if (v > 40) return "#f0c040";
-    return "#ff6b6b";
-  }
+  const pts82 = season.pts_per_82;
 
   const seasonsWithWar = seasons.filter((s) => s.war_total != null);
   const avgCareerWAR =
@@ -510,49 +506,70 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
     .filter((s) => s.pts_per_82 != null)
     .map((s) => ({ season: s.season, pts_per_82: s.pts_per_82 }));
 
-  const hasAnyWAR = season.war_total != null || season.war_ev_off != null;
+  // Does this season have any RAPM/WAR percentile data?
+  const hasRAPMPct = season.rapm_off_pct != null || season.rapm_def_pct != null;
+  const hasWARPct  = season.war_total_pct != null;
+  const hasProdPct = season.pts82_pct != null || season.goals_pct != null || season.ixg_pct != null;
 
-  const pts82 = season.pts_per_82;
+  // WAR badge: prefer percentile, fall back to raw
+  const warBadgePct = season.war_total_pct;
+  const warBadgeRaw = season.war_total;
+  const showWarBadge = warBadgePct != null || warBadgeRaw != null;
 
-  const productionBars = [
+  // Left-panel WAR bars (percentile for EV/WAR, raw for PP/PK)
+  const warBars = [
+    {
+      label: "EV Off",
+      pct: season.rapm_off_pct,
+      raw: null,
+    },
+    {
+      label: "EV Def",
+      pct: season.rapm_def_pct,
+      raw: null,
+    },
+    {
+      label: "WAR",
+      pct: season.war_total_pct,
+      raw: null,
+    },
+    {
+      label: "PP",
+      pct: null,
+      raw: season.war_pp,
+    },
+    {
+      label: "PK",
+      pct: null,
+      raw: season.war_pk,
+    },
+  ];
+
+  // Left-panel Production bars (percentile where available)
+  const prodBars = [
     {
       label: "PTS/82",
-      value: pts82,
-      display: pts82 != null ? fmt(pts82, 1) : "—",
-      max: 200,
-      color: pts82Color(pts82),
+      pct: season.pts82_pct,
+      raw: pts82,
+      rawDisplay: pts82 != null ? fmt(pts82, 1) : "—",
     },
     {
       label: "Goals",
-      value: season.g,
-      display: season.g ?? "—",
-      max: 70,
-      color:
-        season.g >= 40 ? "#35e3a0" : season.g >= 25 ? "#2fb4ff" : season.g >= 15 ? "#f0c040" : "#ff6b6b",
-    },
-    {
-      label: "Assists",
-      value: season.a,
-      display: season.a ?? "—",
-      max: 100,
-      color:
-        season.a >= 60 ? "#35e3a0" : season.a >= 40 ? "#2fb4ff" : season.a >= 20 ? "#f0c040" : "#ff6b6b",
+      pct: season.goals_pct,
+      raw: season.g,
+      rawDisplay: season.g ?? "—",
     },
     {
       label: "ixG",
-      value: season.ixg,
-      display: season.ixg != null ? fmt(season.ixg, 1) : "—",
-      max: 60,
-      color:
-        season.ixg == null
-          ? "rgba(255,255,255,0.25)"
-          : season.ixg >= 20
-          ? "#35e3a0"
-          : season.ixg >= 12
-          ? "#2fb4ff"
-          : season.ixg >= 7
-          ? "#f0c040"
-          : "#ff6b6b",
+      pct: season.ixg_pct,
+      raw: season.ixg,
+      rawDisplay: season.ixg != null ? fmt(season.ixg, 1) : "—",
+    },
+    {
+      label: "WAR Total",
+      pct: season.war_total_pct,
+      raw: season.war_total,
+      rawDisplay: season.war_total != null ? fmt(season.war_total, 2) : "—",
     },
   ];
 
@@ -657,11 +674,11 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
         </div>
 
         {/* WAR badge */}
-        {season.war_total != null && (
+        {showWarBadge && (
           <div
             style={{
               background: "rgba(9,16,23,0.8)",
-              border: `1px solid ${warColor(season.war_total)}44`,
+              border: `1px solid ${(warBadgePct != null ? pc(warBadgePct) : warColor(warBadgeRaw))}44`,
               borderRadius: 12,
               padding: "10px 16px",
               textAlign: "center",
@@ -678,12 +695,18 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
                 marginBottom: 4,
               }}
             >
-              WAR
+              {warBadgePct != null ? "WAR Pctile" : "WAR"}
             </div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: warColor(season.war_total) }}>
-              {season.war_total >= 0 ? "+" : ""}
-              {fmt(season.war_total, 2)}
-            </div>
+            {warBadgePct != null ? (
+              <div style={{ fontSize: 22, fontWeight: 900, color: pc(warBadgePct) }}>
+                {Math.round(warBadgePct)}
+                <span style={{ fontSize: 12, fontWeight: 400 }}>th</span>
+              </div>
+            ) : (
+              <div style={{ fontSize: 22, fontWeight: 900, color: warColor(warBadgeRaw) }}>
+                {warBadgeRaw >= 0 ? "+" : ""}{fmt(warBadgeRaw, 2)}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -753,7 +776,7 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
             WAR Components
           </div>
 
-          {!hasAnyWAR ? (
+          {!hasRAPMPct && !hasWARPct && !season.war_pp && !season.war_pk ? (
             <div
               style={{
                 fontFamily: "'DM Mono', monospace",
@@ -769,67 +792,63 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
             </div>
           ) : (
             <div style={{ display: "grid", gap: 10, marginBottom: 24 }}>
-              {[
-                { label: "EV Off", value: season.war_ev_off },
-                { label: "EV Def", value: season.war_ev_def },
-                { label: "PP", value: season.war_pp },
-                { label: "PK", value: season.war_pk },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: 4,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: "'DM Mono', monospace",
-                        fontSize: 10,
-                        color: "rgba(255,255,255,0.45)",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.08em",
-                      }}
-                    >
-                      {label}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: "'DM Mono', monospace",
-                        fontSize: 11,
-                        color: value != null ? warColor(value) : "rgba(255,255,255,0.2)",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {value != null
-                        ? value >= 0
-                          ? `+${fmt(value, 2)}`
-                          : fmt(value, 2)
-                        : "N/A"}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      height: 6,
-                      background: "rgba(255,255,255,0.06)",
-                      borderRadius: 3,
-                      overflow: "hidden",
-                    }}
-                  >
-                    {value != null && (
-                      <div
+              {warBars.map(({ label, pct, raw }) => {
+                const isPct  = pct != null;
+                const hasVal = isPct || raw != null;
+                const color  = isPct ? pc(pct) : warColor(raw);
+                const barW   = isPct ? pct : warBarWidth(raw);
+                const valLabel = isPct
+                  ? `${Math.round(pct)}th`
+                  : raw != null
+                  ? (raw >= 0 ? `+${fmt(raw, 2)}` : fmt(raw, 2))
+                  : "N/A";
+                return (
+                  <div key={label}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span
                         style={{
-                          height: "100%",
-                          width: `${warBarWidth(value)}%`,
-                          background: warColor(value),
-                          borderRadius: 3,
+                          fontFamily: "'DM Mono', monospace",
+                          fontSize: 10,
+                          color: "rgba(255,255,255,0.45)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
                         }}
-                      />
-                    )}
+                      >
+                        {label}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: "'DM Mono', monospace",
+                          fontSize: 11,
+                          color: hasVal ? color : "rgba(255,255,255,0.2)",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {valLabel}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        height: 6,
+                        background: "rgba(255,255,255,0.06)",
+                        borderRadius: 3,
+                        overflow: "hidden",
+                      }}
+                    >
+                      {hasVal && (
+                        <div
+                          style={{
+                            height: "100%",
+                            width: `${barW}%`,
+                            background: color,
+                            borderRadius: 3,
+                          }}
+                        />
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -848,54 +867,57 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
           </div>
 
           <div style={{ display: "grid", gap: 10 }}>
-            {productionBars.map(({ label, value, display, max, color }) => (
-              <div key={label}>
-                <div
-                  style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}
-                >
-                  <span
-                    style={{
-                      fontFamily: "'DM Mono', monospace",
-                      fontSize: 10,
-                      color: "rgba(255,255,255,0.45)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                    }}
-                  >
-                    {label}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: "'DM Mono', monospace",
-                      fontSize: 11,
-                      color: value != null ? color : "rgba(255,255,255,0.2)",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {display}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    height: 6,
-                    background: "rgba(255,255,255,0.06)",
-                    borderRadius: 3,
-                    overflow: "hidden",
-                  }}
-                >
-                  {value != null && (
-                    <div
+            {prodBars.map(({ label, pct, rawDisplay }) => {
+              const hasVal = pct != null;
+              const color  = pc(pct);
+              const valLabel = hasVal ? `${Math.round(pct)}th` : (rawDisplay ?? "N/A");
+              return (
+                <div key={label}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span
                       style={{
-                        height: "100%",
-                        width: `${Math.min(100, (value / max) * 100)}%`,
-                        background: color,
-                        borderRadius: 3,
+                        fontFamily: "'DM Mono', monospace",
+                        fontSize: 10,
+                        color: "rgba(255,255,255,0.45)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
                       }}
-                    />
-                  )}
+                    >
+                      {label}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "'DM Mono', monospace",
+                        fontSize: 11,
+                        color: hasVal ? color : "rgba(255,255,255,0.2)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {valLabel}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      height: 6,
+                      background: "rgba(255,255,255,0.06)",
+                      borderRadius: 3,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {hasVal && (
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${pct}%`,
+                          background: color,
+                          borderRadius: 3,
+                        }}
+                      />
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -931,7 +953,7 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
                 label: "PTS/82",
                 value: pts82 != null ? fmt(pts82, 1) : "—",
                 sub: bestPts82 > 0 ? `Best ${fmt(bestPts82, 1)}` : null,
-                color: pts82 != null ? pts82Color(pts82) : "rgba(255,255,255,0.25)",
+                color: season.pts82_pct != null ? pc(season.pts82_pct) : "rgba(255,255,255,0.25)",
               },
               {
                 label: "GP",
