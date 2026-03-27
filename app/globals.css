@@ -22,6 +22,8 @@
   --nav-bg: rgba(255,255,255,0.95);
   --nav-border: rgba(0,0,0,0.08);
   --card-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-hover: 0 4px 12px rgba(0,0,0,0.1);
   --card-bg: #ffffff;
   --card-border: rgba(0,0,0,0.08);
   --input-bg: #f4f6f9;
@@ -44,10 +46,24 @@
   --nav-bg: rgba(5,9,15,0.95);
   --nav-border: rgba(255,255,255,0.06);
   --card-shadow: none;
+  --shadow-card: none;
+  --shadow-hover: none;
   --card-bg: #091017;
   --card-border: rgba(255,255,255,0.06);
   --input-bg: #091017;
   --input-border: rgba(255,255,255,0.08);
+}
+
+/* Recharts light mode overrides */
+[data-theme="light"] .recharts-cartesian-grid line,
+[data-theme="light"] .recharts-cartesian-grid-horizontal line,
+[data-theme="light"] .recharts-cartesian-grid-vertical line {
+  stroke: rgba(0,0,0,0.08) !important;
+}
+
+[data-theme="light"] .recharts-text,
+[data-theme="light"] .recharts-label {
+  fill: var(--text-muted) !important;
 }
 
 @theme inline {

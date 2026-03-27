@@ -38,7 +38,7 @@ function toiPerGame(toi_total, gp) {
 // ── styles ───────────────────────────────────────────────────────────────────
 
 const SHELL = {
-  background: "#05090f",
+  background: "var(--bg-primary)",
   minHeight: "100vh",
   padding: "32px 24px 60px",
   maxWidth: 1280,
@@ -46,8 +46,8 @@ const SHELL = {
 };
 
 const CARD = {
-  background: "#091017",
-  border: "1px solid #17283b",
+  background: "var(--bg-card)",
+  border: "1px solid var(--border-strong)",
   borderRadius: 24,
   padding: 24,
 };
@@ -57,18 +57,18 @@ const MONO = { fontFamily: "'DM Mono',monospace" };
 const LABEL_STYLE = {
   ...MONO,
   fontSize: 10,
-  color: "#5e7b98",
+  color: "var(--text-muted)",
   textTransform: "uppercase",
   letterSpacing: "0.1em",
 };
 
 const INPUT_STYLE = {
   width: "100%",
-  background: "#091017",
-  border: "1px solid #17283b",
+  background: "var(--bg-card)",
+  border: "1px solid var(--border-strong)",
   borderRadius: 12,
   padding: "10px 16px",
-  color: "#eff8ff",
+  color: "var(--text-primary)",
   ...MONO,
   fontSize: 14,
   outline: "none",
@@ -76,11 +76,11 @@ const INPUT_STYLE = {
 };
 
 const CHART_TOOLTIP = {
-  background: "#0b1621",
-  border: "1px solid #17283b",
+  background: "var(--bg-secondary)",
+  border: "1px solid var(--border-strong)",
   borderRadius: 10,
   padding: "10px 14px",
-  color: "#eff8ff",
+  color: "var(--text-primary)",
   fontSize: 12,
   ...MONO,
 };
@@ -88,7 +88,7 @@ const CHART_TOOLTIP = {
 const SECTION_TITLE = {
   ...MONO,
   fontSize: 10,
-  color: "#5e7b98",
+  color: "var(--text-muted)",
   textTransform: "uppercase",
   letterSpacing: "0.14em",
   marginBottom: 14,
@@ -150,7 +150,7 @@ function ChartTooltipWar({ active, payload }) {
       <div>PP: <span style={{ color: "#f0c040" }}>{fmt(d.war_pp, 2)}</span></div>
       <div>PK: <span style={{ color: "#ff8d9b" }}>{fmt(d.war_pk, 2)}</span></div>
       <div style={{ borderTop: "1px solid #1e3143", marginTop: 6, paddingTop: 6 }}>
-        WAR Total: <span style={{ color: "#eff8ff", fontWeight: 700 }}>{fmt(total, 2)}</span>
+        WAR Total: <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{fmt(total, 2)}</span>
       </div>
     </div>
   );
@@ -216,8 +216,8 @@ function PlayerSelector({ players, onSelect }) {
             top: "calc(100% + 4px)",
             left: 0,
             right: 0,
-            background: "#091017",
-            border: "1px solid #17283b",
+            background: "var(--bg-card)",
+            border: "1px solid var(--border-strong)",
             borderRadius: 12,
             zIndex: 50,
             maxHeight: 340,
@@ -240,20 +240,20 @@ function PlayerSelector({ players, onSelect }) {
                 width: "100%",
                 background: "transparent",
                 border: "none",
-                borderBottom: "1px solid #17283b",
+                borderBottom: "1px solid var(--border-strong)",
                 padding: "10px 16px",
-                color: "#eff8ff",
+                color: "var(--text-primary)",
                 cursor: "pointer",
                 textAlign: "left",
                 fontSize: 13,
                 fontFamily: "'DM Mono',monospace",
                 gap: 10,
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#0d1926"; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-card-hover)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
               <span>{p.full_name}</span>
-              <span style={{ color: "#5e7b98", fontSize: 11 }}>
+              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>
                 {p.team} · {p.position}
               </span>
             </button>
@@ -300,7 +300,7 @@ function PlayerHeader({ player, seasons = [] }) {
           <div style={{ ...MONO, fontSize: 10, color: teamColor, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>
             {player.team} · #{player.jersey} · {player.position}
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: "#eff8ff", lineHeight: 1.1 }}>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "var(--text-primary)", lineHeight: 1.1 }}>
             {player.full_name}
           </div>
           {isRetired ? (
@@ -313,8 +313,8 @@ function PlayerHeader({ player, seasons = [] }) {
                 { label: "Peak PTS/82", value: peakPts82.toFixed(1) },
               ].map(({ label, value }) => (
                 <div key={label} style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 22, fontWeight: 900, color: "#eff8ff" }}>{value}</div>
-                  <div style={{ fontSize: 10, color: "#5e7b98", fontFamily: "'DM Mono',monospace",
+                  <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text-primary)" }}>{value}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'DM Mono',monospace",
                     textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 2 }}>{label}</div>
                 </div>
               ))}
@@ -331,7 +331,7 @@ function PlayerHeader({ player, seasons = [] }) {
               </div>
               <div>
                 <div style={LABEL_STYLE}>Overall</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: "#eff8ff" }}>{fmt(player.overall_rating, 1)}</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text-primary)" }}>{fmt(player.overall_rating, 1)}</div>
               </div>
               {player.war_total != null && (
                 <div>
@@ -357,8 +357,8 @@ function PlayerHeader({ player, seasons = [] }) {
           ].map(([label, val, color]) =>
             val != null ? (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ ...MONO, fontSize: 10, color: "#5e7b98", width: 72 }}>{label}</div>
-                <div style={{ flex: 1, background: "#0d1926", borderRadius: 4, height: 6 }}>
+                <div style={{ ...MONO, fontSize: 10, color: "var(--text-muted)", width: 72 }}>{label}</div>
+                <div style={{ flex: 1, background: "var(--bg-card-hover)", borderRadius: 4, height: 6 }}>
                   <div style={{ width: `${val}%`, height: "100%", background: color, borderRadius: 4 }} />
                 </div>
                 <div style={{ ...MONO, fontSize: 11, color, width: 28, textAlign: "right" }}>{Math.round(val)}</div>
@@ -378,7 +378,7 @@ function SeasonTable({ seasons }) {
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", ...MONO, fontSize: 12 }}>
         <thead>
-          <tr style={{ background: "#3a5570" }}>
+          <tr style={{ background: "var(--bg-secondary)" }}>
             {["Season", "Team", "GP", "G", "A", "PTS", "PTS/82", "ixG", "TOI/gm", "WAR"].map((h) => (
               <th
                 key={h}
@@ -390,7 +390,7 @@ function SeasonTable({ seasons }) {
                   letterSpacing: "0.1em",
                   color: "#b8d4e8",
                   fontWeight: 700,
-                  borderBottom: "1px solid #0d1a26",
+                  borderBottom: "1px solid var(--border-color)",
                 }}
               >
                 {h}
@@ -402,7 +402,7 @@ function SeasonTable({ seasons }) {
           {seasons.map((s, i) => {
             const isCurrentSeason = s.season === "25-26";
             const warColor =
-              s.war_total == null ? "#5e7b98" : s.war_total >= 0 ? "#35e3a0" : "#ff8d9b";
+              s.war_total == null ? "var(--text-muted)" : s.war_total >= 0 ? "#35e3a0" : "#ff8d9b";
             const tpg = toiPerGame(s.toi_total, s.gp);
             return (
               <tr
@@ -411,32 +411,32 @@ function SeasonTable({ seasons }) {
                   background: isCurrentSeason
                     ? "rgba(47,180,255,0.06)"
                     : i % 2 === 0
-                    ? "#091017"
-                    : "#0b131d",
+                    ? "var(--bg-card)"
+                    : "var(--bg-secondary)",
                   borderLeft: isCurrentSeason ? "2px solid #2fb4ff" : "2px solid transparent",
                 }}
               >
-                <td style={{ padding: "7px 12px", color: "#9fd8ff", fontWeight: 700, borderBottom: "1px solid #0d1a26" }}>
+                <td style={{ padding: "7px 12px", color: "#9fd8ff", fontWeight: 700, borderBottom: "1px solid var(--border-color)" }}>
                   {s.season}
                 </td>
-                <td style={{ padding: "7px 12px", color: "#7daec8", borderBottom: "1px solid #0d1a26" }}>
+                <td style={{ padding: "7px 12px", color: "#7daec8", borderBottom: "1px solid var(--border-color)" }}>
                   {s.team || "—"}
                 </td>
                 {[s.gp, s.g, s.a, s.pts].map((v, ci) => (
-                  <td key={ci} style={{ padding: "7px 12px", textAlign: "right", color: "#d0e8f8", borderBottom: "1px solid #0d1a26" }}>
+                  <td key={ci} style={{ padding: "7px 12px", textAlign: "right", color: "#d0e8f8", borderBottom: "1px solid var(--border-color)" }}>
                     {v ?? "—"}
                   </td>
                 ))}
-                <td style={{ padding: "7px 12px", textAlign: "right", color: "#2fb4ff", borderBottom: "1px solid #0d1a26" }}>
+                <td style={{ padding: "7px 12px", textAlign: "right", color: "#2fb4ff", borderBottom: "1px solid var(--border-color)" }}>
                   {fmt(s.pts_per_82, 1)}
                 </td>
-                <td style={{ padding: "7px 12px", textAlign: "right", color: "#ff8c42", borderBottom: "1px solid #0d1a26" }}>
+                <td style={{ padding: "7px 12px", textAlign: "right", color: "#ff8c42", borderBottom: "1px solid var(--border-color)" }}>
                   {fmt(s.ixg, 2)}
                 </td>
-                <td style={{ padding: "7px 12px", textAlign: "right", color: "#d0e8f8", borderBottom: "1px solid #0d1a26" }}>
+                <td style={{ padding: "7px 12px", textAlign: "right", color: "#d0e8f8", borderBottom: "1px solid var(--border-color)" }}>
                   {fmtToi(tpg)}
                 </td>
-                <td style={{ padding: "7px 12px", textAlign: "right", color: warColor, fontWeight: s.war_total != null ? 700 : 400, borderBottom: "1px solid #0d1a26" }}>
+                <td style={{ padding: "7px 12px", textAlign: "right", color: warColor, fontWeight: s.war_total != null ? 700 : 400, borderBottom: "1px solid var(--border-color)" }}>
                   {s.war_total != null ? fmt(s.war_total, 2) : "—"}
                 </td>
               </tr>
@@ -516,7 +516,7 @@ export default function HistoryPageClient({ players }) {
         <div style={{ ...MONO, fontSize: 10, color: "#2fb4ff", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 6 }}>
           NHL Analytics · History
         </div>
-        <div style={{ fontSize: 32, fontWeight: 900, color: "#eff8ff", lineHeight: 1 }}>
+        <div style={{ fontSize: 32, fontWeight: 900, color: "var(--text-primary)", lineHeight: 1 }}>
           Historical Player Cards
         </div>
         <div style={{ color: "#7daec8", fontSize: 14, marginTop: 8, maxWidth: 640 }}>
@@ -560,13 +560,13 @@ export default function HistoryPageClient({ players }) {
                     <CartesianGrid strokeDasharray="3 3" stroke="#0d1a26" />
                     <XAxis
                       dataKey="season"
-                      tick={{ fill: "#5e7b98", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
+                      tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
                       interval="preserveStartEnd"
                     />
-                    <YAxis tick={{ fill: "#5e7b98", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
+                    <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
                     <Tooltip content={<ChartTooltipPts />} />
                     <ReferenceLine y={82} stroke="#35e3a0" strokeDasharray="4 3" strokeOpacity={0.5} />
-                    <ReferenceLine y={50} stroke="#5e7b98" strokeDasharray="4 3" strokeOpacity={0.4} />
+                    <ReferenceLine y={50} stroke="var(--text-muted)" strokeDasharray="4 3" strokeOpacity={0.4} />
                     <Line
                       type="monotone"
                       dataKey="pts_per_82"
@@ -581,11 +581,11 @@ export default function HistoryPageClient({ players }) {
                 <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <div style={{ width: 20, height: 2, background: "#35e3a0", borderTop: "1px dashed #35e3a0" }} />
-                    <span style={{ ...MONO, fontSize: 10, color: "#5e7b98" }}>1 pt/gm</span>
+                    <span style={{ ...MONO, fontSize: 10, color: "var(--text-muted)" }}>1 pt/gm</span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ width: 20, height: 2, borderTop: "1px dashed #5e7b98" }} />
-                    <span style={{ ...MONO, fontSize: 10, color: "#5e7b98" }}>~avg</span>
+                    <div style={{ width: 20, height: 2, borderTop: "1px dashed var(--text-muted)" }} />
+                    <span style={{ ...MONO, fontSize: 10, color: "var(--text-muted)" }}>~avg</span>
                   </div>
                 </div>
               </div>
@@ -598,10 +598,10 @@ export default function HistoryPageClient({ players }) {
                     <CartesianGrid strokeDasharray="3 3" stroke="#0d1a26" />
                     <XAxis
                       dataKey="season"
-                      tick={{ fill: "#5e7b98", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
+                      tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
                       interval="preserveStartEnd"
                     />
-                    <YAxis tick={{ fill: "#5e7b98", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
+                    <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
                     <Tooltip content={<ChartTooltipIxg />} />
                     <Line
                       type="monotone"
@@ -627,11 +627,11 @@ export default function HistoryPageClient({ players }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="#0d1a26" />
                   <XAxis
                     dataKey="season"
-                    tick={{ fill: "#5e7b98", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
+                    tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
                   />
-                  <YAxis tick={{ fill: "#5e7b98", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
+                  <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
                   <Tooltip content={<ChartTooltipWar />} />
-                  <ReferenceLine y={0} stroke="#5e7b98" strokeWidth={1} />
+                  <ReferenceLine y={0} stroke="var(--text-muted)" strokeWidth={1} />
                   <Bar dataKey="war_ev_off" stackId="war" fill="#35e3a0" name="EV Off" />
                   <Bar dataKey="war_ev_def" stackId="war" fill="#2fb4ff" name="EV Def" />
                   <Bar dataKey="war_pp" stackId="war" fill="#f0c040" name="PP" />
@@ -642,7 +642,7 @@ export default function HistoryPageClient({ players }) {
                 {[["EV Off", "#35e3a0"], ["EV Def", "#2fb4ff"], ["PP", "#f0c040"], ["PK", "#ff8d9b"]].map(([label, color]) => (
                   <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                     <div style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
-                    <span style={{ ...MONO, fontSize: 10, color: "#5e7b98" }}>{label}</span>
+                    <span style={{ ...MONO, fontSize: 10, color: "var(--text-muted)" }}>{label}</span>
                   </div>
                 ))}
               </div>
@@ -660,10 +660,10 @@ export default function HistoryPageClient({ players }) {
                     dataKey="age"
                     type="number"
                     domain={["dataMin - 1", "dataMax + 1"]}
-                    tick={{ fill: "#5e7b98", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
-                    label={{ value: "Age", position: "insideBottomRight", offset: -4, fill: "#5e7b98", fontSize: 10 }}
+                    tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }}
+                    label={{ value: "Age", position: "insideBottomRight", offset: -4, fill: "var(--text-muted)", fontSize: 10 }}
                   />
-                  <YAxis tick={{ fill: "#5e7b98", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
+                  <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
                   <Tooltip content={<ChartTooltipAge />} />
                   <Line
                     type="monotone"
@@ -683,7 +683,7 @@ export default function HistoryPageClient({ players }) {
                   />
                 </LineChart>
               </ResponsiveContainer>
-              <div style={{ ...MONO, fontSize: 10, color: "#5e7b98", marginTop: 8 }}>
+              <div style={{ ...MONO, fontSize: 10, color: "var(--text-muted)", marginTop: 8 }}>
                 Dot size ∝ games played · ★ peak season
               </div>
             </div>
@@ -701,7 +701,7 @@ export default function HistoryPageClient({ players }) {
 
       {/* Empty state */}
       {!selectedPlayerId && !loading && (
-        <div style={{ ...CARD, textAlign: "center", padding: "48px 24px", color: "#5e7b98", fontSize: 14, ...MONO }}>
+        <div style={{ ...CARD, textAlign: "center", padding: "48px 24px", color: "var(--text-muted)", fontSize: 14, ...MONO }}>
           Search and select a player above to view their career history.
         </div>
       )}
