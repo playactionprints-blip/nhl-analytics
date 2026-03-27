@@ -18,6 +18,7 @@ export async function GET(request) {
       { data: careerStats },
       { data: recentSeasons },
       { data: historicalWarData },
+      { data: nstData },
     ] = await Promise.all([
       supabase
         .from("career_stats")
@@ -33,7 +34,12 @@ export async function GET(request) {
         .order("season"),
       supabase
         .from("historical_war")
-        .select("player_id,season,war_pp,war_pk")
+        .select("player_id,season,war_total,war_ev_off,war_ev_def,war_pp,war_pk,war_shooting")
+        .eq("player_id", playerId)
+        .order("season"),
+      supabase
+        .from("historical_nst")
+        .select("player_id,season,toi_pp,toi_pk")
         .eq("player_id", playerId)
         .order("season"),
     ]);
@@ -98,11 +104,12 @@ export async function GET(request) {
         toi_total: row.toi_total,
         ixg: row.ixg,
         pts_per_82: row.pts_per_82,
-        war_total: null,
-        war_ev_off: null,
-        war_ev_def: null,
-        war_pp: warIdx[row.season]?.war_pp ?? null,
-        war_pk: warIdx[row.season]?.war_pk ?? null,
+        war_total:    warIdx[row.season]?.war_total    ?? null,
+        war_ev_off:   warIdx[row.season]?.war_ev_off   ?? null,
+        war_ev_def:   warIdx[row.season]?.war_ev_def   ?? null,
+        war_pp:       warIdx[row.season]?.war_pp       ?? null,
+        war_pk:       warIdx[row.season]?.war_pk       ?? null,
+        war_shooting: warIdx[row.season]?.war_shooting ?? null,
         xgf_pct: null,
       };
     }
@@ -136,6 +143,7 @@ export async function GET(request) {
           war_ev_def: row.war_ev_def,
           war_pp: row.war_pp,
           war_pk: row.war_pk,
+          war_shooting: warIdx[row.season]?.war_shooting ?? null,
           xgf_pct: row.xgf_pct,
         };
       }
@@ -192,11 +200,12 @@ export async function GET(request) {
               toi_total: Math.round(toi_total * 100) / 100,
               ixg: null,
               pts_per_82,
-              war_total: null,
-              war_ev_off: null,
-              war_ev_def: null,
-              war_pp: null,
-              war_pk: null,
+              war_total:    warIdx[seasonLabel]?.war_total    ?? null,
+              war_ev_off:   warIdx[seasonLabel]?.war_ev_off   ?? null,
+              war_ev_def:   warIdx[seasonLabel]?.war_ev_def   ?? null,
+              war_pp:       warIdx[seasonLabel]?.war_pp       ?? null,
+              war_pk:       warIdx[seasonLabel]?.war_pk       ?? null,
+              war_shooting: warIdx[seasonLabel]?.war_shooting ?? null,
               xgf_pct: null,
             };
           } catch {
@@ -231,6 +240,12 @@ export async function GET(request) {
       return { ...s, age };
     });
 
+    // Index historical_nst for toi_pp / toi_pk
+    const nstMap = {};
+    for (const row of (nstData || [])) {
+      nstMap[row.season] = row;
+    }
+
     // Fetch historical percentile ranks for season card
     const { data: histPercentiles } = await supabase
       .from("historical_percentiles")
@@ -252,6 +267,8 @@ export async function GET(request) {
       ixg_pct:       pctMap[s.season]?.ixg_pct       ?? null,
       pp_war_pct:    pctMap[s.season]?.pp_war_pct    ?? null,
       pk_war_pct:    pctMap[s.season]?.pk_war_pct    ?? null,
+      toi_pp:        nstMap[s.season]?.toi_pp        ?? null,
+      toi_pk:        nstMap[s.season]?.toi_pk        ?? null,
     }));
 
     return jsonWithCache(

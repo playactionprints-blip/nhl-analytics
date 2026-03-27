@@ -450,8 +450,17 @@ function SeasonTable({ seasons }) {
 
 // ── historical season card ────────────────────────────────────────────────────
 
-// Color by raw PP/PK WAR value
+// Color by total WAR value (for war_total badge and stat boxes)
 function warColor(val) {
+  if (val == null) return "rgba(255,255,255,0.25)";
+  if (val > 1.5) return "#35e3a0";
+  if (val > 0.5) return "#2fb4ff";
+  if (val >= 0) return "#f0c040";
+  return "#ff6b6b";
+}
+
+// Color by PP/PK/Shooting WAR value (smaller scale)
+function ppWarColor(val) {
   if (val == null) return "rgba(255,255,255,0.25)";
   if (val > 0.5) return "#35e3a0";
   if (val > 0.2) return "#2fb4ff";
@@ -483,9 +492,10 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
   const age = birthYear ? startYear - birthYear : null;
   const accent = TEAM_COLOR[season.team] || TEAM_COLOR[player?.team] || "#2fb4ff";
 
-  // Peak PP/PK WAR across career for bar scaling
+  // Peak WAR values across career for bar scaling
   const peakPP = Math.max(0.01, ...seasons.map((s) => Math.abs(s.war_pp || 0)));
   const peakPK = Math.max(0.01, ...seasons.map((s) => Math.abs(s.war_pk || 0)));
+  const peakShoot = Math.max(0.01, ...seasons.map((s) => Math.abs(s.war_shooting || 0)));
 
   const pts82 = season.pts_per_82;
 
@@ -504,76 +514,49 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
     .filter((s) => s.pts_per_82 != null)
     .map((s) => ({ season: s.season, pts_per_82: s.pts_per_82 }));
 
-  // Does this season have any RAPM/WAR percentile data?
-  const hasRAPMPct = season.rapm_off_pct != null || season.rapm_def_pct != null;
-  const hasWARPct  = season.war_total_pct != null;
-  const hasProdPct = season.pts82_pct != null || season.goals_pct != null || season.ixg_pct != null;
-
   // WAR badge: prefer percentile, fall back to raw
   const warBadgePct = season.war_total_pct;
   const warBadgeRaw = season.war_total;
   const showWarBadge = warBadgePct != null || warBadgeRaw != null;
 
-  // Left-panel WAR bars (percentile for EV/WAR, percentile-or-raw for PP/PK)
-  const warBars = [
-    {
-      label: "EV Off",
-      pct: season.rapm_off_pct,
-      raw: null,
-      peak: null,
-    },
-    {
-      label: "EV Def",
-      pct: season.rapm_def_pct,
-      raw: null,
-      peak: null,
-    },
-    {
-      label: "WAR",
-      pct: season.war_total_pct,
-      raw: null,
-      peak: null,
-    },
-    {
-      label: "PP WAR",
-      pct: season.pp_war_pct ?? null,
-      raw: season.war_pp,
-      peak: peakPP,
-    },
-    {
-      label: "PK WAR",
-      pct: season.pk_war_pct ?? null,
-      raw: season.war_pk,
-      peak: peakPK,
-    },
+  // Per-60 computations (toi_total is in minutes)
+  const toi60 = (season.toi_total || 0) / 60;
+  const goals60 = toi60 > 0 ? (season.g || 0) / toi60 : null;
+  const pts60   = toi60 > 0 ? (season.pts || 0) / toi60 : null;
+  const ixg60   = toi60 > 0 ? (season.ixg || 0) / toi60 : null;
+
+  // Approximate percentile from raw value vs league avg/elite benchmarks
+  const scalePct = (val, avg, elite) =>
+    val == null ? null : Math.min(100, Math.max(0, ((val - avg / 2) / (elite - avg / 2)) * 100));
+
+  // PP/PK eligibility — use toi data when available, fall back to WAR signal
+  const ppPerGame = (season.toi_pp || 0) / (season.gp || 1);
+  const pkPerGame = (season.toi_pk || 0) / (season.gp || 1);
+  const hasPP = season.pp_war_pct != null || ppPerGame >= 0.5 || (season.war_pp != null && season.war_pp !== 0);
+  const hasPK = season.pk_war_pct != null || pkPerGame >= 0.17 || (season.war_pk != null && season.war_pk !== 0);
+
+  // WAR Components (matches PlayerCard warTiles layout)
+  const warTiles = [
+    { label: "EV OFF",  pct: season.rapm_off_pct,              raw: null,           peak: null,      na: false },
+    { label: "EV DEF",  pct: season.rapm_def_pct,              raw: null,           peak: null,      na: false },
+    { label: "PP",      pct: hasPP ? season.pp_war_pct : null, raw: hasPP ? season.war_pp : null, peak: peakPP, na: !hasPP },
+    { label: "PK",      pct: hasPK ? season.pk_war_pct : null, raw: hasPK ? season.war_pk : null, peak: peakPK, na: !hasPK },
+    { label: "FINISH",  pct: season.war_total_pct,             raw: null,           peak: null,      na: false },
   ];
 
-  // Left-panel Production bars (percentile where available)
+  // Production bars (matches PlayerCard productionBars layout)
   const prodBars = [
-    {
-      label: "PTS/82",
-      pct: season.pts82_pct,
-      raw: pts82,
-      rawDisplay: pts82 != null ? fmt(pts82, 1) : "—",
-    },
-    {
-      label: "Goals",
-      pct: season.goals_pct,
-      raw: season.g,
-      rawDisplay: season.g ?? "—",
-    },
-    {
-      label: "ixG",
-      pct: season.ixg_pct,
-      raw: season.ixg,
-      rawDisplay: season.ixg != null ? fmt(season.ixg, 1) : "—",
-    },
-    {
-      label: "WAR Total",
-      pct: season.war_total_pct,
-      raw: season.war_total,
-      rawDisplay: season.war_total != null ? fmt(season.war_total, 2) : "—",
-    },
+    { label: "Goals / 60", pct: season.goals_pct ?? scalePct(goals60, 0.20, 0.70) },
+    { label: "Pts / 60",   pct: season.pts82_pct  ?? scalePct(pts60,   0.60, 1.80) },
+    { label: "ixG / 60",   pct: season.ixg_pct    ?? scalePct(ixg60,   0.20, 0.60) },
+    { label: "WAR Total",  pct: season.war_total_pct },
+  ];
+
+  // Context bars — raw WAR components
+  const contextBars = [
+    { label: "PP WAR",      pct: season.pp_war_pct, raw: season.war_pp,       peak: peakPP    },
+    { label: "PK WAR",      pct: season.pk_war_pct, raw: season.war_pk,       peak: peakPK    },
+    { label: "Shooting WAR",pct: null,              raw: season.war_shooting, peak: peakShoot },
   ];
 
   return (
@@ -766,165 +749,105 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
         {/* LEFT: WAR components + Production */}
         <div style={{ paddingRight: 24, borderRight: "1px solid rgba(255,255,255,0.06)" }}>
           {/* WAR Components */}
-          <div
-            style={{
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 10,
-              color: "rgba(255,255,255,0.35)",
-              textTransform: "uppercase",
-              letterSpacing: "0.14em",
-              marginBottom: 14,
-            }}
-          >
+          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8, fontFamily: "'DM Mono',monospace" }}>
             WAR Components
           </div>
 
-          {!hasRAPMPct && !hasWARPct && season.war_pp == null && season.war_pk == null ? (
-            <div
-              style={{
-                fontFamily: "'DM Mono', monospace",
-                fontSize: 11,
-                color: "rgba(255,255,255,0.28)",
-                marginBottom: 24,
-                lineHeight: 1.5,
-              }}
-            >
-              N/A — Pre-RAPM era
-              <br />
-              WAR not available before 18-19
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: 10, marginBottom: 24 }}>
-              {warBars.map(({ label, pct, raw, peak }) => {
-                const isPct  = pct != null;
-                const hasVal = isPct || raw != null;
-                const color  = isPct ? pc(pct) : warColor(raw);
-                const barW   = isPct
-                  ? pct
-                  : peak != null
-                  ? Math.min(100, Math.max(0, (Math.abs(raw || 0) / peak) * 100))
+          {/* WAR Component bars — PlayerCard-style inline layout */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 18 }}>
+            {warTiles.map((tile) => {
+              const isPct = tile.pct != null;
+              const hasRaw = tile.raw != null;
+              const barW = tile.na ? 0
+                : isPct ? tile.pct
+                : (hasRaw && tile.peak)
+                  ? Math.min(100, Math.max(0, (Math.abs(tile.raw) / tile.peak) * 100))
                   : 0;
-                const valLabel = isPct
-                  ? `${Math.round(pct)}th`
-                  : raw != null
-                  ? (raw >= 0 ? `+${fmt(raw, 2)}` : fmt(raw, 2))
-                  : "N/A";
-                return (
-                  <div key={label}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span
-                        style={{
-                          fontFamily: "'DM Mono', monospace",
-                          fontSize: 10,
-                          color: "rgba(255,255,255,0.45)",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.08em",
-                        }}
-                      >
-                        {label}
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: "'DM Mono', monospace",
-                          fontSize: 11,
-                          color: hasVal ? color : "rgba(255,255,255,0.2)",
-                          fontWeight: 700,
-                        }}
-                      >
-                        {valLabel}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        height: 6,
-                        background: "rgba(255,255,255,0.06)",
-                        borderRadius: 3,
-                        overflow: "hidden",
-                      }}
-                    >
-                      {hasVal && (
-                        <div
-                          style={{
-                            height: "100%",
-                            width: `${barW}%`,
-                            background: color,
-                            borderRadius: 3,
-                          }}
-                        />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Production bars */}
-          <div
-            style={{
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 10,
-              color: "rgba(255,255,255,0.35)",
-              textTransform: "uppercase",
-              letterSpacing: "0.14em",
-              marginBottom: 14,
-            }}
-          >
-            Production
-          </div>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            {prodBars.map(({ label, pct, rawDisplay }) => {
-              const hasVal = pct != null;
-              const color  = pc(pct);
-              const valLabel = hasVal ? `${Math.round(pct)}th` : (rawDisplay ?? "N/A");
+              const tileColor = tile.na
+                ? "rgba(255,255,255,0.2)"
+                : isPct ? pc(tile.pct)
+                : hasRaw ? ppWarColor(tile.raw)
+                : "rgba(255,255,255,0.2)";
+              const tileDisplay = tile.na ? "N/A"
+                : isPct ? Math.round(tile.pct)
+                : hasRaw ? (tile.raw >= 0 ? `+${fmt(tile.raw, 2)}` : fmt(tile.raw, 2))
+                : "\u2014";
               return (
-                <div key={label}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span
-                      style={{
-                        fontFamily: "'DM Mono', monospace",
-                        fontSize: 10,
-                        color: "rgba(255,255,255,0.45)",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.08em",
-                      }}
-                    >
-                      {label}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: "'DM Mono', monospace",
-                        fontSize: 11,
-                        color: hasVal ? color : "rgba(255,255,255,0.2)",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {valLabel}
-                    </span>
+                <div key={tile.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", width: 110, flexShrink: 0 }}>
+                    {tile.label}
+                  </span>
+                  <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${barW}%`, background: tileColor, borderRadius: 2 }} />
                   </div>
-                  <div
-                    style={{
-                      height: 6,
-                      background: "rgba(255,255,255,0.06)",
-                      borderRadius: 3,
-                      overflow: "hidden",
-                    }}
-                  >
-                    {hasVal && (
-                      <div
-                        style={{
-                          height: "100%",
-                          width: `${pct}%`,
-                          background: color,
-                          borderRadius: 3,
-                        }}
-                      />
-                    )}
-                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: tileColor, width: 36, textAlign: "right", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>
+                    {tileDisplay}
+                  </span>
                 </div>
               );
             })}
+          </div>
+
+          {/* Divider */}
+          <div style={{ height: 1, background: "rgba(255,255,255,0.05)", margin: "2px 0 14px" }} />
+
+          {/* Production section label */}
+          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8, fontFamily: "'DM Mono',monospace" }}>
+            Production
+          </div>
+
+          {/* Production bars */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 18 }}>
+            {prodBars.map(({ label, pct }) => (
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", width: 110, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {label}
+                </span>
+                <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct ?? 0}%`, background: pc(pct), borderRadius: 2 }} />
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 700, color: pc(pct), width: 36, textAlign: "right", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>
+                  {pct != null ? Math.round(pct) : "\u2014"}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Divider */}
+          <div style={{ height: 1, background: "rgba(255,255,255,0.05)", margin: "2px 0 14px" }} />
+
+          {/* Context & Deployment */}
+          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8, fontFamily: "'DM Mono',monospace" }}>
+            Context &amp; Deployment
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 10 }}>
+            {contextBars.map(({ label, pct, raw, peak }) => {
+              const isPct = pct != null;
+              const hasRaw = raw != null;
+              const barW = isPct ? pct
+                : (hasRaw && peak) ? Math.min(100, Math.max(0, (Math.abs(raw) / peak) * 100))
+                : 0;
+              const barColor = isPct ? pc(pct) : hasRaw ? ppWarColor(raw) : "rgba(255,255,255,0.2)";
+              const barDisplay = isPct ? Math.round(pct)
+                : hasRaw ? (raw >= 0 ? `+${fmt(raw, 2)}` : fmt(raw, 2))
+                : "\u2014";
+              return (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", width: 110, flexShrink: 0 }}>
+                    {label}
+                  </span>
+                  <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${barW}%`, background: barColor, borderRadius: 2 }} />
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: barColor, width: 36, textAlign: "right", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>
+                    {barDisplay}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", fontFamily: "'DM Mono',monospace", lineHeight: 1.6 }}>
+            * Competition and teammate context not available for historical seasons.
           </div>
         </div>
 
