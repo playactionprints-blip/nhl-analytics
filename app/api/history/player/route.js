@@ -17,6 +17,7 @@ export async function GET(request) {
     const [
       { data: careerStats },
       { data: recentSeasons },
+      { data: historicalWarData },
     ] = await Promise.all([
       supabase
         .from("career_stats")
@@ -28,6 +29,11 @@ export async function GET(request) {
         .select(
           "player_id,season,gp,g,a1,a2,toi,ixg,war_total,war_ev_off,war_ev_def,war_pp,war_pk,xgf_pct,hdcf_pct"
         )
+        .eq("player_id", playerId)
+        .order("season"),
+      supabase
+        .from("historical_war")
+        .select("player_id,season,war_pp,war_pk")
         .eq("player_id", playerId)
         .order("season"),
     ]);
@@ -75,6 +81,12 @@ export async function GET(request) {
     // Build unified season map
     const seasonMap = {};
 
+    // Index historical_war by season for quick lookup
+    const warIdx = {};
+    for (const row of historicalWarData || []) {
+      warIdx[row.season] = row;
+    }
+
     for (const row of careerStats || []) {
       seasonMap[row.season] = {
         season: row.season,
@@ -89,8 +101,8 @@ export async function GET(request) {
         war_total: null,
         war_ev_off: null,
         war_ev_def: null,
-        war_pp: null,
-        war_pk: null,
+        war_pp: warIdx[row.season]?.war_pp ?? null,
+        war_pk: warIdx[row.season]?.war_pk ?? null,
         xgf_pct: null,
       };
     }
@@ -222,7 +234,7 @@ export async function GET(request) {
     // Fetch historical percentile ranks for season card
     const { data: histPercentiles } = await supabase
       .from("historical_percentiles")
-      .select("season,rapm_off_pct,rapm_def_pct,war_total_pct,pts82_pct,goals_pct,ixg_pct")
+      .select("season,rapm_off_pct,rapm_def_pct,war_total_pct,pts82_pct,goals_pct,ixg_pct,pp_war_pct,pk_war_pct")
       .eq("player_id", playerId);
 
     const pctMap = {};
@@ -238,6 +250,8 @@ export async function GET(request) {
       pts82_pct:     pctMap[s.season]?.pts82_pct     ?? null,
       goals_pct:     pctMap[s.season]?.goals_pct     ?? null,
       ixg_pct:       pctMap[s.season]?.ixg_pct       ?? null,
+      pp_war_pct:    pctMap[s.season]?.pp_war_pct    ?? null,
+      pk_war_pct:    pctMap[s.season]?.pk_war_pct    ?? null,
     }));
 
     return jsonWithCache(

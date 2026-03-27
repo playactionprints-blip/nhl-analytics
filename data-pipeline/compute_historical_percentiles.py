@@ -89,7 +89,7 @@ with open(rapm_path) as f:
     per_season_rapm = json.load(f)
 
 print("Loading historical_war table...")
-war_rows = paginate('historical_war', 'player_id,season,war_total')
+war_rows = paginate('historical_war', 'player_id,season,war_total,war_pp,war_pk')
 war_idx = {(int(r['player_id']), r['season']): r for r in war_rows}
 print(f"  {len(war_rows)} WAR rows")
 
@@ -138,8 +138,8 @@ for season in all_seasons:
 
     # Build per-group value lists for percentile ranking
     group_vals = {
-        'F': {'rapm_off': [], 'rapm_def': [], 'war_total': [], 'pts82': [], 'goals': [], 'ixg': []},
-        'D': {'rapm_off': [], 'rapm_def': [], 'war_total': [], 'pts82': [], 'goals': [], 'ixg': []},
+        'F': {'rapm_off': [], 'rapm_def': [], 'war_total': [], 'pts82': [], 'goals': [], 'ixg': [], 'war_pp': [], 'war_pk': []},
+        'D': {'rapm_off': [], 'rapm_def': [], 'war_total': [], 'pts82': [], 'goals': [], 'ixg': [], 'war_pp': [], 'war_pk': []},
     }
 
     for pid in all_pids:
@@ -166,6 +166,12 @@ for season in all_seasons:
         v = safe(cs.get('ixg'))
         if v is not None: group_vals[g]['ixg'].append(v)
 
+        v = safe(war.get('war_pp'))
+        if v is not None: group_vals[g]['war_pp'].append(v)
+
+        v = safe(war.get('war_pk'))
+        if v is not None: group_vals[g]['war_pk'].append(v)
+
     # Compute percentile ranks for every player
     for pid in all_pids:
         g = pos_group(pid)
@@ -184,6 +190,8 @@ for season in all_seasons:
             'pts82_pct':     pct_rank_in_group(safe(cs.get('pts_per_82')),   gv['pts82']),
             'goals_pct':     pct_rank_in_group(safe(cs.get('g')),            gv['goals']),
             'ixg_pct':       pct_rank_in_group(safe(cs.get('ixg')),          gv['ixg']),
+            'pp_war_pct':    pct_rank_in_group(safe(war.get('war_pp')),      gv['war_pp']),
+            'pk_war_pct':    pct_rank_in_group(safe(war.get('war_pk')),      gv['war_pk']),
         }
         output_rows.append(row)
 

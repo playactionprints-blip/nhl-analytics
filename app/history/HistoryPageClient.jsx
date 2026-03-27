@@ -450,11 +450,11 @@ function SeasonTable({ seasons }) {
 
 // ── historical season card ────────────────────────────────────────────────────
 
-// Color by raw WAR value (for PP/PK bars that have no percentile)
+// Color by raw PP/PK WAR value
 function warColor(val) {
   if (val == null) return "rgba(255,255,255,0.25)";
-  if (val > 1.5) return "#35e3a0";
-  if (val > 0.5) return "#2fb4ff";
+  if (val > 0.5) return "#35e3a0";
+  if (val > 0.2) return "#2fb4ff";
   if (val >= 0) return "#f0c040";
   return "#ff6b6b";
 }
@@ -483,11 +483,9 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
   const age = birthYear ? startYear - birthYear : null;
   const accent = TEAM_COLOR[season.team] || TEAM_COLOR[player?.team] || "#2fb4ff";
 
-  // Peak WAR for scaling raw PP/PK bars
-  const peakWAR = Math.max(1, ...seasons.map((s) => Math.abs(s.war_total || 0)));
-  function warBarWidth(val) {
-    return Math.min(100, Math.max(0, (Math.abs(val || 0) / peakWAR) * 100));
-  }
+  // Peak PP/PK WAR across career for bar scaling
+  const peakPP = Math.max(0.01, ...seasons.map((s) => Math.abs(s.war_pp || 0)));
+  const peakPK = Math.max(0.01, ...seasons.map((s) => Math.abs(s.war_pk || 0)));
 
   const pts82 = season.pts_per_82;
 
@@ -516,32 +514,37 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
   const warBadgeRaw = season.war_total;
   const showWarBadge = warBadgePct != null || warBadgeRaw != null;
 
-  // Left-panel WAR bars (percentile for EV/WAR, raw for PP/PK)
+  // Left-panel WAR bars (percentile for EV/WAR, percentile-or-raw for PP/PK)
   const warBars = [
     {
       label: "EV Off",
       pct: season.rapm_off_pct,
       raw: null,
+      peak: null,
     },
     {
       label: "EV Def",
       pct: season.rapm_def_pct,
       raw: null,
+      peak: null,
     },
     {
       label: "WAR",
       pct: season.war_total_pct,
       raw: null,
+      peak: null,
     },
     {
-      label: "PP",
-      pct: null,
+      label: "PP WAR",
+      pct: season.pp_war_pct ?? null,
       raw: season.war_pp,
+      peak: peakPP,
     },
     {
-      label: "PK",
-      pct: null,
+      label: "PK WAR",
+      pct: season.pk_war_pct ?? null,
       raw: season.war_pk,
+      peak: peakPK,
     },
   ];
 
@@ -776,7 +779,7 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
             WAR Components
           </div>
 
-          {!hasRAPMPct && !hasWARPct && !season.war_pp && !season.war_pk ? (
+          {!hasRAPMPct && !hasWARPct && season.war_pp == null && season.war_pk == null ? (
             <div
               style={{
                 fontFamily: "'DM Mono', monospace",
@@ -792,11 +795,15 @@ function HistoricalSeasonCard({ player, seasons, birthYear }) {
             </div>
           ) : (
             <div style={{ display: "grid", gap: 10, marginBottom: 24 }}>
-              {warBars.map(({ label, pct, raw }) => {
+              {warBars.map(({ label, pct, raw, peak }) => {
                 const isPct  = pct != null;
                 const hasVal = isPct || raw != null;
                 const color  = isPct ? pc(pct) : warColor(raw);
-                const barW   = isPct ? pct : warBarWidth(raw);
+                const barW   = isPct
+                  ? pct
+                  : peak != null
+                  ? Math.min(100, Math.max(0, (Math.abs(raw || 0) / peak) * 100))
+                  : 0;
                 const valLabel = isPct
                   ? `${Math.round(pct)}th`
                   : raw != null
