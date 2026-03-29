@@ -3,6 +3,7 @@ import { TEAM_COLOR, TEAM_FULL } from "@/app/lib/nhlTeams";
 import {
   buildPredictionsForDate,
   confidenceMeta,
+  dateStringFromUtcInToronto,
   formatDateString,
   formatHeadlineDate,
   formatStartTime,
@@ -143,7 +144,7 @@ function mapInsightCards(predictions = []) {
       const marketEdge = favorite === entry.game.homeTeam.abbr ? entry.market?.homeEdge : entry.market?.awayEdge;
 
       return {
-        href: predictionHref(entry.game.dateString, entry.game.id),
+        href: predictionHref(dateStringFromUtcInToronto(entry.game.startTimeUTC), entry.game.id),
         kicker: entry.game.gameState === "LIVE" ? "Live edge" : "Today",
         awayTeam: entry.game.awayTeam.abbr,
         homeTeam: entry.game.homeTeam.abbr,
