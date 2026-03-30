@@ -2212,25 +2212,41 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
     return list.slice(0, 50);
   }, [allPlayers, selectedTeam]);
 
+  const positionLabel = { C: "Centres", LW: "Left Wings", RW: "Right Wings", D: "Defencemen", G: "Goalies", F: "Forwards" };
+
+  function matchesPos(p, pos) {
+    const p2 = (p.position || "").toUpperCase();
+    if (pos === "G")  return p2 === "G";
+    if (pos === "D")  return p2 === "D";
+    if (pos === "LW") return p2 === "L" || p2 === "LW";
+    if (pos === "RW") return p2 === "R" || p2 === "RW";
+    if (pos === "C")  return p2 === "C";
+    if (pos === "F")  return p2 === "C" || p2 === "L" || p2 === "R" || p2 === "LW" || p2 === "RW";
+    return true;
+  }
+
   const filteredSearchResults = useMemo(() => {
+    // No search query + specific position → show top 5 for that position from the full player list
+    if (!search.trim() && filterPos !== "All") {
+      let list = allPlayers
+        .filter(p => matchesPos(p, filterPos))
+        .sort((a, b) => (b.war_total ?? -999) - (a.war_total ?? -999))
+        .slice(0, 5);
+      if (filterTeam) list = list.filter(p => (p.team || "").toUpperCase() === filterTeam);
+      if (filterRatingMin > 0) list = list.filter(p => (p.overall_rating ?? 0) >= filterRatingMin);
+      if (filterWarMin != null) list = list.filter(p => (p.war_total ?? -99) >= filterWarMin);
+      return list;
+    }
+
     let list = searchResults;
     if (filterPos !== "All") {
-      list = list.filter(p => {
-        const pos = (p.position || "").toUpperCase();
-        if (filterPos === "G") return pos === "G";
-        if (filterPos === "D") return pos === "D";
-        if (filterPos === "LW") return pos === "L" || pos === "LW";
-        if (filterPos === "RW") return pos === "R" || pos === "RW";
-        if (filterPos === "C") return pos === "C";
-        if (filterPos === "F") return pos === "C" || pos === "L" || pos === "R" || pos === "LW" || pos === "RW";
-        return true;
-      });
+      list = list.filter(p => matchesPos(p, filterPos));
     }
     if (filterTeam) list = list.filter(p => (p.team || "").toUpperCase() === filterTeam);
     if (filterRatingMin > 0) list = list.filter(p => (p.overall_rating ?? 0) >= filterRatingMin);
     if (filterWarMin != null) list = list.filter(p => (p.war_total ?? -99) >= filterWarMin);
     return list;
-  }, [searchResults, filterPos, filterTeam, filterRatingMin, filterWarMin]);
+  }, [searchResults, filterPos, filterTeam, filterRatingMin, filterWarMin, search, allPlayers]);
 
   const visiblePlayers = browseMode === "search" ? filteredSearchResults : teamFilteredPlayers;
   const searchHighlights = useMemo(() => defaultSearchPlayers.slice(0, 4), [defaultSearchPlayers]);
@@ -2349,7 +2365,12 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
                     )}
                   </div>
                   <div style={{ fontSize:10, color:"#3f6282", fontFamily:"'DM Mono',monospace", display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap" }}>
-                    <span>{search.trim() ? "Live substring search across current-season players" : "Defaulting to the top 5 current-season WAR leaders"}</span>
+                    <span>{search.trim()
+                      ? "Live substring search across current-season players"
+                      : filterPos !== "All"
+                        ? `Top 5 ${positionLabel[filterPos] || filterPos} by WAR — search to find others`
+                        : "Defaulting to the top 5 current-season WAR leaders"
+                    }</span>
                     <span>Showing {filteredSearchResults.length} of {searchResults.length}</span>
                   </div>
                 </div>
@@ -2367,7 +2388,11 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
                   letterSpacing: "0.12em",
                   background: "#0b141e",
                 }}>
-                  {search.trim() ? "Matching current-season players" : "Top 5 current-season WAR"}
+                  {search.trim()
+                    ? "Matching current-season players"
+                    : filterPos !== "All"
+                      ? `Top 5 ${positionLabel[filterPos] || filterPos} by WAR`
+                      : "Top 5 current-season WAR"}
                 </div>
               )}
               {visiblePlayers.map((p, index) => {
