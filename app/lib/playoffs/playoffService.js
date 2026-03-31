@@ -200,12 +200,29 @@ async function fetchScheduleRange(startDate, endDate) {
     games: await fetchScheduleForDate(date),
   })));
 
-  return results.flatMap((entry) =>
-    (entry.games || []).map((game) => ({
-      raw: game,
-      date: entry.date,
-    }))
-  );
+  const deduped = new Map();
+
+  for (const entry of results) {
+    for (const game of entry.games || []) {
+      const normalized = normalizeScheduleGame(game, TEAM_FULL);
+      if (!normalized?.id) continue;
+      const actualDate = dateStringFromUtcInToronto(normalized.startTimeUTC) || entry.date;
+      if (actualDate < startDate || actualDate > endDate) continue;
+      const existing = deduped.get(normalized.id);
+      if (existing) continue;
+      deduped.set(normalized.id, {
+        raw: game,
+        date: actualDate,
+      });
+    }
+  }
+
+  return [...deduped.values()].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    const aId = String(a.raw?.id ?? a.raw?.gameId ?? "");
+    const bId = String(b.raw?.id ?? b.raw?.gameId ?? "");
+    return aId.localeCompare(bId);
+  });
 }
 
 function dedupeAndSortTeamDates(scheduleRows) {
