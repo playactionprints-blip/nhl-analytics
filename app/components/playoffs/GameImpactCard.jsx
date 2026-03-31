@@ -17,18 +17,12 @@ function outcomeTone(delta) {
   return "#9fd8ff";
 }
 
-function TeamBranchTable({ side, team, branches }) {
-  const rows = side === "away"
-    ? [
-        { label: "If Win", data: branches.away_reg.away },
-        { label: "If Lose OT", data: branches.home_ot.away },
-        { label: "If Lose Reg", data: branches.home_reg.away },
-      ]
-    : [
-        { label: "If Win", data: branches.home_reg.home },
-        { label: "If Lose OT", data: branches.away_ot.home },
-        { label: "If Lose Reg", data: branches.away_reg.home },
-      ];
+function TeamBranchTable({ team, outcomeRows }) {
+  const rows = [
+    { label: "If Win", data: outcomeRows.win },
+    { label: "If Lose OT", data: outcomeRows.loseOt },
+    { label: "If Lose Reg", data: outcomeRows.loseReg },
+  ];
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
@@ -109,8 +103,8 @@ export default function GameImpactCard({ gameImpact }) {
           gap: 14,
         }}
       >
-        <TeamBranchTable side="away" team={game.awayTeam} branches={gameImpact.branches} />
-        <TeamBranchTable side="home" team={game.homeTeam} branches={gameImpact.branches} />
+        <TeamBranchTable team={game.awayTeam} outcomeRows={gameImpact.outcomes.away} />
+        <TeamBranchTable team={game.homeTeam} outcomeRows={gameImpact.outcomes.home} />
       </div>
 
       <LeagueImpactMiniTable rows={gameImpact.leagueImpacts} />

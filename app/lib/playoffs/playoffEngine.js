@@ -388,6 +388,70 @@ function summarizeTeamBranch(teamSummary, baselineSummary) {
   };
 }
 
+function combineBranchSummaries(summaries, weights) {
+  const valid = summaries
+    .map((summary, index) => ({
+      summary,
+      weight: Number(weights?.[index] ?? 0),
+    }))
+    .filter((entry) => entry.summary);
+
+  if (!valid.length) {
+    return {
+      playoffProbability: 0,
+      projectedPoints: null,
+      playoffDelta: 0,
+      projectedPointsDelta: 0,
+    };
+  }
+
+  const totalWeight = valid.reduce((sum, entry) => sum + Math.max(0, entry.weight), 0);
+  const normalized = totalWeight > 0
+    ? valid.map((entry) => ({ ...entry, weight: Math.max(0, entry.weight) / totalWeight }))
+    : valid.map((entry) => ({ ...entry, weight: 1 / valid.length }));
+
+  const weightedValue = (key, fallback = 0) => {
+    const numericEntries = normalized.filter(({ summary }) => Number.isFinite(summary?.[key]));
+    if (!numericEntries.length) return fallback;
+    const numericWeight = numericEntries.reduce((sum, entry) => sum + entry.weight, 0);
+    return numericEntries.reduce((sum, entry) => {
+      const share = numericWeight > 0 ? entry.weight / numericWeight : 1 / numericEntries.length;
+      return sum + summaryValue(entry.summary[key]) * share;
+    }, 0);
+  };
+
+  const projectedPointsEntries = normalized.filter(({ summary }) => Number.isFinite(summary?.projectedPoints));
+  const projectedPoints = projectedPointsEntries.length
+    ? projectedPointsEntries.reduce((sum, entry) => sum + entry.summary.projectedPoints * entry.weight, 0)
+    : null;
+
+  return {
+    playoffProbability: weightedValue("playoffProbability", 0),
+    projectedPoints,
+    playoffDelta: weightedValue("playoffDelta", 0),
+    projectedPointsDelta: weightedValue("projectedPointsDelta", 0),
+  };
+}
+
+function summaryValue(value) {
+  return Number.isFinite(value) ? Number(value) : 0;
+}
+
+function buildOutcomeWeights(game) {
+  const awayReg = Number(game?.regulationAwayWinProb ?? 0);
+  const awayOt = Number(game?.overtimeAwayWinProb ?? 0);
+  const homeReg = Number(game?.regulationHomeWinProb ?? 0);
+  const homeOt = Number(game?.overtimeHomeWinProb ?? 0);
+
+  const awayTotal = awayReg + awayOt;
+  const homeTotal = homeReg + homeOt;
+
+  return {
+    awayWin: awayTotal > 0 ? [awayReg / awayTotal, awayOt / awayTotal] : [0.5, 0.5],
+    homeWin: homeTotal > 0 ? [homeReg / homeTotal, homeOt / homeTotal] : [0.5, 0.5],
+  };
+}
+
 export function calculateGameImpacts({
   baselineResults,
   conditionalResultsByGame,
@@ -406,19 +470,41 @@ export function calculateGameImpacts({
       };
     }
 
+    const outcomeWeights = buildOutcomeWeights(entry.game);
+    const awayWinSummary = combineBranchSummaries(
+      [teamBranches.away_reg.away, teamBranches.away_ot.away],
+      outcomeWeights.awayWin
+    );
+    const homeWinSummary = combineBranchSummaries(
+      [teamBranches.home_reg.home, teamBranches.home_ot.home],
+      outcomeWeights.homeWin
+    );
+
     const leagueImpacts = Object.values(baselineMap)
       .filter((team) => ![entry.game.awayTeam.abbr, entry.game.homeTeam.abbr].includes(team.team))
       .map((team) => {
-        const awayWin = entry.branches.away_reg?.teamMap?.[team.team];
-        const homeWin = entry.branches.home_reg?.teamMap?.[team.team];
+        const awayWin = combineBranchSummaries(
+          [
+            summarizeTeamBranch(entry.branches.away_reg?.teamMap?.[team.team], baselineMap[team.team]),
+            summarizeTeamBranch(entry.branches.away_ot?.teamMap?.[team.team], baselineMap[team.team]),
+          ],
+          outcomeWeights.awayWin
+        );
+        const homeWin = combineBranchSummaries(
+          [
+            summarizeTeamBranch(entry.branches.home_reg?.teamMap?.[team.team], baselineMap[team.team]),
+            summarizeTeamBranch(entry.branches.home_ot?.teamMap?.[team.team], baselineMap[team.team]),
+          ],
+          outcomeWeights.homeWin
+        );
         const maxSwing = awayWin && homeWin
           ? awayWin.playoffProbability - homeWin.playoffProbability
           : 0;
         return {
           team: team.team,
           teamName: team.teamName,
-          awayWinPlayoffProbability: awayWin?.playoffProbability ?? team.playoffProbability,
-          homeWinPlayoffProbability: homeWin?.playoffProbability ?? team.playoffProbability,
+          awayWinPlayoffProbability: awayWin.playoffProbability ?? team.playoffProbability,
+          homeWinPlayoffProbability: homeWin.playoffProbability ?? team.playoffProbability,
           maxSwing,
         };
       })
@@ -435,6 +521,18 @@ export function calculateGameImpacts({
         overtime: entry.game.regulationTieProbability,
       },
       branches: teamBranches,
+      outcomes: {
+        away: {
+          win: awayWinSummary,
+          loseOt: teamBranches.home_ot.away,
+          loseReg: teamBranches.home_reg.away,
+        },
+        home: {
+          win: homeWinSummary,
+          loseOt: teamBranches.away_ot.home,
+          loseReg: teamBranches.away_reg.home,
+        },
+      },
       leagueImpacts,
     };
   });
