@@ -15,7 +15,7 @@ const OTHER_NAV_ITEMS = [
   { href: "/teams",          label: "Teams" },
   { href: "/predictions",    label: "Predictions" },
   { href: "/fantasy",        label: "Fantasy Hub" },
-  { href: "/playoff-odds",   label: "Playoff Odds" },
+  { href: "/playoffs",       label: "Playoffs" },
   { href: "/roster-builder", label: "Roster Builder" },
   { href: "/lottery",        label: "NHL Lottery" },
 ];
@@ -60,6 +60,7 @@ export default function TopNav() {
   const { theme, toggleTheme } = useTheme();
   const dropdownRef = useRef(null);
   const hoverTimeout = useRef(null);
+  const routeCloseFrame = useRef(null);
 
   const isPlayersActive = PLAYER_GROUP.some((item) => pathname?.startsWith(item.href));
 
@@ -77,7 +78,14 @@ export default function TopNav() {
 
   // Close dropdown on route change
   useEffect(() => {
-    setPlayersOpen(false);
+    routeCloseFrame.current = window.requestAnimationFrame(() => {
+      setPlayersOpen(false);
+    });
+    return () => {
+      if (routeCloseFrame.current) {
+        window.cancelAnimationFrame(routeCloseFrame.current);
+      }
+    };
   }, [pathname]);
 
   // Clean up hover timeout on unmount
