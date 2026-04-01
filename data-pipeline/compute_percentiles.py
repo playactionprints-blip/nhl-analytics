@@ -1,12 +1,30 @@
 #!/usr/bin/env python3
 import math
 import os
+from pathlib import Path
 
 import pandas as pd
 from supabase import create_client
 from sync_log import install_sync_logger
 
 install_sync_logger("percentiles")
+
+def load_env_file(path):
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+# Auto-load env vars for local runs.
+repo_root = Path(__file__).resolve().parents[1]
+load_env_file(repo_root / ".env.local")
+load_env_file(repo_root / ".env")
 
 sb = create_client(
     os.getenv('SUPABASE_URL') or os.getenv('NEXT_PUBLIC_SUPABASE_URL'),
@@ -37,69 +55,59 @@ def pct_rank(series):
 
 
 cols = (
-    'player_id,full_name,position,gp,g,pts,toi,xgf_pct,hdcf_pct,icf,ixg,'
+    'player_id,full_name,position,gp,toi,'
+    'g_60,pts_60,a1_60,ixg_60,'          # 3yr-weighted rate stats (compute_ratings.py)
+    'xgf_pct,hdcf_pct,icf,'              # 3yr-weighted on-ice % (compute_ratings.py)
     'rapm_off,rapm_def,qot_impact,qoc_impact,'
     'war_total,war_ev_off,war_ev_def,war_pp,war_pk,war_shooting,war_penalties,'
     'off_rating,def_rating,overall_rating'
 )
 players = sb.table('players').select(cols).neq('position', 'G').execute().data
 print(f"Fetched {len(players)} skaters")
-
-# ── Fetch current-season a1 from player_seasons ──────────────────────────────
-CURRENT_SEASON = '25-26'
-ps_rows = sb.table('player_seasons').select('player_id,a1,toi').eq('season', CURRENT_SEASON).execute().data
-a1_lookup = {}
-for row in ps_rows:
-    pid = row['player_id']
-    a1 = row.get('a1')
-    toi_min = row.get('toi')
-    if a1 is not None and toi_min and float(toi_min) > 0:
-        a1_lookup[pid] = float(a1) / (float(toi_min) / 60.0)
-print(f"Fetched a1_60 for {len(a1_lookup)} players from player_seasons")
+# Note: g_60/pts_60/a1_60/ixg_60/xgf_pct/hdcf_pct are 3yr-weighted values
+# uploaded by compute_ratings.py — no separate player_seasons fetch needed.
 
 rows = []
 for p in players:
-    gp = safe(p.get('gp')) or 0
+    gp      = safe(p.get('gp')) or 0
     avg_toi = parse_toi(p.get('toi'))
     if gp < 10 or avg_toi is None or avg_toi < 5:
         continue
 
-    total_toi = avg_toi * gp
-    toi60 = total_toi / 60.0 if total_toi else None
     position = p.get('position', '')
-    group = 'D' if position == 'D' else 'F'
-
-    g = safe(p.get('g')) or 0
-    pts = safe(p.get('pts')) or 0
-    icf = safe(p.get('icf'))
-    ixg = safe(p.get('ixg'))
+    group    = 'D' if position == 'D' else 'F'
+    icf      = safe(p.get('icf'))
+    # Derive icf_60 from current avg_toi × gp (icf column still current-season on players table)
+    total_toi = avg_toi * gp
+    toi60     = total_toi / 60.0 if total_toi else None
 
     rows.append({
-        'player_id': p['player_id'],
-        'full_name': p['full_name'],
-        'position': position,
-        'group': group,
-        'goals_60': round(g / toi60, 4) if toi60 else None,
-        'pts_60': round(pts / toi60, 4) if toi60 else None,
-        'icf_60': round(icf / toi60, 4) if (icf is not None and toi60) else None,
-        'ixg_60': round(ixg / toi60, 4) if (ixg is not None and toi60) else None,
-        'xgf_pct': safe(p.get('xgf_pct')),
-        'hdcf_pct': safe(p.get('hdcf_pct')),
-        'rapm_off': safe(p.get('rapm_off')),
-        'rapm_def': safe(p.get('rapm_def')),
-        'qot_impact': safe(p.get('qot_impact')),
-        'qoc_impact': safe(p.get('qoc_impact')),
-        'war_total': safe(p.get('war_total')),
-        'war_ev_off': safe(p.get('war_ev_off')),
-        'war_ev_def': safe(p.get('war_ev_def')),
-        'war_pp': safe(p.get('war_pp')),
-        'war_pk': safe(p.get('war_pk')),
-        'war_shooting': safe(p.get('war_shooting')),
-        'war_penalties': safe(p.get('war_penalties')),
-        'off_rating': safe(p.get('off_rating')),
-        'def_rating': safe(p.get('def_rating')),
+        'player_id':      p['player_id'],
+        'full_name':      p['full_name'],
+        'position':       position,
+        'group':          group,
+        # 3yr-weighted rate stats — read directly from players table
+        'goals_60':       safe(p.get('g_60')),
+        'pts_60':         safe(p.get('pts_60')),
+        'icf_60':         round(icf / toi60, 4) if (icf is not None and toi60) else None,
+        'ixg_60':         safe(p.get('ixg_60')),
+        'xgf_pct':        safe(p.get('xgf_pct')),
+        'hdcf_pct':       safe(p.get('hdcf_pct')),
+        'a1_60':          safe(p.get('a1_60')),
+        'rapm_off':       safe(p.get('rapm_off')),
+        'rapm_def':       safe(p.get('rapm_def')),
+        'qot_impact':     safe(p.get('qot_impact')),
+        'qoc_impact':     safe(p.get('qoc_impact')),
+        'war_total':      safe(p.get('war_total')),
+        'war_ev_off':     safe(p.get('war_ev_off')),
+        'war_ev_def':     safe(p.get('war_ev_def')),
+        'war_pp':         safe(p.get('war_pp')),
+        'war_pk':         safe(p.get('war_pk')),
+        'war_shooting':   safe(p.get('war_shooting')),
+        'war_penalties':  safe(p.get('war_penalties')),
+        'off_rating':     safe(p.get('off_rating')),
+        'def_rating':     safe(p.get('def_rating')),
         'overall_rating': safe(p.get('overall_rating')),
-        'a1_60': a1_lookup.get(p['player_id']),
     })
 
 df = pd.DataFrame(rows)
