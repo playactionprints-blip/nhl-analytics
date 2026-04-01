@@ -32,7 +32,25 @@ Usage:
 """
 
 import json, os
+from pathlib import Path
 from supabase import create_client
+
+def load_env_file(path):
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+# Auto-load env vars for local runs.
+repo_root = Path(__file__).resolve().parents[1]
+load_env_file(repo_root / '.env.local')
+load_env_file(repo_root / '.env')
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL') or os.environ.get('NEXT_PUBLIC_SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY') or os.environ.get('NEXT_PUBLIC_SUPABASE_ANON_KEY')
