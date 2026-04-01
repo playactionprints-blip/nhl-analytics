@@ -9,10 +9,28 @@ import numpy as np
 import os
 import math
 from collections import defaultdict
+from pathlib import Path
 from supabase import create_client
 from sync_log import install_sync_logger
 
 install_sync_logger('ratings')
+
+def load_env_file(path):
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+# Auto-load env vars for local runs.
+repo_root = Path(__file__).resolve().parents[1]
+load_env_file(repo_root / ".env.local")
+load_env_file(repo_root / ".env")
 
 SUPABASE_URL = os.getenv('SUPABASE_URL') or os.getenv('NEXT_PUBLIC_SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY') or os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
@@ -26,7 +44,8 @@ SEASONS = ['25-26', '24-25', '23-24']
 PS_COLS = (
     'player_id,season,gp,toi,g,a1,a2,ixg,icf,tka,gva,xgf_pct,hdcf_pct,cf_pct,scf_pct,'
     'fow,fol,cf_pct_pk,toi_5v5,toi_pp,toi_pk,xgf_pp,xga_pk,penalty_minutes_drawn,penalty_minutes_taken,'
-    'rapm_off,rapm_def,rapm_off_pct,rapm_def_pct,qot_impact,qoc_impact,qot_impact_pct,qoc_impact_pct'
+    'rapm_off,rapm_def,rapm_off_pct,rapm_def_pct,qot_impact,qoc_impact,qot_impact_pct,qoc_impact_pct,'
+    'pp_rapm,pk_rapm'
 )
 
 print("Fetching player_seasons (per-season to avoid row limit)...")
@@ -142,6 +161,7 @@ for pid, season_data in seasons_by_player.items():
     w_penalty_minutes_drawn = w_penalty_minutes_taken = 0.0
     xgf_n = hdcf_n = cf_n = cf_pk_n = 0.0
     xgf_d = hdcf_d = cf_d = cf_pk_d = 0.0
+    pp_rapm_n = pp_rapm_d = pk_rapm_n = pk_rapm_d = 0.0
 
     for season_key, row in season_data.items():
         w   = SEASON_WEIGHTS.get(season_key, 0.0)
@@ -199,6 +219,15 @@ for pid, season_data in seasons_by_player.items():
         if xga_pk is not None:
             w_xga_pk += w * xga_pk
 
+        pp_rapm_v = safe(row.get('pp_rapm'))
+        if pp_rapm_v is not None:
+            pp_rapm_n += w * pp_rapm_v
+            pp_rapm_d += w
+        pk_rapm_v = safe(row.get('pk_rapm'))
+        if pk_rapm_v is not None:
+            pk_rapm_n += w * pk_rapm_v
+            pk_rapm_d += w
+
         pmd = safe(row.get('penalty_minutes_drawn'))
         if pmd is not None:
             w_penalty_minutes_drawn += w * pmd
@@ -218,6 +247,15 @@ for pid, season_data in seasons_by_player.items():
     if fow is not None and fol is not None:
         total_fo = fow + fol
         fo_pct   = (fow / total_fo * 100) if total_fo > 20 else None
+
+    # Current-season rate stats (for _current suffix columns)
+    curr_toi_min = safe(curr.get('toi')) or 0
+    curr_toi60   = curr_toi_min / 60.0 if curr_toi_min > 0 else None
+    curr_g       = safe(curr.get('g'))   or 0
+    curr_a1      = safe(curr.get('a1'))  or 0
+    curr_a2      = safe(curr.get('a2'))  or 0
+    curr_pts     = curr_g + curr_a1 + curr_a2
+    curr_ixg     = safe(curr.get('ixg')) or 0
 
     rapm  = rapm_lookup.get(pid, {})
     extra = extra_lookup.get(pid, {})
@@ -266,6 +304,14 @@ for pid, season_data in seasons_by_player.items():
         'qoc_impact':    safe(rapm.get('qoc_impact')),
         'qot_impact_pct': safe(rapm.get('qot_impact_pct')),
         'qoc_impact_pct': safe(rapm.get('qoc_impact_pct')),
+        # Weighted PP/PK RAPM from player_seasons
+        'pp_rapm_weighted': round(pp_rapm_n / pp_rapm_d, 4) if pp_rapm_d > 0 else None,
+        'pk_rapm_weighted': round(pk_rapm_n / pk_rapm_d, 4) if pk_rapm_d > 0 else None,
+        # Current-season rate stats (for _current columns)
+        'g_60_current':   round(curr_g   / curr_toi60, 4) if curr_toi60 else None,
+        'pts_60_current': round(curr_pts / curr_toi60, 4) if curr_toi60 else None,
+        'a1_60_current':  round(curr_a1  / curr_toi60, 4) if curr_toi60 else None,
+        'ixg_60_current': round(curr_ixg / curr_toi60, 4) if curr_toi60 else None,
     })
 
 df = pd.DataFrame(records)
@@ -399,41 +445,66 @@ print(f"Ratings computed for {len(final)} players")
 # ── WAR Computation ────────────────────────────────────────────────────────────
 print("\nComputing WAR...")
 
-GOALS_PER_WIN      = 6.0
-# EV_OFF_REPLACEMENT and EV_DEF_REPLACEMENT_FWD/D are computed empirically after ratings
-# (see below) so they stay calibrated to whatever alpha build_rapm.py last used.
-# RAPM_OFF_PLAYER_SHARE (1/5) and DEF_RAPM_SHARE (1/14 fwd, 1/10 D) are removed — the
-# Ridge regression already produces individual-level coefficients; the old division by
-# 5 or 14 was double-shrinkage that compressed elite players to ~20% of their real value.
-SHOOTING_XG_SHRINK = 20.0  # Shrink low-volume finishers toward league average
-NET_XG_PER_PENALTY_MIN = 0.11  # Minor-only first-pass estimate of net xG gained per penalty minute
-PP_WAR_SHRINK_TOI = 120.0  # Shrink PP on-ice results toward league average
-PK_WAR_SHRINK_TOI = 120.0  # Shrink PK on-ice results toward league average
+GOALS_PER_WIN           = 6.0
+SHOOTING_XG_SHRINK      = 20.0   # Shrink low-volume finishers toward league average
+NET_XG_PER_PENALTY_MIN  = 0.11   # Minor-only first-pass estimate of net xG gained per penalty minute
 
-pp_baseline_by_season = {}
-pk_baseline_by_season = {}
+# ── PP/PK RAPM replacement levels ─────────────────────────────────────────────
+# Compute from per-season player_seasons rows, per season.
+# PP replacement = 35th percentile of qualified PP players (>50 PP min in season).
+# PK replacement = 65th percentile of qualified PK players (>50 PK min).
+#   (With pk_rapm "lower=better", 65th pct ≈ 35% of PK players below replacement.)
+# SQL migrations needed:
+#   alter table player_seasons add column if not exists pp_rapm float8;
+#   alter table player_seasons add column if not exists pk_rapm float8;
+#   alter table players        add column if not exists g_60            float8;
+#   alter table players        add column if not exists pts_60          float8;
+#   alter table players        add column if not exists a1_60           float8;
+#   alter table players        add column if not exists ixg_60          float8;
+#   alter table players        add column if not exists g_60_current    float8;
+#   alter table players        add column if not exists pts_60_current  float8;
+#   alter table players        add column if not exists a1_60_current   float8;
+#   alter table players        add column if not exists ixg_60_current  float8;
+print("SQL migrations needed (run once in Supabase if columns don't exist):")
+print("  alter table player_seasons add column if not exists pp_rapm float8;")
+print("  alter table player_seasons add column if not exists pk_rapm float8;")
+print("  alter table players add column if not exists g_60 float8;")
+print("  alter table players add column if not exists pts_60 float8;")
+print("  alter table players add column if not exists a1_60 float8;")
+print("  alter table players add column if not exists ixg_60 float8;")
+print("  alter table players add column if not exists g_60_current float8;")
+print("  alter table players add column if not exists pts_60_current float8;")
+print("  alter table players add column if not exists a1_60_current float8;")
+print("  alter table players add column if not exists ixg_60_current float8;")
+
+pp_replacement_by_season = {}
+pk_replacement_by_season = {}
 for season_key in SEASONS:
     season_rows = [sp for sp in ps_rows if sp.get('season') == season_key]
-    pp_xgf_total = pp_toi_total = 0.0
-    pk_xga_total = pk_toi_total = 0.0
-    for sp in season_rows:
-        toi_pp_sp = safe(sp.get('toi_pp'))
-        xgf_pp_sp = safe(sp.get('xgf_pp'))
-        if toi_pp_sp and toi_pp_sp > 0 and xgf_pp_sp is not None:
-            pp_xgf_total += xgf_pp_sp
-            pp_toi_total += toi_pp_sp
-
-        toi_pk_sp = safe(sp.get('toi_pk'))
-        xga_pk_sp = safe(sp.get('xga_pk'))
-        if toi_pk_sp and toi_pk_sp > 0 and xga_pk_sp is not None:
-            pk_xga_total += xga_pk_sp
-            pk_toi_total += toi_pk_sp
-    pp_baseline_by_season[season_key] = (pp_xgf_total / pp_toi_total * 60.0) if pp_toi_total > 0 else 6.8
-    pk_baseline_by_season[season_key] = (pk_xga_total / pk_toi_total * 60.0) if pk_toi_total > 0 else 6.8
+    pp_rapm_vals = [safe(sp.get('pp_rapm')) for sp in season_rows
+                    if safe(sp.get('pp_rapm')) is not None
+                    and (safe(sp.get('toi_pp')) or 0) >= 50]
+    pk_rapm_vals = [safe(sp.get('pk_rapm')) for sp in season_rows
+                    if safe(sp.get('pk_rapm')) is not None
+                    and (safe(sp.get('toi_pk')) or 0) >= 50]
+    if len(pp_rapm_vals) >= 10:
+        pp_replacement_by_season[season_key] = float(np.percentile(pp_rapm_vals, 35))
+    else:
+        pp_replacement_by_season[season_key] = None   # no PP RAPM data yet
+    if len(pk_rapm_vals) >= 10:
+        pk_replacement_by_season[season_key] = float(np.percentile(pk_rapm_vals, 65))
+    else:
+        pk_replacement_by_season[season_key] = None   # no PK RAPM data yet
 
 for season_key in SEASONS:
-    print(f"  {season_key} PP baseline: {pp_baseline_by_season[season_key]:.2f} xGF/60")
-    print(f"  {season_key} PK baseline: {pk_baseline_by_season[season_key]:.2f} xGA/60")
+    pp_r = pp_replacement_by_season[season_key]
+    pk_r = pk_replacement_by_season[season_key]
+    print(f"  {season_key} PP replacement: "
+          + (f"{pp_r:.4f} xGF/60 (35th pct, {len([sp for sp in ps_rows if sp.get('season')==season_key and safe(sp.get('pp_rapm')) is not None and (safe(sp.get('toi_pp')) or 0)>=50])} qualified)"
+             if pp_r is not None else "N/A (no pp_rapm data — run build_rapm.py first)"))
+    print(f"  {season_key} PK replacement: "
+          + (f"{pk_r:.4f} xGA/60 (65th pct)"
+             if pk_r is not None else "N/A (no pk_rapm data — run build_rapm.py first)"))
 
 # Empirical RAPM replacement levels — computed from the qualified skater distribution
 # so WAR scales correctly regardless of which alpha build_rapm.py last selected.
@@ -445,7 +516,7 @@ for season_key in SEASONS:
 _all_rapm_off   = df['rapm_off'].dropna()
 _fwd_rapm_def   = df[df['position'] != 'D']['rapm_def'].dropna()
 _def_rapm_def   = df[df['position'] == 'D']['rapm_def'].dropna()
-ev_off_replacement     = float(_all_rapm_off.mean())              if len(_all_rapm_off) > 0 else 0.0
+ev_off_replacement     = float(np.percentile(_all_rapm_off, 35))  if len(_all_rapm_off) > 0 else 0.0
 ev_def_replacement_fwd = float(np.percentile(_fwd_rapm_def, 35))  if len(_fwd_rapm_def) > 0 else 0.0
 ev_def_replacement_d   = float(np.percentile(_def_rapm_def, 35))  if len(_def_rapm_def) > 0 else 0.0
 print(f"Empirical RAPM replacement levels:")
@@ -455,57 +526,59 @@ print(f"  EV Def (D):   {ev_def_replacement_d:.4f} xG/60  (35th pctile, defensem
 
 
 def compute_season_war_component(row, position, ev_off_replacement, ev_def_replacement_fwd, ev_def_replacement_d):
-    season_key = row.get('season')
-    rapm_off_v = safe(row.get('rapm_off'))
-    rapm_def_v = safe(row.get('rapm_def'))
-    toi_5v5 = safe(row.get('toi_5v5'))
-    toi_pp_sp = safe(row.get('toi_pp'))
-    toi_pk_sp = safe(row.get('toi_pk'))
-    xgf_pp_v = safe(row.get('xgf_pp'))
-    xga_pk_v = safe(row.get('xga_pk'))
-    g_val = safe(row.get('g'))
-    ixg_val = safe(row.get('ixg'))
-    pmd = safe(row.get('penalty_minutes_drawn')) or 0.0
-    pmt = safe(row.get('penalty_minutes_taken')) or 0.0
+    season_key  = row.get('season')
+    rapm_off_v  = safe(row.get('rapm_off'))
+    rapm_def_v  = safe(row.get('rapm_def'))
+    toi_5v5     = safe(row.get('toi_5v5'))
+    toi_pp_sp   = safe(row.get('toi_pp'))
+    toi_pk_sp   = safe(row.get('toi_pk'))
+    pp_rapm_v   = safe(row.get('pp_rapm'))
+    pk_rapm_v   = safe(row.get('pk_rapm'))
+    g_val       = safe(row.get('g'))
+    ixg_val     = safe(row.get('ixg'))
+    pmd         = safe(row.get('penalty_minutes_drawn')) or 0.0
+    pmt         = safe(row.get('penalty_minutes_taken')) or 0.0
 
-    is_defense = position == 'D'
+    is_defense      = position == 'D'
     def_replacement = ev_def_replacement_d if is_defense else ev_def_replacement_fwd
 
     ev_off = ev_def = pp_war = pk_war = shooting_war = penalties_war = None
+
     if rapm_off_v is not None and toi_5v5 and toi_5v5 > 0:
         ev_off = (rapm_off_v - ev_off_replacement) * (toi_5v5 / 60.0) / GOALS_PER_WIN
     if rapm_def_v is not None and toi_5v5 and toi_5v5 > 0:
         ev_def = (rapm_def_v - def_replacement) * (toi_5v5 / 60.0) / GOALS_PER_WIN
 
-    if toi_pp_sp and toi_pp_sp > 0 and xgf_pp_v is not None:
-        pp_rate = xgf_pp_v / toi_pp_sp * 60.0
-        pp_shrink = toi_pp_sp / (toi_pp_sp + PP_WAR_SHRINK_TOI)
-        pp_baseline = pp_baseline_by_season.get(season_key, 6.8)
-        pp_war = ((pp_rate - pp_baseline) * pp_shrink) * (toi_pp_sp / 60.0) / GOALS_PER_WIN
+    # PP WAR: RAPM-isolated (replaces on-ice xGF/60 vs baseline approach).
+    # pp_rapm (higher=better) vs replacement level (35th pct of qualified PP players).
+    pp_replacement = pp_replacement_by_season.get(season_key)
+    if pp_rapm_v is not None and toi_pp_sp and toi_pp_sp > 0 and pp_replacement is not None:
+        pp_war = (pp_rapm_v - pp_replacement) * (toi_pp_sp / 60.0) / GOALS_PER_WIN
 
-    if toi_pk_sp and toi_pk_sp > 0 and xga_pk_v is not None:
-        pk_rate = xga_pk_v / toi_pk_sp * 60.0
-        pk_shrink = toi_pk_sp / (toi_pk_sp + PK_WAR_SHRINK_TOI)
-        pk_baseline = pk_baseline_by_season.get(season_key, 6.8)
-        pk_war = ((pk_baseline - pk_rate) * pk_shrink) * (toi_pk_sp / 60.0) / GOALS_PER_WIN
+    # PK WAR: RAPM-isolated (pk_rapm lower=better convention).
+    # pk_war = (pk_replacement - pk_rapm) * toi_pk / 60 / GPW
+    # pk_replacement = 65th pct of qualified PK players.
+    pk_replacement = pk_replacement_by_season.get(season_key)
+    if pk_rapm_v is not None and toi_pk_sp and toi_pk_sp > 0 and pk_replacement is not None:
+        pk_war = (pk_replacement - pk_rapm_v) * (toi_pk_sp / 60.0) / GOALS_PER_WIN
 
     if g_val is not None and ixg_val is not None and ixg_val > 0:
-        excess_goals = g_val - ixg_val
-        shrink = ixg_val / (ixg_val + SHOOTING_XG_SHRINK)
-        shooting_war = (excess_goals * shrink) / GOALS_PER_WIN
+        excess_goals  = g_val - ixg_val
+        shrink        = ixg_val / (ixg_val + SHOOTING_XG_SHRINK)
+        shooting_war  = (excess_goals * shrink) / GOALS_PER_WIN
 
     if pmd or pmt:
         penalties_war = ((pmd - pmt) * NET_XG_PER_PENALTY_MIN) / GOALS_PER_WIN
 
     total_war = sum(v for v in (ev_off, ev_def, pp_war, pk_war, shooting_war, penalties_war) if v is not None)
     return {
-        'war_ev_off': round(ev_off, 2) if ev_off is not None else None,
-        'war_ev_def': round(ev_def, 2) if ev_def is not None else None,
-        'war_pp': round(pp_war, 2) if pp_war is not None else None,
-        'war_pk': round(pk_war, 2) if pk_war is not None else None,
-        'war_shooting': round(shooting_war, 2) if shooting_war is not None else None,
-        'war_penalties': round(penalties_war, 2) if penalties_war is not None else None,
-        'war_total': round(total_war, 2) if total_war is not None else None,
+        'war_ev_off':   round(ev_off,         2) if ev_off         is not None else None,
+        'war_ev_def':   round(ev_def,         2) if ev_def         is not None else None,
+        'war_pp':       round(pp_war,         2) if pp_war         is not None else None,
+        'war_pk':       round(pk_war,         2) if pk_war         is not None else None,
+        'war_shooting': round(shooting_war,   2) if shooting_war   is not None else None,
+        'war_penalties':round(penalties_war,  2) if penalties_war  is not None else None,
+        'war_total':    round(total_war,      2) if total_war      is not None else None,
     }
 
 
@@ -597,6 +670,30 @@ for pid, d in shoot_list[:10]:
     name, pos = name_pos.get(pid, ('?', '?'))
     print(f"  {name:<26}  {pos:>3}  {fmt_metric(d['war_shooting']):>7}  {fmt_metric(d['war_total']):>7}")
 
+# ── Top ixG/60 leaderboard (3yr weighted) — Task 2 validation ─────────────────
+print("\n--- TOP 10 ixG/60 (3-yr weighted) ---")
+_ixg_rows = final[final['ixg_60'].notna()].nlargest(10, 'ixg_60')
+for _, _r in _ixg_rows.iterrows():
+    print(f"  {_r['full_name']:<26} {_r['position']:>3}  ixG/60={_r['ixg_60']:.4f}")
+
+# ── Jackson LaCombe benchmark (Task 1 + Task 2 validation) ────────────────────
+_lc_rows = final[final['full_name'] == 'Jackson LaCombe']
+if not _lc_rows.empty:
+    _lc = _lc_rows.iloc[0]
+    _lc_pid = _lc['player_id']
+    _lc_war = war_data.get(_lc_pid, {})
+    print(f"\n--- JACKSON LaCOMBE WAR BENCHMARK ---")
+    print(f"  pp_rapm_weighted : {fmt_metric(_lc.get('pp_rapm_weighted'))}")
+    print(f"  pk_rapm_weighted : {fmt_metric(_lc.get('pk_rapm_weighted'))}")
+    print(f"  war_pp (new RAPM): {fmt_metric(_lc_war.get('war_pp'))}")
+    print(f"  war_pk (new RAPM): {fmt_metric(_lc_war.get('war_pk'))}")
+    print(f"  war_total        : {fmt_metric(_lc_war.get('war_total'))}")
+    print(f"  ixg_60 (3yr wtd) : {fmt_metric(_lc.get('ixg_60'))}")
+    print(f"  ixg_60_current   : {fmt_metric(_lc.get('ixg_60_current'))}")
+    print(f"  (current ixG/60 was previously ~97th pct; 3yr weighted should be lower)")
+else:
+    print("\n  Jackson LaCombe not found in qualified skaters")
+
 print("\nUploading season WAR components to player_seasons...")
 season_war_updated = 0
 season_war_failed = 0
@@ -665,6 +762,9 @@ for _, row in final.iterrows():
         skipped += 1
         continue
 
+    def _f(val):
+        return None if val is None or (isinstance(val, float) and (pd.isna(val) or math.isinf(val))) else float(val)
+
     data = {
         'off_rating':     None if pd.isna(off) else float(off),
         'def_rating':     None if pd.isna(dff) else float(dff),
@@ -676,6 +776,20 @@ for _, row in final.iterrows():
         'war_pk':         None,
         'war_shooting':   None,
         'war_penalties':  None,
+        # 3-year weighted production stats (Task 2 — unified timeframe)
+        'g_60':           _f(row.get('goals_60')),
+        'pts_60':         _f(row.get('pts_60')),
+        'a1_60':          _f(row.get('a1_60')),
+        'ixg_60':         _f(row.get('ixg_60')),
+        # Current-season rate stats
+        'g_60_current':   _f(row.get('g_60_current')),
+        'pts_60_current': _f(row.get('pts_60_current')),
+        'a1_60_current':  _f(row.get('a1_60_current')),
+        'ixg_60_current': _f(row.get('ixg_60_current')),
+        # 3-year weighted on-ice %s (update in place; overrides current-season values)
+        'xgf_pct':        _f(row.get('xgf_pct')),
+        'hdcf_pct':       _f(row.get('hdcf_pct')),
+        'cf_pct':         _f(row.get('cf_pct')),
     }
     war = war_data.get(row['player_id'], {})
     if war:
