@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/env python3
 """
 Compute 3-year weighted ratings from player_seasons table.
@@ -42,7 +43,7 @@ CURRENT_SEASON  = '25-26'
 # ── Fetch data ────────────────────────────────────────────────────────────────
 SEASONS = ['25-26', '24-25', '23-24']
 PS_COLS = (
-    'player_id,season,gp,toi,g,a1,a2,ixg,icf,tka,gva,xgf_pct,hdcf_pct,cf_pct,scf_pct,'
+    'player_id,season,gp,toi,g,a1,a2,ixg,ixg_own,icf,tka,gva,xgf_pct,hdcf_pct,cf_pct,scf_pct,'
     'fow,fol,cf_pct_pk,toi_5v5,toi_pp,toi_pk,xgf_pp,xga_pk,penalty_minutes_drawn,penalty_minutes_taken,'
     'rapm_off,rapm_def,rapm_off_pct,rapm_def_pct,qot_impact,qoc_impact,qot_impact_pct,qoc_impact_pct,'
     'pp_rapm,pk_rapm'
@@ -173,7 +174,9 @@ for pid, season_data in seasons_by_player.items():
         w_toi60 += w * t60
         w_g     += w * (safe(row.get('g'))   or 0)
         w_a1    += w * (safe(row.get('a1'))  or 0)
-        w_ixg   += w * (safe(row.get('ixg')) or 0)
+        # Prefer own_ixg (calibrated XGBoost model) if available, else EH ixg
+        _ixg = safe(row.get('ixg_own')) or safe(row.get('ixg')) or 0
+        w_ixg   += w * _ixg
         w_icf   += w * (safe(row.get('icf')) or 0)
         w_tka   += w * (safe(row.get('tka')) or 0)
         w_gva   += w * (safe(row.get('gva')) or 0)
@@ -255,7 +258,8 @@ for pid, season_data in seasons_by_player.items():
     curr_a1      = safe(curr.get('a1'))  or 0
     curr_a2      = safe(curr.get('a2'))  or 0
     curr_pts     = curr_g + curr_a1 + curr_a2
-    curr_ixg     = safe(curr.get('ixg')) or 0
+    # Prefer own_ixg for current-season display value if available
+    curr_ixg = safe(curr.get('ixg_own')) or safe(curr.get('ixg')) or 0
 
     rapm  = rapm_lookup.get(pid, {})
     extra = extra_lookup.get(pid, {})
@@ -264,7 +268,7 @@ for pid, season_data in seasons_by_player.items():
         'full_name':     info['full_name'],
         'position':      pos,
         'curr_g':        safe(curr.get('g')),
-        'curr_ixg':      safe(curr.get('ixg')),
+        'curr_ixg':      safe(curr.get('ixg_own')) or safe(curr.get('ixg')),
         'weighted_g':    round(w_g, 4),
         'weighted_ixg':  round(w_ixg, 4),
         'goals_60':      round(w_g    / w_toi60, 4),
@@ -535,7 +539,7 @@ def compute_season_war_component(row, position, ev_off_replacement, ev_def_repla
     pp_rapm_v   = safe(row.get('pp_rapm'))
     pk_rapm_v   = safe(row.get('pk_rapm'))
     g_val       = safe(row.get('g'))
-    ixg_val     = safe(row.get('ixg'))
+    ixg_val     = safe(row.get('ixg_own')) or safe(row.get('ixg'))
     pmd         = safe(row.get('penalty_minutes_drawn')) or 0.0
     pmt         = safe(row.get('penalty_minutes_taken')) or 0.0
 

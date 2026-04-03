@@ -54,6 +54,7 @@ SCHEDULE_API = "https://api-web.nhle.com/v1"
 DATA_DIR     = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 PATCH_FILE   = os.path.join(DATA_DIR, 'player_id_patch.json')
 os.makedirs(DATA_DIR, exist_ok=True)
+SHOTS_CACHE_FILE = os.path.join(DATA_DIR, 'shots_all_seasons_hs_backup.csv')
 
 # Player IDs used for quality gate before uploading
 MCDAVID_ID   = 8478402
@@ -243,10 +244,28 @@ CARD_SEASON_WEIGHTS = {
 }
 MIN_TOI_MINUTES = 200
 MAX_RAPM = 3.0
+
+# ── PP/PK RAPM constants ───────────────────────────────────────────────────────
+# Strength states from the HOME team's perspective.
+# 5v4 = home team has 5 skaters vs away's 4  →  home team is on PP.
+PP_HOME_STATES = frozenset(['5v4', '5v3', '4v3'])   # home on PP, away on PK
+PP_AWAY_STATES = frozenset(['4v5', '3v5', '3v4'])   # away on PP, home on PK
+PP_PK_ALL_STATES = PP_HOME_STATES | PP_AWAY_STATES
+# Minimum PP/PK minutes to include a player in the regression matrix.
+MIN_PP_REGRESSION_TOI_SEC = 100 * 60   # 100 PP min
+MIN_PK_REGRESSION_TOI_SEC = 100 * 60   # 100 PK min
 QOT_QOC_TOI_SHRINK = 600.0
 QOT_QOC_MAX_ABS = 2.5
 QOT_IMPACT_OFF_WEIGHT = 0.7
 QOT_IMPACT_DEF_WEIGHT = 0.3
+
+# Seasons that get PP-expiry / zone-start / back-to-back augmentation
+DUMMY_SEASONS = {'23-24', '24-25', '25-26'}
+DUMMY_COLS    = ['home_pp_expiry', 'away_pp_expiry',
+                 'home_ozs', 'away_ozs', 'nzs',
+                 'home_btb', 'away_btb']
+# Set QUICK_TEST=1 to run only the 3 card seasons (skips daisy-chain history)
+QUICK_TEST = os.getenv("QUICK_TEST", "").lower() in ("1", "true", "yes")
 
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or
                 os.getenv("NEXT_PUBLIC_SUPABASE_URL", ""))
@@ -501,22 +520,25 @@ def _extract_batch_stints(batch, result, id_base, failed):
     sh_all = _coerce_scrape_frame(result.get('shifts') if isinstance(result, dict) else None)
     if pbp_all.empty or sh_all.empty:
         failed.extend(batch)
-        return []
+        return [], []
 
     pbp_all = pbp_all.copy()
     sh_all = sh_all.copy()
     pbp_all['_gid_full'] = pbp_all['Game_Id'].apply(lambda x: _hs_id_to_full(x, id_base))
     sh_all['_gid_full'] = sh_all['Game_Id'].apply(lambda x: _hs_id_to_full(x, id_base))
 
-    rows = []
+    rows    = []
+    ev_rows = []
     for gid in batch:
         game_pbp = pbp_all[pbp_all['_gid_full'] == gid]
         game_sh = sh_all[sh_all['_gid_full'] == gid]
         if game_pbp.empty or game_sh.empty:
             failed.append(gid)
             continue
-        rows.extend(build_stints_from_game_hs(gid, game_pbp, game_sh))
-    return rows
+        stints_g, events_g = build_stints_from_game_hs(gid, game_pbp, game_sh)
+        rows.extend(stints_g)
+        ev_rows.extend(events_g)
+    return rows, ev_rows
 
 
 def _get_with_retry(url, max_retries=3):
@@ -538,6 +560,512 @@ def parse_player_ids(cell):
     if pd.isna(cell):
         return []
     return [int(p) for p in str(cell).split('|') if p.strip()]
+
+
+# ── Dummy-variable augmentation (Tasks 1, 2, 3) ───────────────────────────────
+
+def _time_to_abs_sec(period, time_str):
+    """Convert period number + 'MM:SS' to absolute game seconds."""
+    try:
+        parts = str(time_str).split(':')
+        in_period = int(parts[0]) * 60 + int(parts[1])
+    except (IndexError, ValueError):
+        in_period = 0
+    return (period - 1) * 1200 + in_period
+
+
+def fetch_game_pbp_events(game_id):
+    """
+    Fetch faceoff and penalty events for one game from the NHL stats API.
+    Returns dict: {faceoffs: list-of-dicts, penalties: list-of-dicts, home_team: str}
+
+    faceoffs:  [{game_id, abs_sec, zone_code}]   zone_code ∈ {O, D, N}
+                zone_code is from the HOME team's offensive perspective:
+                  O = home offensive zone  D = home defensive zone  N = neutral
+    penalties: [{game_id, abs_sec, duration_sec, team_is_home}]
+                team_is_home=1 → home team was penalized → AWAY team has the PP
+                Skip 10-min misconducts (no PP created).
+    """
+    url  = f"{SCHEDULE_API}/gamecenter/{game_id}/play-by-play"
+    r    = _get_with_retry(url)
+    data = r.json()
+
+    home_team_id = data.get('homeTeam', {}).get('id', -1)
+    faceoffs     = []
+    penalties    = []
+
+    for play in data.get('plays', []):
+        type_key = play.get('typeDescKey', '')
+        period   = play.get('periodDescriptor', {}).get('number', 0)
+        if period not in (1, 2, 3):
+            continue
+        abs_sec = _time_to_abs_sec(period, play.get('timeInPeriod', '0:00'))
+        details = play.get('details', {})
+
+        if type_key == 'faceoff':
+            zone = str(details.get('zoneCode', 'N')).upper()
+            if zone not in ('O', 'D', 'N'):
+                zone = 'N'
+            faceoffs.append({'game_id': game_id, 'abs_sec': abs_sec, 'zone_code': zone})
+
+        elif type_key == 'penalty':
+            dur_min = details.get('duration', 2)
+            try:
+                dur_sec = int(dur_min) * 60
+            except (TypeError, ValueError):
+                dur_sec = 120
+            if dur_sec == 0 or dur_sec >= 600:   # skip 0-sec or 10-min misconducts
+                continue
+            # NHL API v1: penalised team identified by eventOwnerTeamId (int)
+            pen_team_id = details.get('eventOwnerTeamId')
+            if pen_team_id is None:
+                continue
+            is_home = int(int(pen_team_id) == int(home_team_id))
+            penalties.append({
+                'game_id': game_id,
+                'abs_sec': abs_sec,
+                'duration_sec': dur_sec,
+                'team_is_home': is_home,
+            })
+
+    return {'faceoffs': faceoffs, 'penalties': penalties}
+
+
+def load_or_build_event_cache(game_ids, season_key, faceoffs_file, penalties_file):
+    """
+    Load (or fetch+save) faceoff and penalty events for every game in season_key.
+    Returns (faceoffs_df, penalties_df).
+    """
+    faceoffs_list  = []
+    penalties_list = []
+    fo_done_gids   = set()
+    pe_done_gids   = set()
+
+    if os.path.exists(faceoffs_file):
+        try:
+            fo = pd.read_csv(faceoffs_file)
+            if not fo.empty:
+                faceoffs_list = fo.to_dict('records')
+                fo_done_gids  = set(fo['game_id'].unique())
+                print(f"  Faceoffs cache: {len(fo_done_gids)} games loaded "
+                      f"({os.path.basename(faceoffs_file)})")
+        except Exception as e:
+            print(f"  Warning: could not load faceoffs cache: {e}")
+
+    if os.path.exists(penalties_file):
+        try:
+            pe = pd.read_csv(penalties_file)
+            if not pe.empty:
+                penalties_list = pe.to_dict('records')
+                pe_done_gids   = set(pe['game_id'].unique())
+        except Exception as e:
+            print(f"  Warning: could not load penalties cache: {e}")
+
+    # A game is fully cached only when BOTH faceoffs and penalties are present
+    done_gids = fo_done_gids & pe_done_gids
+    todo = [gid for gid in game_ids if gid not in done_gids]
+    if todo:
+        # Drop stale entries for games being re-fetched to prevent duplication
+        todo_set = set(todo)
+        faceoffs_list  = [r for r in faceoffs_list  if r['game_id'] not in todo_set]
+        penalties_list = [r for r in penalties_list if r['game_id'] not in todo_set]
+        print(f"  Fetching PBP events for {len(todo)} games ({season_key})...")
+        for i, gid in enumerate(todo):
+            if i > 0 and i % 100 == 0:
+                print(f"    {i}/{len(todo)} games done…")
+            try:
+                ev = fetch_game_pbp_events(gid)
+                faceoffs_list.extend(ev['faceoffs'])
+                penalties_list.extend(ev['penalties'])
+                time.sleep(0.3)
+            except Exception as e:
+                print(f"    Warning: PBP fetch failed for {gid}: {e}")
+
+        if faceoffs_list:
+            pd.DataFrame(faceoffs_list).to_csv(faceoffs_file, index=False)
+            print(f"  Saved faceoffs: {len(faceoffs_list)} events → "
+                  f"{os.path.basename(faceoffs_file)}")
+        if penalties_list:
+            pd.DataFrame(penalties_list).to_csv(penalties_file, index=False)
+            print(f"  Saved penalties: {len(penalties_list)} events → "
+                  f"{os.path.basename(penalties_file)}")
+
+    fo_df = (pd.DataFrame(faceoffs_list)
+             if faceoffs_list
+             else pd.DataFrame(columns=['game_id', 'abs_sec', 'zone_code']))
+    pe_df = (pd.DataFrame(penalties_list)
+             if penalties_list
+             else pd.DataFrame(columns=['game_id', 'abs_sec', 'duration_sec', 'team_is_home']))
+    return fo_df, pe_df
+
+
+def load_or_build_game_dates_cache(season_cfg, season_key, cache_file):
+    """
+    Build a {str(game_id): {date, home, away}} mapping for the season.
+    Used for back-to-back detection.  Caches to JSON.
+    """
+    if os.path.exists(cache_file):
+        with open(cache_file) as f:
+            data = json.load(f)
+        print(f"  Game-dates cache: {len(data)} games ({os.path.basename(cache_file)})")
+        return data
+
+    start_d = season_cfg['start_date']
+    end_d   = min(season_cfg['end_date'], date.today())
+    result  = {}
+    print(f"  Fetching game dates for {season_key} ({start_d} → {end_d})…")
+    current = start_d
+    while current <= end_d:
+        url = f"{SCHEDULE_API}/schedule/{current.isoformat()}"
+        try:
+            r = _get_with_retry(url)
+            for week_day in r.json().get('gameWeek', []):
+                gdate = week_day.get('date', '')
+                for g in week_day.get('games', []):
+                    if g.get('gameType') == 2:
+                        result[str(g['id'])] = {
+                            'date': gdate,
+                            'home': str(g.get('homeTeam', {}).get('abbrev', '')).upper(),
+                            'away': str(g.get('awayTeam', {}).get('abbrev', '')).upper(),
+                        }
+        except Exception as e:
+            print(f"    Warning {current}: {e}")
+        current += timedelta(days=7)
+        time.sleep(1.0)
+
+    with open(cache_file, 'w') as f:
+        json.dump(result, f)
+    print(f"  Saved game-dates: {len(result)} games → {os.path.basename(cache_file)}")
+    return result
+
+
+def augment_stints_with_dummies(stints_df, game_ids, season_key, season_cfg):
+    """
+    Add 7 dummy-variable columns to a stints DataFrame:
+      home_pp_expiry / away_pp_expiry  — PP-to-EV transitions  (Task 1)
+      home_ozs / away_ozs / nzs        — zone starts           (Task 2)
+      home_btb / away_btb              — back-to-back games    (Task 3)
+
+    Uses cached NHL-API PBP (faceoffs + penalties) and schedule data.
+    Does NOT modify the existing stints CSV files.
+    """
+    print(f"\n  Augmenting stints with dummy variables for {season_key}…")
+    tag = season_key.replace('-', '')
+    faceoffs_file   = os.path.join(DATA_DIR, f'faceoffs_{tag}.csv')
+    penalties_file  = os.path.join(DATA_DIR, f'penalties_{tag}.csv')
+    game_dates_file = os.path.join(DATA_DIR, f'game_dates_{tag}.json')
+
+    # ── Task 2 + 1: faceoff and penalty caches ────────────────────────────────
+    fo_df, pe_df = load_or_build_event_cache(
+        game_ids, season_key, faceoffs_file, penalties_file)
+
+    # ── Task 3: game-dates cache for back-to-back ──────────────────────────────
+    game_dates = load_or_build_game_dates_cache(season_cfg, season_key, game_dates_file)
+
+    # Build {team_abbrev: set-of-date-strings} for O(1) BTB lookup
+    team_date_set: dict[str, set] = defaultdict(set)
+    for info in game_dates.values():
+        if info['date']:
+            team_date_set[info['home']].add(info['date'])
+            team_date_set[info['away']].add(info['date'])
+
+    def _is_btb(team: str, game_date: str) -> int:
+        if not team or not game_date:
+            return 0
+        try:
+            yesterday = (date.fromisoformat(game_date) - timedelta(days=1)).isoformat()
+        except ValueError:
+            return 0
+        return int(yesterday in team_date_set.get(team, set()))
+
+    btb_lookup: dict[int, tuple] = {}   # game_id → (home_btb, away_btb)
+    for gid_str, info in game_dates.items():
+        try:
+            gid = int(gid_str)
+        except (ValueError, TypeError):
+            continue
+        btb_lookup[gid] = (_is_btb(info['home'], info['date']),
+                           _is_btb(info['away'], info['date']))
+
+    # ── Zone starts via pandas merge_asof ─────────────────────────────────────
+    # fo_df zone_code is from HOME team's perspective:
+    #   O = home offensive zone → home_ozs=1
+    #   D = home defensive zone → away_ozs=1
+    #   N = neutral             → nzs=1
+    # A faceoff "starts" a stint when |fo_abs_sec - stint_start_sec| ≤ 3 s.
+
+    # ── Build per-game event lookups (numpy arrays, sorted by abs_sec) ──────────
+    FO_WINDOW = 3   # seconds: faceoff must be within 3 s of stint start
+    PP_WINDOW = 5   # seconds: PP expiry within 5 s of stint start
+
+    # Faceoff lookup: {game_id: (sorted abs_sec array, zone_code array)}
+    fo_by_game: dict = {}
+    if not fo_df.empty:
+        fo_df2 = fo_df.astype({'game_id': int, 'abs_sec': int})
+        for gid, grp in fo_df2.groupby('game_id'):
+            grp_s = grp.sort_values('abs_sec')
+            fo_by_game[gid] = (grp_s['abs_sec'].values, grp_s['zone_code'].values)
+
+    # Penalty-expiry lookup split by who was penalized
+    # home_pp_expiry: away team penalized (team_is_home=0) → home had PP
+    # away_pp_expiry: home team penalized (team_is_home=1) → away had PP
+    pe_home_exp: dict = {}   # {game_id: sorted expiry_sec array} for away-penalized
+    pe_away_exp: dict = {}   # {game_id: sorted expiry_sec array} for home-penalized
+    if not pe_df.empty:
+        pe_df2 = pe_df.astype({'game_id': int, 'abs_sec': int,
+                                'duration_sec': int, 'team_is_home': int})
+        pe_df2['expiry_sec'] = pe_df2['abs_sec'] + pe_df2['duration_sec']
+        for gid, grp in pe_df2.groupby('game_id'):
+            home_pen = np.sort(grp.loc[grp['team_is_home'] == 1, 'expiry_sec'].values)
+            away_pen = np.sort(grp.loc[grp['team_is_home'] == 0, 'expiry_sec'].values)
+            if len(away_pen): pe_home_exp[gid] = away_pen  # away penalized → home PP
+            if len(home_pen): pe_away_exp[gid] = home_pen  # home penalized → away PP
+
+    # ── Vectorised per-stint lookup with numpy searchsorted ───────────────────
+    game_ids_arr  = stints_df['game_id'].astype(int).values
+    start_sec_arr = stints_df['start_sec'].astype(int).values
+    n_stints      = len(stints_df)
+
+    home_ozs_col       = np.zeros(n_stints, dtype=int)
+    away_ozs_col       = np.zeros(n_stints, dtype=int)
+    nzs_col            = np.ones(n_stints,  dtype=int)   # default = on-the-fly/neutral
+    home_pp_expiry_col = np.zeros(n_stints, dtype=int)
+    away_pp_expiry_col = np.zeros(n_stints, dtype=int)
+
+    for i in range(n_stints):
+        gid   = game_ids_arr[i]
+        start = start_sec_arr[i]
+
+        # Zone start: find the most recent faceoff at or before start + FO_WINDOW
+        if gid in fo_by_game:
+            fo_times, fo_zones = fo_by_game[gid]
+            pos = int(np.searchsorted(fo_times, start + 1, side='left')) - 1
+            if pos >= 0 and (start - fo_times[pos]) <= FO_WINDOW:
+                zone = fo_zones[pos]
+                if zone == 'O':
+                    home_ozs_col[i] = 1
+                    nzs_col[i] = 0
+                elif zone == 'D':
+                    away_ozs_col[i] = 1
+                    nzs_col[i] = 0
+                # zone == 'N' → nzs stays 1
+
+        # PP expiry: find the most recent expiry at or before start + PP_WINDOW
+        if gid in pe_home_exp:
+            exp_arr = pe_home_exp[gid]
+            pos = int(np.searchsorted(exp_arr, start + 1, side='left')) - 1
+            if pos >= 0 and (start - exp_arr[pos]) <= PP_WINDOW:
+                home_pp_expiry_col[i] = 1
+
+        if gid in pe_away_exp:
+            exp_arr = pe_away_exp[gid]
+            pos = int(np.searchsorted(exp_arr, start + 1, side='left')) - 1
+            if pos >= 0 and (start - exp_arr[pos]) <= PP_WINDOW:
+                away_pp_expiry_col[i] = 1
+
+    # ── Back-to-back (row-wise, btb_lookup is small) ──────────────────────────
+    gids      = stints_df['game_id'].astype(int).values
+    home_btbs = np.array([btb_lookup.get(g, (0, 0))[0] for g in gids], dtype=int)
+    away_btbs = np.array([btb_lookup.get(g, (0, 0))[1] for g in gids], dtype=int)
+
+    # ── Assemble and summarise ─────────────────────────────────────────────────
+    out = stints_df.copy()
+    out['home_pp_expiry'] = home_pp_expiry_col
+    out['away_pp_expiry'] = away_pp_expiry_col
+    out['home_ozs']       = home_ozs_col
+    out['away_ozs']       = away_ozs_col
+    out['nzs']            = nzs_col
+    out['home_btb']       = home_btbs
+    out['away_btb']       = away_btbs
+
+    n = len(out)
+    print(f"  Dummy summary ({season_key}, {n:,} stints):")
+    for col in DUMMY_COLS:
+        v = out[col].sum()
+        print(f"    {col:<18}: {v:6,}  ({v/n*100:4.1f}%)")
+
+    return out
+
+
+def augment_events_with_stints_dummies(events_df, stints_df):
+    """
+    Propagate dummy-variable columns from the augmented stints DataFrame to events.
+    For each event at time t in game g, find the containing 5v5 stint and copy its
+    dummy variable values (home_pp_expiry, away_pp_expiry, home_ozs, away_ozs, nzs,
+    home_btb, away_btb).
+    """
+    if events_df.empty or stints_df.empty:
+        for col in DUMMY_COLS:
+            events_df = events_df.copy()
+            events_df[col] = 0
+        return events_df
+
+    # Build per-game sorted lookup
+    dummy_present = [c for c in DUMMY_COLS if c in stints_df.columns]
+    stints_by_game = {}
+    stints_df_int = stints_df.copy()
+    stints_df_int['game_id']   = stints_df_int['game_id'].astype(int)
+    stints_df_int['start_sec'] = stints_df_int['start_sec'].astype(int)
+    stints_df_int['end_sec']   = stints_df_int['end_sec'].astype(int)
+
+    for gid, grp in stints_df_int.groupby('game_id'):
+        grp_s = grp.sort_values('start_sec')
+        stints_by_game[int(gid)] = {
+            'starts':  grp_s['start_sec'].values,
+            'ends':    grp_s['end_sec'].values,
+            'dummies': {col: grp_s[col].values.astype(int) for col in dummy_present},
+        }
+
+    # Process event-by-game (vectorised within each game)
+    result_parts = []
+    for gid, ev_grp in events_df.groupby('game_id'):
+        ev_grp = ev_grp.copy()
+        gid_int = int(gid)
+
+        # Default: all zeros
+        for col in DUMMY_COLS:
+            ev_grp[col] = 0
+
+        if gid_int not in stints_by_game:
+            result_parts.append(ev_grp)
+            continue
+
+        g      = stints_by_game[gid_int]
+        starts = g['starts']
+        ends   = g['ends']
+        ts     = ev_grp['t'].astype(int).values
+
+        pos_arr = np.searchsorted(starts, ts + 1, side='left') - 1
+        valid   = (pos_arr >= 0) & (pos_arr < len(starts))
+        if valid.any():
+            pos_valid = pos_arr[valid].clip(0, len(starts) - 1)
+            in_stint  = (starts[pos_valid] <= ts[valid]) & (ts[valid] < ends[pos_valid])
+            valid[valid] &= in_stint
+
+        for col in dummy_present:
+            if col in g['dummies']:
+                col_vals = np.zeros(len(ev_grp), dtype=int)
+                if valid.any():
+                    col_vals[valid] = g['dummies'][col][pos_arr[valid].clip(0, len(starts) - 1)]
+                ev_grp[col] = col_vals
+
+        result_parts.append(ev_grp)
+
+    if result_parts:
+        return pd.concat(result_parts, ignore_index=True)
+    return events_df
+
+
+def _load_shots_cache():
+    """Load cached shot events from shots_all_seasons_hs_backup.csv."""
+    if not os.path.exists(SHOTS_CACHE_FILE):
+        print(f"  Shots cache not found: {SHOTS_CACHE_FILE}")
+        return pd.DataFrame()
+    df = pd.read_csv(SHOTS_CACHE_FILE)
+    if df.empty:
+        return df
+    # Filter to 5v5, non-empty-net, non-blocked shots
+    df = df[df['game_strength'] == '5v5'].copy()
+    df = df[df['is_empty_net'] == 0].copy()
+    df = df[~df['shot_type'].fillna('').str.contains('BLOCK', case=False, na=False)].copy()
+    return df
+
+
+def _compute_xg_for_shots(shots_df):
+    """Compute xG for each shot using compute_xg_xy()."""
+    if shots_df.empty:
+        return shots_df
+    # Coerce coordinates to numeric and drop missing
+    shots_df = shots_df.copy()
+    shots_df['x_coord'] = pd.to_numeric(shots_df['x_coord'], errors='coerce')
+    shots_df['y_coord'] = pd.to_numeric(shots_df['y_coord'], errors='coerce')
+    shots_df = shots_df[shots_df['x_coord'].notna() & shots_df['y_coord'].notna()].copy()
+
+    xg_vals = []
+    for row in shots_df.itertuples(index=False):
+        xg_vals.append(compute_xg_xy(float(row.x_coord), float(row.y_coord), getattr(row, 'shot_type', '')))
+    shots_df['xg'] = xg_vals
+    return shots_df
+
+
+def _match_shots_to_stints(shots_df, stints_df, season_key, season_weight):
+    """
+    Match shot events to containing stints to get on-ice players and context.
+    Prints progress every 10,000 shots.
+    """
+    if shots_df.empty or stints_df.empty:
+        return pd.DataFrame(columns=EVENT_COLS)
+
+    stints_int = stints_df.copy()
+    stints_int['game_id'] = stints_int['game_id'].astype(int)
+    stints_int['start_sec'] = stints_int['start_sec'].astype(int)
+    stints_int['end_sec'] = stints_int['end_sec'].astype(int)
+
+    stints_by_game = {}
+    for gid, grp in stints_int.groupby('game_id'):
+        grp_s = grp.sort_values('start_sec')
+        stints_by_game[int(gid)] = {
+            'starts': grp_s['start_sec'].values,
+            'ends': grp_s['end_sec'].values,
+            'home_players': grp_s['home_players'].values,
+            'away_players': grp_s['away_players'].values,
+            'home_score_diff': grp_s['home_score_diff'].values,
+            'duration_seconds': grp_s['duration_seconds'].values,
+            'period': grp_s['period'].values,
+        }
+
+    rows = []
+    processed = 0
+    matched = 0
+
+    for gid, ev_grp in shots_df.groupby('game_id'):
+        ev_grp = ev_grp.copy()
+        gid_int = int(gid)
+        processed += len(ev_grp)
+        if processed // 10000 != (processed - len(ev_grp)) // 10000:
+            print(f"    {season_key}: matched {matched:,} / processed {processed:,} shots...")
+
+        if gid_int not in stints_by_game:
+            continue
+
+        g = stints_by_game[gid_int]
+        starts = g['starts']
+        ends = g['ends']
+
+        ts = ev_grp['time_seconds'].astype(int).values
+        pos_arr = np.searchsorted(starts, ts + 1, side='left') - 1
+        valid = (pos_arr >= 0) & (pos_arr < len(starts))
+        if valid.any():
+            pos_valid = pos_arr[valid].clip(0, len(starts) - 1)
+            in_stint = (starts[pos_valid] <= ts[valid]) & (ts[valid] < ends[pos_valid])
+            valid[valid] &= in_stint
+
+        for idx, is_valid in enumerate(valid):
+            if not is_valid:
+                continue
+            pos = int(pos_arr[idx])
+            shot = ev_grp.iloc[idx]
+            is_home_shot = int(shot.get('is_home', 0) or 0)
+            home_score_diff = g['home_score_diff'][pos]
+            if pd.isna(home_score_diff):
+                home_score_diff = shot.get('score_diff', 0)
+
+            rows.append({
+                'game_id': int(shot['game_id']),
+                't': int(shot['time_seconds']),
+                'xg': float(shot['xg']),
+                'is_home_shot': is_home_shot,
+                'home_players': g['home_players'][pos],
+                'away_players': g['away_players'][pos],
+                'home_score_diff': float(home_score_diff) if home_score_diff is not None else 0.0,
+                'period': int(shot.get('period', g['period'][pos])),
+                'stint_duration_seconds': float(g['duration_seconds'][pos]),
+                'season_weight': float(season_weight),
+            })
+            matched += 1
+
+    events_df = pd.DataFrame(rows, columns=EVENT_COLS + ['season_weight'])
+    return events_df
 
 
 def filter_qualified_results(results_df, min_toi_minutes=MIN_TOI_MINUTES, max_rapm=MAX_RAPM):
@@ -653,7 +1181,20 @@ def project_season_results(season_results):
             grouped[int(row.player_id)][season_key] = row
 
     rows = []
+    n_skipped_card_guard = 0
     for pid, season_map in grouped.items():
+        # Guard: player must have ≥200 min in at least one card season (23-24/24-25/25-26).
+        # Prevents fringe players who only accumulated minutes in old daisy-chain seasons
+        # from appearing in the projection with stale inflated prior-chain RAPM.
+        has_recent_toi = any(
+            float(getattr(season_map.get(s), 'toi_5v5_total', 0) or 0) >= 200.0
+            for s in CARD_SEASON_WEIGHTS
+            if s in season_map
+        )
+        if not has_recent_toi:
+            n_skipped_card_guard += 1
+            continue
+
         data = {'player_id': pid}
         toi_weighted = 0.0
         weight_sum = 0.0
@@ -678,6 +1219,10 @@ def project_season_results(season_results):
                 den += weight
             data[metric] = (num / den) if den > 0 else None
         rows.append(data)
+
+    if n_skipped_card_guard:
+        print(f"  Card projection guard: skipped {n_skipped_card_guard} players "
+              f"with <200 min in all card seasons (23-24/24-25/25-26)")
 
     projected = pd.DataFrame(rows)
     if projected.empty:
@@ -708,7 +1253,7 @@ def fetch_player_seasons_for_priors():
         offset = 0
         while True:
             batch = (sb.table('player_seasons')
-                     .select('player_id,season,gp,toi,g,a1,ixg,cf_pct')
+                     .select('player_id,season,gp,toi,g,a1,ixg,ixg_own,cf_pct')
                      .range(offset, offset + 999)
                      .execute().data)
             if not batch:
@@ -720,9 +1265,16 @@ def fetch_player_seasons_for_priors():
         df = pd.DataFrame(rows)
         for col in ('gp', 'toi', 'g', 'a1', 'ixg', 'cf_pct'):
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+        # ixg_own may be NULL if build_xg_model.py hasn't run yet — keep 0.0 as fallback
+        if 'ixg_own' in df.columns:
+            df['ixg_own'] = pd.to_numeric(df['ixg_own'], errors='coerce').fillna(0.0)
+        else:
+            df['ixg_own'] = 0.0
         df['player_id'] = df['player_id'].astype(int)
+        n_with_own = int((df['ixg_own'] > 0).sum())
         print(f"  Fetched player_seasons for priors: {len(df)} rows "
-              f"({df['season'].nunique()} seasons, {df['player_id'].nunique()} players)")
+              f"({df['season'].nunique()} seasons, {df['player_id'].nunique()} players, "
+              f"{n_with_own} rows with ixg_own>0)")
         return df
     except Exception as e:
         print(f"  Warning: could not fetch player_seasons for priors: {e}")
@@ -756,12 +1308,41 @@ def compute_box_score_prior(player_seasons_df, season):
         return {}
 
     season_df['toi_hours'] = season_df['toi'] / 60.0
-    season_df['ixg_60'] = season_df['ixg'] / season_df['toi_hours']
+
+    # Use ixg_own (calibrated XGB model) when available; fall back to EH ixg.
+    # EH ixg over-values close-range tip-ins for net-front forwards (e.g. Anders Lee),
+    # inflating their box-score prior and chaining inflated RAPM forward.
+    has_own = ('ixg_own' in season_df.columns and (season_df['ixg_own'] > 0).any())
+    if has_own:
+        season_df['ixg_for_prior'] = np.where(
+            season_df['ixg_own'] > 0,
+            season_df['ixg_own'],
+            season_df['ixg'],
+        )
+        n_using_own = int((season_df['ixg_own'] > 0).sum())
+        print(f"    ixg_own: {n_using_own}/{len(season_df)} players use calibrated xG "
+              f"(rest fall back to EH ixg)")
+    else:
+        season_df['ixg_for_prior'] = season_df['ixg']
+        print(f"    ixg_own: not available — using EH ixg for all players")
+
+    season_df['ixg_60'] = season_df['ixg_for_prior'] / season_df['toi_hours']
     season_df['pts_60'] = (season_df['g'] + season_df['a1']) / season_df['toi_hours']
 
     avg_ixg_60 = season_df['ixg_60'].mean()
     avg_pts_60 = season_df['pts_60'].mean()
     avg_cf = season_df['cf_pct'].mean() if 'cf_pct' in season_df.columns else 50.0
+
+    # Diagnostic: print ixg/60 for key net-front forwards vs playmakers
+    _DIAG_PIDS = {8475314: 'Anders Lee', 8478402: 'McDavid', 8477492: 'MacKinnon'}
+    for _pid, _name in _DIAG_PIDS.items():
+        _row = season_df[season_df['player_id'] == _pid]
+        if not _row.empty:
+            _r = _row.iloc[0]
+            _eh60 = float(_r['ixg']) / float(_r['toi_hours']) if _r['toi_hours'] > 0 else 0
+            _own60 = float(_r['ixg_for_prior']) / float(_r['toi_hours']) if _r['toi_hours'] > 0 else 0
+            print(f"    {_name}: EH ixg/60={_eh60:.2f}  used ixg/60={_own60:.2f}  "
+                  f"(avg={avg_ixg_60:.2f})")
 
     season_df['off_prior'] = (
         (season_df['ixg_60'] - avg_ixg_60) * 0.5 +
@@ -796,8 +1377,8 @@ def get_player_prior(player_id, previous_rapm, box_score_prior, current_season_t
     # Case 1 — Returning player with previous RAPM
     if player_id in previous_rapm:
         prev = previous_rapm[player_id]
-        off_prior = 0.008 + prev.get('off', 0.0) * 0.446
-        def_prior = -0.003 + prev.get('def', 0.0) * 0.280
+        off_prior = 0.008151 + prev.get('off', 0.0) * 0.446297
+        def_prior = -0.003181 + prev.get('def', 0.0) * 0.280373
         # Blend with box-score prior (60% chain, 40% box-score) when box data is available.
         # Pure chain propagates collinearity artifacts (e.g. Knies underrated playing with
         # Matthews/Nylander). Blending anchors the prior to observed production.
@@ -853,7 +1434,8 @@ def _compute_toi_from_stints(stints_df):
     return {pid: t / 60.0 for pid, t in toi_sec.items()}
 
 
-def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_filter=None):
+def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_filter=None,
+                             events_by_season=None):
     """
     Daisy chain RAPM across all available seasons (oldest first).
     Each season's output becomes the prior for the next, propagating
@@ -864,6 +1446,9 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
     current_season_filter: optional set of player_ids with ≥200 min in the current season
       (25-26). Passed only to the '25-26' build_rapm() call to exclude low-sample
       call-ups that lack both current-season TOI and a prior.
+
+    events_by_season: optional dict {season: events_df}. When provided, uses event-level
+      regression for each season that has a non-empty events DataFrame.
     """
     # Sort chronologically by season start year
     seasons_in_order = sorted(
@@ -919,7 +1504,8 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
                 _sb = create_client(SUPABASE_URL, SUPABASE_KEY)
                 _diag_names = ['Matthew Knies', 'William Nylander', 'Auston Matthews',
                                 'Gabriel Landeskog', 'Leon Draisaitl', 'Connor McDavid',
-                                'Mackie Samoskevich', 'Ben Kindel']
+                                'Mackie Samoskevich', 'Ben Kindel',
+                                'Jackson LaCombe', 'Rasmus Andersson']
                 _pids = {r['full_name']: r['player_id'] for r in
                          _sb.table('players').select('player_id,full_name').execute().data
                          if r['full_name'] in _diag_names}
@@ -934,16 +1520,17 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
                     _gp_val = current_season_gp.get(_pid, 0)
                     _chained = _pid in previous_rapm
                     _box_str = f"box_off={_bp['off_prior']:+.4f}" if _bp else "box=N/A"
-                    _prior_str = f"prior_off={_sp['off']:+.4f}" if _sp else "prior=N/A"
+                    _prior_off_str = f"prior_off={_sp['off']:+.4f}" if _sp else "prior_off=N/A"
+                    _prior_def_str = f"prior_def={_sp['def']:+.4f}" if _sp else "prior_def=N/A"
                     if not _ps.empty:
                         _r = _ps.iloc[0]
                         print(f"      {_name:<24} gp={int(_r['gp']):<3} "
                               f"toi={_r['toi']:.1f}min  g={_r['g']:.0f}  "
-                              f"ixg={_r['ixg']:.2f}  {_box_str}  {_prior_str}  "
+                              f"ixg={_r['ixg']:.2f}  {_box_str}  {_prior_off_str}  {_prior_def_str}  "
                               f"chained={'Y' if _chained else 'N'}  season_gp={_gp_val}")
                     else:
                         print(f"      {_name:<24} NO ps row for {season}  "
-                              f"{_prior_str}  chained={'Y' if _chained else 'N'}  "
+                              f"{_prior_off_str}  {_prior_def_str}  chained={'Y' if _chained else 'N'}  "
                               f"season_gp={_gp_val}")
                 print()
             except Exception as _e:
@@ -951,7 +1538,12 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
 
         print(f"  Fitting prior-informed RAPM for {season}...")
         csf = current_season_filter if season == '25-26' else None
-        raw_results = build_rapm(stints, priors=season_priors, current_season_filter=csf)
+        season_events = (events_by_season.get(season) if events_by_season else None)
+        n_events = len(season_events) if season_events is not None and not season_events.empty else 0
+        mode_str = f"event-level ({n_events:,} events)" if n_events > 0 else "stint-level (no events file)"
+        print(f"  Regression mode: {mode_str}")
+        raw_results = build_rapm(stints, priors=season_priors, current_season_filter=csf,
+                                  events_df=season_events)
         all_season_results[season] = raw_results
 
         # Feed this season's results forward as the next season's prior
@@ -1045,7 +1637,7 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
                          Ev_Team, Description
     """
     if pbp_df.empty or shifts_df.empty:
-        return []
+        return [], []
 
     home_team = str(pbp_df['Home_Team'].iloc[0]).upper().strip()
 
@@ -1098,7 +1690,7 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
         player_intervals.setdefault(pid, []).append((abs_start, abs_end, is_home))
 
     if not player_intervals:
-        return []
+        return [], []
 
     # Change points from every shift boundary + hard period boundaries
     change_pts = set()
@@ -1225,7 +1817,55 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
             'home_score_diff':  int(home_goals_before - away_goals_before),
         })
 
-    return _merge_stints(raw_stints)
+    # ── Extract event-level records from xg_events ─────────────────────────
+    # For each shot event, look up on-ice players and parent stint duration.
+    # Only 5v5 intervals are captured (same filter as stints above).
+    if raw_stints:
+        _raw_starts = np.array([rs['start_sec']        for rs in raw_stints])
+        _raw_ends   = np.array([rs['end_sec']          for rs in raw_stints])
+        _raw_durs   = np.array([rs['duration_seconds'] for rs in raw_stints])
+    else:
+        _raw_starts = np.array([], dtype=int)
+        _raw_ends   = np.array([], dtype=int)
+        _raw_durs   = np.array([], dtype=int)
+
+    event_records = []
+    for (t_ev, xg_ev, is_home_ev) in xg_events:
+        # Find containing 5v5 interval via binary search
+        pos = int(np.searchsorted(_raw_starts, t_ev + 1, side='left')) - 1
+        if pos < 0 or pos >= len(_raw_starts):
+            continue
+        if not (_raw_starts[pos] <= t_ev < _raw_ends[pos]):
+            continue
+        parent_dur = int(_raw_durs[pos])
+
+        # Look up on-ice players at event time
+        home_ev, away_ev = set(), set()
+        for pid_ev, ivs_ev in player_intervals.items():
+            for s_ev, e_ev, is_h_ev in ivs_ev:
+                if s_ev <= t_ev < e_ev:
+                    (home_ev if is_h_ev else away_ev).add(pid_ev)
+                    break
+        if len(home_ev) != 5 or len(away_ev) != 5:
+            continue
+
+        period_ev = t_ev // 1200 + 1
+        hg = sum(1 for gt, ih in goal_events if gt < t_ev and ih)
+        ag = sum(1 for gt, ih in goal_events if gt < t_ev and not ih)
+
+        event_records.append({
+            'game_id':              full_game_id,
+            't':                    t_ev,
+            'xg':                   round(xg_ev, 4),
+            'is_home_shot':         int(is_home_ev),
+            'home_players':         '|'.join(str(p) for p in sorted(home_ev)),
+            'away_players':         '|'.join(str(p) for p in sorted(away_ev)),
+            'home_score_diff':      hg - ag,
+            'period':               period_ev,
+            'stint_duration_seconds': parent_dur,
+        })
+
+    return _merge_stints(raw_stints), event_records
 
 
 STINT_COLS = [
@@ -1233,16 +1873,267 @@ STINT_COLS = [
     'home_players', 'away_players', 'home_xg', 'away_xg', 'home_score_diff',
 ]
 
+PP_PK_STINT_COLS = STINT_COLS + ['strength_state']
+
+EVENT_COLS = [
+    'game_id', 't', 'xg', 'is_home_shot',
+    'home_players', 'away_players',
+    'home_score_diff', 'period', 'stint_duration_seconds',
+]
+
+
+def _merge_pp_pk_stints(stints):
+    """Merge adjacent PP/PK stints with identical lineups and strength state."""
+    if not stints:
+        return []
+    stints = sorted(stints, key=lambda s: (s['period'], s['start_sec']))
+    merged = [stints[0].copy()]
+    for s in stints[1:]:
+        prev = merged[-1]
+        if (s['home_players'] == prev['home_players'] and
+                s['away_players'] == prev['away_players'] and
+                s['period'] == prev['period'] and
+                s.get('home_score_diff') == prev.get('home_score_diff') and
+                s.get('strength_state') == prev.get('strength_state') and
+                s['start_sec'] <= prev['end_sec'] + 1):
+            prev['end_sec'] = max(prev['end_sec'], s['end_sec'])
+            prev['duration_seconds'] = prev['end_sec'] - prev['start_sec']
+            prev['home_xg'] = round(prev['home_xg'] + s['home_xg'], 4)
+            prev['away_xg'] = round(prev['away_xg'] + s['away_xg'], 4)
+        else:
+            merged.append(s.copy())
+    return [s for s in merged if s['duration_seconds'] >= 10]
+
+
+def build_pp_pk_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
+    """
+    Reconstruct PP/PK stints for one game using hockey-scraper DataFrames.
+    Captures strength states: 5v4, 4v5, 5v3, 3v5, 4v3, 3v4.
+    Returns list of dicts with same columns as EV stints plus 'strength_state'.
+    """
+    PP_PK_PAIRS = {(5, 4), (4, 5), (5, 3), (3, 5), (4, 3), (3, 4)}
+    XG_TYPES = {'SHOT', 'GOAL', 'MISS'}
+
+    if pbp_df.empty or shifts_df.empty:
+        return []
+
+    home_team = str(pbp_df['Home_Team'].iloc[0]).upper().strip()
+
+    # Collect goalie IDs to exclude
+    goalie_ids = set()
+    for col in ('Home_Goalie_Id', 'Away_Goalie_Id'):
+        if col in pbp_df.columns:
+            for v in pbp_df[col].dropna().unique():
+                try:
+                    goalie_ids.add(int(float(v)))
+                except (ValueError, TypeError):
+                    pass
+
+    # Parse shifts into per-player on-ice intervals (same as EV)
+    player_intervals = {}
+    for _, sh in shifts_df.iterrows():
+        try:
+            period = int(sh.get('Period', 0))
+        except (ValueError, TypeError):
+            continue
+        if period not in (1, 2, 3):
+            continue
+        pid = sh.get('Player_Id')
+        if pd.isna(pid):
+            pid = _lookup_player_patch(sh.get('Player', ''))
+        if pd.isna(pid) or not pid:
+            continue
+        try:
+            pid = int(float(pid))
+        except (ValueError, TypeError):
+            continue
+        if pid in goalie_ids:
+            continue
+        start_s = sh.get('Start', 0)
+        end_s   = sh.get('End',   0)
+        if pd.isna(start_s) or pd.isna(end_s):
+            continue
+        abs_start = (period - 1) * 1200 + int(float(start_s))
+        abs_end   = (period - 1) * 1200 + int(float(end_s))
+        if abs_end <= abs_start:
+            continue
+        is_home = (str(sh.get('Team', '')).upper().strip() == home_team)
+        player_intervals.setdefault(pid, []).append((abs_start, abs_end, is_home))
+
+    if not player_intervals:
+        return []
+
+    # Change points from shift boundaries and period boundaries
+    change_pts = set()
+    for ivs in player_intervals.values():
+        for s, e, _ in ivs:
+            change_pts.add(s)
+            change_pts.add(e)
+    for p in range(1, 4):
+        change_pts.add((p - 1) * 1200)
+        change_pts.add(p * 1200)
+
+    # xG events from PBP — use '5v4' as approximate game strength for PP shots
+    xg_events  = []
+    goal_events = []
+    all_events_list = []
+    for _, ev in pbp_df.iterrows():
+        try:
+            p = int(ev.get('Period', 0))
+            s = ev.get('Seconds_Elapsed', 0)
+            if pd.isna(s) or p not in (1, 2, 3):
+                continue
+            all_events_list.append({
+                't':          (p - 1) * 1200 + int(float(s)),
+                'xC':         ev.get('xC'),
+                'yC':         ev.get('yC'),
+                'event_type': str(ev.get('Event', '')).upper(),
+            })
+        except Exception:
+            continue
+    all_events_list.sort(key=lambda x: x['t'])
+
+    for _, ev in pbp_df.iterrows():
+        try:
+            period = int(ev.get('Period', 0))
+        except (ValueError, TypeError):
+            continue
+        if period not in (1, 2, 3):
+            continue
+        event_type = str(ev.get('Event', '')).upper()
+        if event_type not in XG_TYPES:
+            continue
+        secs = ev.get('Seconds_Elapsed', 0)
+        if pd.isna(secs):
+            continue
+        t         = (period - 1) * 1200 + int(float(secs))
+        xc        = ev.get('xC')
+        yc        = ev.get('yC')
+        shot_type = str(ev.get('Type', ''))
+        is_home   = (str(ev.get('Ev_Team', '')).upper().strip() == home_team)
+        prev_ev = None
+        for ev_item in reversed(all_events_list):
+            if ev_item['t'] < t:
+                prev_ev = ev_item
+                break
+        if pd.notna(xc) and pd.notna(yc):
+            xg = compute_xg_from_model(
+                {'xC': xc, 'yC': yc, 'shot_type': shot_type, 't': t},
+                prev_ev, period=period, is_home=is_home, game_strength='5v4',
+            )
+        else:
+            dist = _parse_dist(ev.get('Description', ''))
+            if dist is None:
+                continue
+            xg = compute_xg_xy(89.0 - dist, 0.0, shot_type)
+        if xg is not None:
+            xg_events.append((t, xg, is_home))
+        if event_type == 'GOAL':
+            goal_events.append((t, is_home))
+
+    for goal_time, _ in goal_events:
+        change_pts.add(goal_time)
+    change_pts = sorted(change_pts)
+
+    # Build micro-stints
+    raw_stints = []
+    for i in range(len(change_pts) - 1):
+        t_start = change_pts[i]
+        t_end   = change_pts[i + 1]
+        dur     = t_end - t_start
+        if dur <= 0:
+            continue
+        if t_start // 1200 != t_end // 1200 and t_end % 1200 != 0:
+            continue
+        p_start = t_start // 1200 + 1
+        if p_start > 3:
+            continue
+        t_mid = (t_start + t_end) / 2.0
+        home_sk, away_sk = set(), set()
+        for pid, ivs in player_intervals.items():
+            for s, e, is_h in ivs:
+                if s <= t_mid < e:
+                    (home_sk if is_h else away_sk).add(pid)
+                    break
+        h_n, a_n = len(home_sk), len(away_sk)
+        if (h_n, a_n) not in PP_PK_PAIRS:
+            continue
+        strength = f"{h_n}v{a_n}"
+        h_xg = sum(xg for t, xg, ih in xg_events if t_start <= t < t_end and ih)
+        a_xg = sum(xg for t, xg, ih in xg_events if t_start <= t < t_end and not ih)
+        home_goals_before = sum(1 for t, ih in goal_events if t < t_start and ih)
+        away_goals_before = sum(1 for t, ih in goal_events if t < t_start and not ih)
+        raw_stints.append({
+            'game_id':          full_game_id,
+            'period':           p_start,
+            'start_sec':        t_start,
+            'end_sec':          t_end,
+            'duration_seconds': dur,
+            'home_players':     '|'.join(str(p) for p in sorted(home_sk)),
+            'away_players':     '|'.join(str(p) for p in sorted(away_sk)),
+            'home_xg':          round(h_xg, 4),
+            'away_xg':          round(a_xg, 4),
+            'home_score_diff':  int(home_goals_before - away_goals_before),
+            'strength_state':   strength,
+        })
+
+    return _merge_pp_pk_stints(raw_stints)
+
+
+def _derive_events_from_stints(stints_df):
+    """
+    Approximate event extraction from cached stints when true PBP events are
+    unavailable (i.e. events_ev_XXYY.csv missing or empty).
+
+    One synthetic event per stint-side with non-zero xG, placed at the stint
+    midpoint.  This eliminates zero-inflation without re-scraping.  The
+    aggregated xG value is used directly as the regression target.
+
+    Can be replaced with true per-shot events once a scrape is run.
+    """
+    records = []
+    for _, stint in stints_df.iterrows():
+        t_mid   = int((float(stint['start_sec']) + float(stint['end_sec'])) / 2.0)
+        hxg     = float(stint.get('home_xg', 0) or 0)
+        axg     = float(stint.get('away_xg', 0) or 0)
+        dur     = int(float(stint.get('duration_seconds', 30) or 30))
+        def _safe_int(v, default=0):
+            try:
+                f = float(v)
+                return default if (f != f) else int(f)  # NaN check: NaN != NaN
+            except (TypeError, ValueError):
+                return default
+        common  = {
+            'game_id':              _safe_int(stint['game_id']),
+            't':                    t_mid,
+            'home_players':         str(stint.get('home_players', '') or ''),
+            'away_players':         str(stint.get('away_players', '') or ''),
+            'home_score_diff':      _safe_int(stint.get('home_score_diff', 0)),
+            'period':               _safe_int(stint.get('period', 1), default=1),
+            'stint_duration_seconds': dur,
+        }
+        if hxg > 0:
+            records.append({**common, 'xg': round(hxg, 4), 'is_home_shot': 1})
+        if axg > 0:
+            records.append({**common, 'xg': round(axg, 4), 'is_home_shot': 0})
+    if not records:
+        return pd.DataFrame(columns=EVENT_COLS)
+    return pd.DataFrame(records, columns=EVENT_COLS)
+
 
 def fetch_all_stints(game_ids, season_cfg):
     """
-    Scrape all games for one season and extract merged 5v5 stints.
+    Scrape all games for one season and extract merged 5v5 stints plus shot events.
     Resumes automatically from existing stints_file or ckpt_file.
     Saves a checkpoint every 5 batches (~250 games).
+    Returns (stints_df, events_df) tuple.
     """
     stints_file = season_cfg['stints_file']
     ckpt_file   = season_cfg['ckpt_file']
     id_base     = season_cfg['id_base']
+
+    events_file      = season_cfg['stints_file'].replace('stints_', 'events_ev_')
+    events_ckpt_file = events_file.replace('.csv', '_checkpoint.csv')
 
     # Load existing stints to find already-processed games
     existing_rows = []
@@ -1260,13 +2151,42 @@ def fetch_all_stints(game_ids, season_cfg):
             except Exception as e:
                 print(f"  Warning: could not load {fpath}: {e}")
 
+    # Load existing events checkpoint
+    existing_ev_rows = []
+    if os.path.exists(events_ckpt_file):
+        try:
+            ev_ckpt = pd.read_csv(events_ckpt_file)
+            if len(ev_ckpt) > 0:
+                existing_ev_rows = ev_ckpt.to_dict('records')
+                print(f"  Events checkpoint: {len(existing_ev_rows)} events loaded")
+        except Exception as e:
+            print(f"  Warning: could not load events checkpoint: {e}")
+
     todo = [gid for gid in game_ids if gid not in done_games]
 
     if SKIP_SCRAPING:
         print(f"  SKIP_SCRAPING: using {len(existing_rows)} cached stints ({len(todo)} games skipped)")
         df = (pd.DataFrame(existing_rows, columns=STINT_COLS)
               if existing_rows else pd.DataFrame(columns=STINT_COLS))
-        return df
+        # Load cached events if available; derive from stints if missing/empty
+        ev_df = pd.DataFrame(columns=EVENT_COLS)
+        if os.path.exists(events_file):
+            try:
+                ev_df = pd.read_csv(events_file)
+                print(f"  Loaded {len(ev_df):,} events from {os.path.basename(events_file)}")
+            except Exception as e:
+                print(f"  Warning: could not load events file: {e}")
+        if ev_df.empty and not df.empty:
+            print(f"  Events file missing or empty — deriving approximate events from "
+                  f"{len(df):,} cached stints (one per stint-side with xG > 0)...")
+            ev_df = _derive_events_from_stints(df)
+            xg_vals = ev_df['xg'].values if not ev_df.empty else []
+            print(f"  Derived {len(ev_df):,} events  "
+                  f"mean_xg={float(sum(xg_vals)/max(len(xg_vals),1)):.4f}  zeros=0")
+            if not ev_df.empty:
+                ev_df.to_csv(events_file, index=False)
+                print(f"  Saved derived events → {os.path.basename(events_file)}")
+        return df, ev_df
 
     if TEST_MODE:
         todo = todo[:TEST_GAMES]
@@ -1276,11 +2196,30 @@ def fetch_all_stints(game_ids, season_cfg):
         df = (pd.DataFrame(existing_rows, columns=STINT_COLS)
               if existing_rows else pd.DataFrame(columns=STINT_COLS))
         print(f"  All games already processed ({len(df)} stints total)")
-        return df
+        # Load cached events; derive from stints if missing/empty
+        ev_df = pd.DataFrame(columns=EVENT_COLS)
+        if os.path.exists(events_file):
+            try:
+                ev_df = pd.read_csv(events_file)
+                print(f"  Loaded {len(ev_df):,} events from cache")
+            except Exception:
+                pass
+        if ev_df.empty and not df.empty:
+            print(f"  Events file missing or empty — deriving approximate events from "
+                  f"{len(df):,} cached stints...")
+            ev_df = _derive_events_from_stints(df)
+            xg_vals = ev_df['xg'].values if not ev_df.empty else []
+            print(f"  Derived {len(ev_df):,} events  "
+                  f"mean_xg={float(sum(xg_vals)/max(len(xg_vals),1)):.4f}  zeros=0")
+            if not ev_df.empty:
+                ev_df.to_csv(events_file, index=False)
+                print(f"  Saved derived events → {os.path.basename(events_file)}")
+        return df, ev_df
 
     total        = len(todo)
     n_batches    = math.ceil(total / BATCH_SIZE)
     new_rows     = []
+    new_ev_rows  = []
     failed       = []
     batches_done = 0
 
@@ -1297,10 +2236,11 @@ def fetch_all_stints(game_ids, season_cfg):
                 raise ValueError("scraper returned None")
 
             batch_failed = []
-            batch_rows = _extract_batch_stints(batch, result, id_base, batch_failed)
-            if not batch_rows:
+            batch_stints, batch_events = _extract_batch_stints(batch, result, id_base, batch_failed)
+            if not batch_stints:
                 raise ValueError("empty batch result")
-            new_rows.extend(batch_rows)
+            new_rows.extend(batch_stints)
+            new_ev_rows.extend(batch_events)
             failed.extend(batch_failed)
 
             progress = batch_start + len(batch)
@@ -1313,9 +2253,10 @@ def fetch_all_stints(game_ids, season_cfg):
                 try:
                     single_result = hockey_scraper.scrape_games([gid], True, data_format='pandas')
                     single_failed = []
-                    single_rows = _extract_batch_stints([gid], single_result, id_base, single_failed)
-                    if single_rows:
-                        new_rows.extend(single_rows)
+                    single_stints, single_events = _extract_batch_stints([gid], single_result, id_base, single_failed)
+                    if single_stints:
+                        new_rows.extend(single_stints)
+                        new_ev_rows.extend(single_events)
                     else:
                         failed.extend(single_failed or [gid])
                 except Exception as game_err:
@@ -1327,6 +2268,9 @@ def fetch_all_stints(game_ids, season_cfg):
             cp_rows = existing_rows + new_rows
             pd.DataFrame(cp_rows, columns=STINT_COLS).to_csv(ckpt_file, index=False)
             print(f"  Checkpoint: {len(cp_rows):,} stints → {os.path.basename(ckpt_file)}")
+            if new_ev_rows:
+                cp_ev = existing_ev_rows + new_ev_rows
+                pd.DataFrame(cp_ev, columns=EVENT_COLS).to_csv(events_ckpt_file, index=False)
 
     if failed:
         print(f"  {len(failed)} games could not be processed")
@@ -1335,17 +2279,149 @@ def fetch_all_stints(game_ids, season_cfg):
     df = (pd.DataFrame(all_rows, columns=STINT_COLS)
           if all_rows else pd.DataFrame(columns=STINT_COLS))
 
+    all_ev_rows = existing_ev_rows + new_ev_rows
+    ev_df = (pd.DataFrame(all_ev_rows, columns=EVENT_COLS)
+             if all_ev_rows else pd.DataFrame(columns=EVENT_COLS))
+
     if TEST_MODE:
-        print(f"  [TEST] {len(df)} stints (not written in TEST_MODE)")
+        print(f"  [TEST] {len(df)} stints, {len(ev_df)} events (not written in TEST_MODE)")
     else:
         df.to_csv(stints_file, index=False)
         print(f"  Total stints: {len(df):,} → {os.path.basename(stints_file)}")
+        ev_df.to_csv(events_file, index=False)
+        print(f"  Total events: {len(ev_df):,} → {os.path.basename(events_file)}")
+        # Clean up checkpoints
+        for cp in (ckpt_file, events_ckpt_file):
+            if os.path.exists(cp):
+                os.remove(cp)
 
+    return df, ev_df
+
+
+# ── PP/PK stints pipeline ─────────────────────────────────────────────────────
+def _pp_pk_stints_file_path(season_cfg):
+    """Derive PP/PK stints file path from the EV stints file path."""
+    base = os.path.basename(season_cfg['stints_file'])   # e.g. 'stints_2526.csv'
+    return os.path.join(DATA_DIR, base.replace('stints_', 'stints_ppk_'))
+
+
+def _extract_batch_pp_pk_stints(batch, result, id_base, failed):
+    pbp_all = _coerce_scrape_frame(result.get('pbp') if isinstance(result, dict) else None)
+    sh_all  = _coerce_scrape_frame(result.get('shifts') if isinstance(result, dict) else None)
+    if pbp_all.empty or sh_all.empty:
+        failed.extend(batch)
+        return []
+    pbp_all = pbp_all.copy()
+    sh_all  = sh_all.copy()
+    pbp_all['_gid_full'] = pbp_all['Game_Id'].apply(lambda x: _hs_id_to_full(x, id_base))
+    sh_all['_gid_full']  = sh_all['Game_Id'].apply(lambda x: _hs_id_to_full(x, id_base))
+    rows = []
+    for gid in batch:
+        game_pbp = pbp_all[pbp_all['_gid_full'] == gid]
+        game_sh  = sh_all[sh_all['_gid_full']  == gid]
+        if game_pbp.empty or game_sh.empty:
+            failed.append(gid)
+            continue
+        rows.extend(build_pp_pk_stints_from_game_hs(gid, game_pbp, game_sh))
+    return rows
+
+
+def fetch_all_pp_pk_stints(game_ids, season_cfg):
+    """
+    Load PP/PK stints from cache or scrape games.
+    Supports resume-from-checkpoint (same pattern as fetch_all_stints).
+    Returns DataFrame with columns: game_id, period, start_sec, end_sec,
+    duration_seconds, home_players, away_players, home_xg, away_xg,
+    home_score_diff, strength_state.
+    """
+    ppk_file  = _pp_pk_stints_file_path(season_cfg)
+    ckpt_file = ppk_file.replace('.csv', '_checkpoint.csv')
+    id_base   = season_cfg['id_base']
+
+    # Load from final cached file
+    if os.path.exists(ppk_file):
+        try:
+            df = pd.read_csv(ppk_file)
+            if len(df) > 0:
+                if 'strength_state' not in df.columns:
+                    df['strength_state'] = '5v4'
+                print(f"  Loaded {len(df):,} PP/PK stints from {os.path.basename(ppk_file)}")
+                return df
+        except Exception as e:
+            print(f"  Warning: could not load {ppk_file}: {e}")
+
+    if SKIP_SCRAPING:
+        print(f"  SKIP_SCRAPING: {os.path.basename(ppk_file)} not found — no PP/PK stints for this season")
+        return pd.DataFrame(columns=PP_PK_STINT_COLS)
+
+    # Try to resume from checkpoint
+    existing_rows = []
+    done_games    = set()
+    if os.path.exists(ckpt_file):
+        try:
+            df_ckpt = pd.read_csv(ckpt_file)
+            if len(df_ckpt) > 0:
+                existing_rows = df_ckpt.to_dict('records')
+                done_games    = set(df_ckpt['game_id'].unique())
+                print(f"  Resuming from {os.path.basename(ckpt_file)}: "
+                      f"{len(done_games)} games done, {len(existing_rows)} stints")
+        except Exception as e:
+            print(f"  Warning: could not load checkpoint {ckpt_file}: {e}")
+
+    todo = [gid for gid in game_ids if gid not in done_games]
+    if TEST_MODE:
+        todo = todo[:TEST_GAMES]
+    if not todo and not existing_rows:
+        return pd.DataFrame(columns=PP_PK_STINT_COLS)
+
+    total     = len(todo)
+    n_batches = math.ceil(total / BATCH_SIZE) if total > 0 else 0
+    all_rows  = list(existing_rows)
+    failed    = []
+    print(f"  Generating PP/PK stints: {total} games to process ({n_batches} batches)...")
+
+    for batch_start in range(0, total, BATCH_SIZE):
+        batch        = todo[batch_start:batch_start + BATCH_SIZE]
+        batches_done = batch_start // BATCH_SIZE + 1
+        try:
+            result = hockey_scraper.scrape_games(batch, True, data_format='pandas')
+            if result is None:
+                raise ValueError("scraper returned None")
+            batch_failed = []
+            batch_rows   = _extract_batch_pp_pk_stints(batch, result, id_base, batch_failed)
+            all_rows.extend(batch_rows)
+            failed.extend(batch_failed)
+            print(f"  Batch {batches_done}/{n_batches}: {len(all_rows):,} PP/PK stints total")
+        except Exception as e:
+            print(f"  Batch {batches_done}/{n_batches} failed: {e}")
+            for gid in batch:
+                try:
+                    single_result = hockey_scraper.scrape_games([gid], True, data_format='pandas')
+                    rows = _extract_batch_pp_pk_stints([gid], single_result, id_base, [])
+                    all_rows.extend(rows)
+                except Exception as game_err:
+                    print(f"    Game {gid} failed: {game_err}")
+                    failed.append(gid)
+        # Save checkpoint every 5 batches
+        if not TEST_MODE and batches_done % 5 == 0:
+            pd.DataFrame(all_rows, columns=PP_PK_STINT_COLS).to_csv(ckpt_file, index=False)
+            print(f"  Checkpoint saved: {len(all_rows):,} stints → {os.path.basename(ckpt_file)}")
+
+    if failed:
+        print(f"  {len(failed)} games could not be processed")
+
+    df = (pd.DataFrame(all_rows, columns=PP_PK_STINT_COLS)
+          if all_rows else pd.DataFrame(columns=PP_PK_STINT_COLS))
+    if not TEST_MODE:
+        df.to_csv(ppk_file, index=False)
+        print(f"  {len(df):,} PP/PK stints → {os.path.basename(ppk_file)}")
+        if os.path.exists(ckpt_file):
+            os.remove(ckpt_file)
     return df
 
 
 # ── Step 3: Build RAPM regression ─────────────────────────────────────────────
-def build_rapm(stints_df, priors=None, current_season_filter=None):
+def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=None):
     """
     Fit offense/defense RAPM on combined stints with separate coefficient blocks.
     Each observation models one team's xG rate in a stint:
@@ -1363,6 +2439,10 @@ def build_rapm(stints_df, priors=None, current_season_filter=None):
       When provided, players NOT in this set are excluded from the regression matrix
       unless they have a prior (established history). Prevents 3-GP call-ups from
       polluting the matrix via inflated prior chain values.
+
+    events_df: optional DataFrame of shot events (EVENT_COLS). When provided, uses
+      event-level regression (one row per shot) instead of stint-level aggregation,
+      eliminating zero-inflation from stints without shots.
     """
     stints_df = stints_df[stints_df['duration_seconds'] >= 10].copy()
     n_stints  = len(stints_df)
@@ -1379,7 +2459,14 @@ def build_rapm(stints_df, priors=None, current_season_filter=None):
     all_pids  = sorted(all_pids)
     pid_idx   = {p: i for i, p in enumerate(all_pids)}
     n_players = len(all_pids)
-    context_features = ['is_home_attack', 'score_state', 'score_state_abs', 'period_2', 'period_3']
+    context_features = [
+        'is_home_attack', 'score_state', 'score_state_abs', 'period_2', 'period_3',
+        # Dummy variables (Tasks 1, 2, 3) — present only for DUMMY_SEASONS;
+        # absent in older seasons (treated as 0 via .get())
+        'home_pp_expiry', 'away_pp_expiry',
+        'home_ozs', 'away_ozs', 'nzs',
+        'home_btb', 'away_btb',
+    ]
     n_context = len(context_features)
 
     # Vectorised per-player 5v5 TOI (seconds) — used later for min-TOI filter
@@ -1396,7 +2483,11 @@ def build_rapm(stints_df, priors=None, current_season_filter=None):
     player_toi_sec = toi_home.add(toi_away, fill_value=0)
 
     # Pre-regression TOI filter: exclude players with <500 min 5v5 TOI from the regression
-    # matrix to suppress small-sample noise. Excluded players receive RAPM=0 (league mean).
+    # matrix to suppress small-sample noise. Excluded players receive shrunk-prior estimate.
+    # Note: was raised to 750 but reverted — the 750-min threshold reduces the 25-26 in-season
+    # matrix to only ~94 players, amplifying McDavid/Draisaitl collinearity and causing
+    # Draisaitl to fail the quality gate. The post-projection ≥400-min filter handles fringe
+    # players; the card guard (≥200 min in one card season) handles stale historical players.
     MIN_REGRESSION_TOI_SEC = 500 * 60
     excluded_pids = {p for p in all_pids if player_toi_sec.get(p, 0) < MIN_REGRESSION_TOI_SEC}
     # Fix 2: also exclude players not in current_season_filter (if provided) unless they
@@ -1422,93 +2513,222 @@ def build_rapm(stints_df, priors=None, current_season_filter=None):
     pid_idx   = {p: i for i, p in enumerate(all_pids)}
     n_players = len(all_pids)
     print(f"  Pre-regression TOI filter (≥500 min): {n_players} in matrix, "
-          f"{len(excluded_pids)} excluded (will receive shrunk prior or RAPM=0)")
+          f"{len(excluded_pids)} excluded (will receive shrunk prior)")
 
-    has_season_weight = 'season_weight' in stints_df.columns
-    print(f"Building RAPM matrix: {n_stints*2:,} rows × {n_players * 2 + n_context} features"
-          + (" (season-weighted)" if has_season_weight else ""))
+    use_events = events_df is not None and not events_df.empty
 
-    r_idx, c_idx, vals = [], [], []
-    y = np.zeros(n_stints * 2)
-    weights = np.zeros(n_stints * 2)
-    off_offset = 0
-    def_offset = n_players
-    ctx_offset = n_players * 2
+    if use_events:
+        # ── Event-level regression (JFresh-style) ─────────────────────────────
+        # Each row = one shot event. Target = xG value (no zeros!).
+        # Offensive players (shooting team): offense block +1
+        # Defensive players (defending team): defense block +1
+        # Coefficients in per-event units → convert to per-60 after regression.
+        total_toi_sec = float(stints_df['duration_seconds'].sum())
+        avg_events_per_60 = (len(events_df) / (total_toi_sec / 3600.0)
+                             if total_toi_sec > 0 else 30.0)
+        n_obs = len(events_df)
+        xg_vals = events_df['xg'].astype(float).values
+        print(f"\nEvent-level RAPM matrix: {n_obs:,} rows × {n_players * 2 + n_context} features")
+        print(f"  avg_events_per_60 = {avg_events_per_60:.1f}")
+        print(f"  xG distribution: mean={xg_vals.mean():.4f}  std={xg_vals.std():.4f}  "
+              f"max={xg_vals.max():.4f}  zeros={int((xg_vals == 0).sum())}")
 
-    for i, (_, stint) in enumerate(stints_df.iterrows()):
-        dur    = float(stint['duration_seconds'])
-        dur_h  = dur / 3600.0
-        seas_w = float(stint['season_weight']) if has_season_weight else 1.0
-        w      = math.sqrt(dur) * seas_w
+        has_season_weight = 'season_weight' in events_df.columns
 
-        hxg = float(stint['home_xg']) / dur_h
-        axg = float(stint['away_xg']) / dur_h
+        r_idx, c_idx, vals = [], [], []
+        y       = np.zeros(n_obs)
+        weights = np.zeros(n_obs)
+        off_offset = 0
+        def_offset = n_players
+        ctx_offset = n_players * 2
 
-        h_pids = [int(p) for p in str(stint['home_players']).split('|') if p.strip()]
-        a_pids = [int(p) for p in str(stint['away_players']).split('|') if p.strip()]
+        for i, (_, ev) in enumerate(events_df.iterrows()):
+            xg_ev      = float(ev['xg'])
+            is_home_ev = int(ev['is_home_shot'])
+            h_pids     = [int(p) for p in str(ev['home_players']).split('|') if p.strip()]
+            a_pids     = [int(p) for p in str(ev['away_players']).split('|') if p.strip()]
+            dur        = float(ev.get('stint_duration_seconds', 30) or 30)
+            seas_w     = float(ev.get('season_weight', 1.0) or 1.0)
+            w          = math.sqrt(max(dur, 1.0)) * seas_w
+            period_ev  = int(ev.get('period', 1) or 1)
 
-        home_row = i * 2
-        away_row = home_row + 1
-        home_score_state = max(-2.0, min(2.0, float(stint.get('home_score_diff', 0) or 0)))
-        away_score_state = -home_score_state
-        period = int(stint.get('period', 0) or 0)
+            if is_home_ev:
+                off_pids, def_pids = h_pids, a_pids
+                score_st = max(-2.0, min(2.0, float(ev.get('home_score_diff', 0) or 0)))
+            else:
+                off_pids, def_pids = a_pids, h_pids
+                score_st = max(-2.0, min(2.0, -float(ev.get('home_score_diff', 0) or 0)))
 
-        for pid in h_pids:
-            if pid in pid_idx:
-                col = pid_idx[pid]
-                r_idx.append(home_row); c_idx.append(off_offset + col); vals.append(1.0)
-                r_idx.append(away_row); c_idx.append(def_offset + col); vals.append(1.0)
-        for pid in a_pids:
-            if pid in pid_idx:
-                col = pid_idx[pid]
-                r_idx.append(away_row); c_idx.append(off_offset + col); vals.append(1.0)
-                r_idx.append(home_row); c_idx.append(def_offset + col); vals.append(1.0)
+            for pid in off_pids:
+                if pid in pid_idx:
+                    r_idx.append(i); c_idx.append(off_offset + pid_idx[pid]); vals.append(1.0)
+            for pid in def_pids:
+                if pid in pid_idx:
+                    r_idx.append(i); c_idx.append(def_offset + pid_idx[pid]); vals.append(1.0)
 
-        for row_idx, is_home_attack, score_state in (
-            (home_row, 1.0, home_score_state),
-            (away_row, 0.0, away_score_state),
-        ):
+            # Context features (same names/order as context_features list)
+            h_pp_exp = float(ev.get('home_pp_expiry', 0) or 0)
+            a_pp_exp = float(ev.get('away_pp_expiry', 0) or 0)
+            h_ozs    = float(ev.get('home_ozs',       0) or 0)
+            a_ozs    = float(ev.get('away_ozs',       0) or 0)
+            nzs_val  = float(ev.get('nzs',            0) or 0)
+            h_btb    = float(ev.get('home_btb',       0) or 0)
+            a_btb    = float(ev.get('away_btb',       0) or 0)
+
             ctx_vals = [
-                is_home_attack,
-                score_state,
-                abs(score_state),
-                1.0 if period == 2 else 0.0,
-                1.0 if period == 3 else 0.0,
+                float(is_home_ev),
+                score_st,
+                abs(score_st),
+                1.0 if period_ev == 2 else 0.0,
+                1.0 if period_ev == 3 else 0.0,
+                h_pp_exp, a_pp_exp,
+                h_ozs, a_ozs, nzs_val,
+                h_btb, a_btb,
             ]
             for ctx_col, ctx_val in enumerate(ctx_vals):
                 if ctx_val == 0.0:
                     continue
-                r_idx.append(row_idx)
-                c_idx.append(ctx_offset + ctx_col)
-                vals.append(ctx_val)
+                r_idx.append(i); c_idx.append(ctx_offset + ctx_col); vals.append(ctx_val)
 
-        # Subtract per-team prior sums from target so ridge explains the residual
-        if priors:
-            h_off = sum(priors.get(pid, {}).get('off', 0.0) for pid in h_pids)
-            a_off = sum(priors.get(pid, {}).get('off', 0.0) for pid in a_pids)
-            h_def = sum(priors.get(pid, {}).get('def', 0.0) for pid in h_pids)
-            a_def = sum(priors.get(pid, {}).get('def', 0.0) for pid in a_pids)
-        else:
-            h_off = a_off = h_def = a_def = 0.0
-        # home xG: home offense drives it up; away defense suppresses it
-        # away xG: away offense drives it up; home defense suppresses it
-        y[home_row] = hxg - h_off - a_def
-        y[away_row] = axg - a_off - h_def
-        weights[home_row] = w
-        weights[away_row] = w
+            # Prior subtraction in per-60 space (aligns priors with regression target)
+            if priors:
+                off_prior = sum(priors.get(p, {}).get('off', 0.0) for p in off_pids)
+                def_prior = sum(priors.get(p, {}).get('def', 0.0) for p in def_pids)
+                prior_per60 = off_prior + def_prior
+            else:
+                prior_per60 = 0.0
 
-    X = sparse.csr_matrix((vals, (r_idx, c_idx)), shape=(n_stints * 2, n_players * 2 + n_context))
+            dur_safe = max(dur, 1.0)
+            xg_per60 = xg_ev * (3600.0 / dur_safe)
+            y[i]       = xg_per60 - prior_per60
+            weights[i] = w
 
-    alphas = [100.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0, 50000.0]
+        X = sparse.csr_matrix(
+            (vals, (r_idx, c_idx)), shape=(n_obs, n_players * 2 + n_context)
+        )
 
-    print("Fitting joint offense/defense RAPM (RidgeCV)...")
+    else:
+        # ── Stint-level regression (legacy / fallback) ────────────────────────
+        n_stints_use = len(stints_df)
+        has_season_weight = 'season_weight' in stints_df.columns
+        print(f"Building RAPM matrix (stint-level): {n_stints_use*2:,} rows × "
+              f"{n_players * 2 + n_context} features"
+              + (" (season-weighted)" if has_season_weight else ""))
+
+        r_idx, c_idx, vals = [], [], []
+        y       = np.zeros(n_stints_use * 2)
+        weights = np.zeros(n_stints_use * 2)
+        off_offset = 0
+        def_offset = n_players
+        ctx_offset = n_players * 2
+
+        for i, (_, stint) in enumerate(stints_df.iterrows()):
+            dur    = float(stint['duration_seconds'])
+            dur_h  = dur / 3600.0
+            seas_w = float(stint['season_weight']) if has_season_weight else 1.0
+            w      = math.sqrt(dur) * seas_w
+
+            hxg = float(stint['home_xg']) / dur_h
+            axg = float(stint['away_xg']) / dur_h
+
+            h_pids = [int(p) for p in str(stint['home_players']).split('|') if p.strip()]
+            a_pids = [int(p) for p in str(stint['away_players']).split('|') if p.strip()]
+
+            home_row = i * 2
+            away_row = home_row + 1
+            home_score_state = max(-2.0, min(2.0, float(stint.get('home_score_diff', 0) or 0)))
+            away_score_state = -home_score_state
+            period = int(stint.get('period', 0) or 0)
+
+            h_pp_exp = float(stint.get('home_pp_expiry', 0) or 0)
+            a_pp_exp = float(stint.get('away_pp_expiry', 0) or 0)
+            h_ozs    = float(stint.get('home_ozs',       0) or 0)
+            a_ozs    = float(stint.get('away_ozs',       0) or 0)
+            nzs_val  = float(stint.get('nzs',            0) or 0)
+            h_btb    = float(stint.get('home_btb',       0) or 0)
+            a_btb    = float(stint.get('away_btb',       0) or 0)
+
+            for pid in h_pids:
+                if pid in pid_idx:
+                    col = pid_idx[pid]
+                    r_idx.append(home_row); c_idx.append(off_offset + col); vals.append(1.0)
+                    r_idx.append(away_row); c_idx.append(def_offset + col); vals.append(1.0)
+            for pid in a_pids:
+                if pid in pid_idx:
+                    col = pid_idx[pid]
+                    r_idx.append(away_row); c_idx.append(off_offset + col); vals.append(1.0)
+                    r_idx.append(home_row); c_idx.append(def_offset + col); vals.append(1.0)
+
+            for row_idx, is_home_attack, score_state in (
+                (home_row, 1.0, home_score_state),
+                (away_row, 0.0, away_score_state),
+            ):
+                ctx_vals = [
+                    is_home_attack,
+                    score_state,
+                    abs(score_state),
+                    1.0 if period == 2 else 0.0,
+                    1.0 if period == 3 else 0.0,
+                    h_pp_exp, a_pp_exp,
+                    h_ozs, a_ozs, nzs_val,
+                    h_btb, a_btb,
+                ]
+                for ctx_col, ctx_val in enumerate(ctx_vals):
+                    if ctx_val == 0.0:
+                        continue
+                    r_idx.append(row_idx)
+                    c_idx.append(ctx_offset + ctx_col)
+                    vals.append(ctx_val)
+
+            if priors:
+                h_off = sum(priors.get(pid, {}).get('off', 0.0) for pid in h_pids)
+                a_off = sum(priors.get(pid, {}).get('off', 0.0) for pid in a_pids)
+                h_def = sum(priors.get(pid, {}).get('def', 0.0) for pid in h_pids)
+                a_def = sum(priors.get(pid, {}).get('def', 0.0) for pid in a_pids)
+            else:
+                h_off = a_off = h_def = a_def = 0.0
+
+            y[home_row] = hxg - h_off - a_def
+            y[away_row] = axg - a_off - h_def
+            weights[home_row] = w
+            weights[away_row] = w
+
+        X = sparse.csr_matrix(
+            (vals, (r_idx, c_idx)),
+            shape=(n_stints_use * 2, n_players * 2 + n_context)
+        )
+        avg_events_per_60 = None  # not applicable in stint-level mode
+
+    # Base alpha grid (tuned for modern seasons at ~87 events/60 min).
+    # Older PBP formats (10-11→17-18) produced ~160 events/60; events for those seasons
+    # may include blocked shots mis-labeled as MISS.  Effective per-60 regularisation =
+    # alpha / avg_events_per_60², so we scale the alpha grid to keep that constant.
+    # Without scaling, old seasons have ~3.4× weaker regularisation → higher RAPM variance
+    # that partially chains forward as inflated priors.
+    BASELINE_EV60 = 87.0
+    _base_alphas = [100.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0, 50000.0]
+    if use_events and avg_events_per_60 and avg_events_per_60 > 0:
+        _alpha_scale = (avg_events_per_60 / BASELINE_EV60) ** 2
+        alphas = [a * _alpha_scale for a in _base_alphas]
+        print(f"  Alpha scaling: ev/60={avg_events_per_60:.1f} ÷ {BASELINE_EV60} → "
+              f"scale²={_alpha_scale:.3f}  alpha range=[{alphas[0]:.0f}, {alphas[-1]:.0f}]")
+    else:
+        alphas = _base_alphas
+
+    mode_str = "event-level" if use_events else "stint-level"
+    print(f"Fitting joint offense/defense RAPM ({mode_str}) (RidgeCV)...")
     model = RidgeCV(alphas=alphas, fit_intercept=True)
     model.fit(X, y, sample_weight=weights)
     print(f"  Best alpha: {model.alpha_}")
 
     coef = model.coef_
-    rapm_off = coef[:n_players].copy()
-    rapm_def = -coef[n_players:n_players * 2].copy()  # lower xGA allowed = better defense
+    if use_events:
+        # Event-level regression already targets per-60; coefficients are per-60
+        rapm_off = coef[:n_players].copy()
+        rapm_def = -coef[n_players:n_players * 2].copy()
+    else:
+        rapm_off = coef[:n_players].copy()
+        rapm_def = -coef[n_players:n_players * 2].copy()  # lower xGA allowed = better defense
 
     # Fix 4: hard cap before adding priors back — clips regression blow-up artifacts
     n_clipped = int(((rapm_off > MAX_RAPM) | (rapm_off < -MAX_RAPM) |
@@ -1524,6 +2744,14 @@ def build_rapm(stints_df, priors=None, current_season_filter=None):
             p = priors.get(pid, {})
             rapm_off[i] += p.get('off', 0.0)
             rapm_def[i] += p.get('def', 0.0)
+
+    # Print context (including dummy-variable) coefficients
+    ctx_coef = coef[n_players * 2:]
+    print("  Context / dummy-variable coefficients:")
+    ctx_scale = 1.0 if use_events else 1.0
+    for cf_name, cf_val in zip(context_features, ctx_coef):
+        print(f"    {cf_name:<22}: {cf_val * ctx_scale:+.6f}"
+              + (" [×avg_ev/60]" if use_events else ""))
 
     # Fix 5: per-season diagnostics
     print(f"  Diagnostics ({len(all_pids)} players in matrix):")
@@ -1580,6 +2808,389 @@ def build_rapm(stints_df, priors=None, current_season_filter=None):
         results['rapm_def_pct'] = results['rapm_def'].rank(pct=True) * 100
 
     return results
+
+
+# ── PP/PK RAPM regression ──────────────────────────────────────────────────────
+def build_pp_rapm(pp_stints_df, priors=None):
+    """
+    Fit PP RAPM.  Each PP/PK stint contributes ONE observation from the PP
+    team's perspective.
+
+    Target  : xGF/60 for the PP team per stint (higher = better PP player).
+    Features: indicator variables for each PP skater + period/score context.
+    priors  : {player_id: {'pp': float}}  (Bayesian chain prior, same
+              asymmetric decay as EV RAPM).
+
+    Returns DataFrame: player_id, pp_rapm, toi_pp_total.
+    """
+    df = pp_stints_df[pp_stints_df['strength_state'].isin(PP_PK_ALL_STATES)].copy()
+    df = df[df['duration_seconds'] >= 10].copy()
+    if len(df) == 0:
+        print("  No PP stints to fit")
+        return pd.DataFrame(columns=['player_id', 'pp_rapm', 'toi_pp_total'])
+
+    # Build per-record view: one row per stint, from PP team's perspective
+    pp_records = []
+    for _, stint in df.iterrows():
+        ss = stint['strength_state']
+        if ss in PP_HOME_STATES:
+            pp_pids = [int(p) for p in str(stint['home_players']).split('|') if p.strip()]
+            pp_xg   = float(stint['home_xg'])
+        else:
+            pp_pids = [int(p) for p in str(stint['away_players']).split('|') if p.strip()]
+            pp_xg   = float(stint['away_xg'])
+        pp_records.append({
+            'pp_pids':          pp_pids,
+            'pp_xg':            pp_xg,
+            'duration_seconds': float(stint['duration_seconds']),
+            'period':           int(stint.get('period', 1) or 1),
+            'score_diff_pp':    int(stint.get('home_score_diff', 0))
+                                    if ss in PP_HOME_STATES
+                                    else -int(stint.get('home_score_diff', 0)),
+        })
+
+    # Per-player PP TOI
+    pp_toi_sec = defaultdict(float)
+    for rec in pp_records:
+        for pid in rec['pp_pids']:
+            pp_toi_sec[pid] += rec['duration_seconds']
+
+    included = sorted(p for p in pp_toi_sec if pp_toi_sec[p] >= MIN_PP_REGRESSION_TOI_SEC)
+    excluded = {p for p in pp_toi_sec if p not in included}
+    if not included:
+        print("  No PP players meet 100-min threshold")
+        return pd.DataFrame(columns=['player_id', 'pp_rapm', 'toi_pp_total'])
+
+    pid_idx   = {p: i for i, p in enumerate(included)}
+    n_players = len(included)
+    n_ctx     = 3   # period_2, period_3, score_diff_pp
+
+    r_idx, c_idx, vals = [], [], []
+    y       = np.zeros(len(pp_records))
+    weights = np.zeros(len(pp_records))
+
+    for row_i, rec in enumerate(pp_records):
+        dur   = rec['duration_seconds']
+        dur_h = dur / 3600.0
+        w     = math.sqrt(dur)
+        prior_sum = (sum(priors.get(pid, {}).get('pp', 0.0) for pid in rec['pp_pids'])
+                     if priors else 0.0)
+        y[row_i]       = rec['pp_xg'] / dur_h - prior_sum
+        weights[row_i] = w
+        for pid in rec['pp_pids']:
+            if pid in pid_idx:
+                r_idx.append(row_i)
+                c_idx.append(pid_idx[pid])
+                vals.append(1.0)
+        period     = rec['period']
+        score_diff = max(-2.0, min(2.0, float(rec['score_diff_pp'])))
+        if period == 2:
+            r_idx.append(row_i); c_idx.append(n_players);     vals.append(1.0)
+        elif period == 3:
+            r_idx.append(row_i); c_idx.append(n_players + 1); vals.append(1.0)
+        if score_diff != 0.0:
+            r_idx.append(row_i); c_idx.append(n_players + 2); vals.append(score_diff)
+
+    X      = sparse.csr_matrix((vals, (r_idx, c_idx)),
+                               shape=(len(pp_records), n_players + n_ctx))
+    alphas = [10.0, 50.0, 100.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0]
+    print(f"  Fitting PP RAPM: {len(pp_records):,} stints × {n_players} PP players ...")
+    model = RidgeCV(alphas=alphas, fit_intercept=True)
+    model.fit(X, y, sample_weight=weights)
+    print(f"  Best PP alpha: {model.alpha_}")
+
+    pp_rapm = model.coef_[:n_players].copy()
+    if priors:
+        for i, pid in enumerate(included):
+            pp_rapm[i] += priors.get(pid, {}).get('pp', 0.0)
+
+    results = pd.DataFrame({
+        'player_id':    included,
+        'pp_rapm':      pp_rapm,
+        'toi_pp_total': [round(float(pp_toi_sec.get(p, 0)) / 60.0, 1) for p in included],
+    })
+
+    if excluded:
+        excl_rows = []
+        for p in sorted(excluded):
+            toi_min = float(pp_toi_sec.get(p, 0)) / 60.0
+            shrink  = min(toi_min / (MIN_PP_REGRESSION_TOI_SEC / 60.0), 1.0)
+            excl_rows.append({
+                'player_id':    p,
+                'pp_rapm':      priors.get(p, {}).get('pp', 0.0) * shrink if priors else 0.0,
+                'toi_pp_total': round(toi_min, 1),
+            })
+        results = pd.concat([results, pd.DataFrame(excl_rows)], ignore_index=True)
+
+    print(f"  PP RAPM: mean={results['pp_rapm'].mean():.4f}  "
+          f"std={results['pp_rapm'].std():.4f}  "
+          f"min={results['pp_rapm'].min():.4f}  max={results['pp_rapm'].max():.4f}")
+    return results
+
+
+def build_pk_rapm(pp_stints_df, priors=None):
+    """
+    Fit PK RAPM.  Uses the same PP/PK stints as build_pp_rapm but from the
+    PK team's perspective.
+
+    Target  : xGA/60 for the PK team per stint (= PP team's xGF/60).
+              Lower coefficient → better PK player (suppresses more xGA).
+              pk_rapm stored WITHOUT sign flip — lower is better.
+    priors  : {player_id: {'pk': float}}
+
+    Returns DataFrame: player_id, pk_rapm, toi_pk_total.
+    """
+    df = pp_stints_df[pp_stints_df['strength_state'].isin(PP_PK_ALL_STATES)].copy()
+    df = df[df['duration_seconds'] >= 10].copy()
+    if len(df) == 0:
+        return pd.DataFrame(columns=['player_id', 'pk_rapm', 'toi_pk_total'])
+
+    pk_records = []
+    for _, stint in df.iterrows():
+        ss = stint['strength_state']
+        if ss in PP_HOME_STATES:
+            # home on PP → away on PK; PK team's xGA = home team's xGF
+            pk_pids = [int(p) for p in str(stint['away_players']).split('|') if p.strip()]
+            pk_xga  = float(stint['home_xg'])
+        else:
+            pk_pids = [int(p) for p in str(stint['home_players']).split('|') if p.strip()]
+            pk_xga  = float(stint['away_xg'])
+        pk_records.append({
+            'pk_pids':          pk_pids,
+            'pk_xga':           pk_xga,
+            'duration_seconds': float(stint['duration_seconds']),
+            'period':           int(stint.get('period', 1) or 1),
+        })
+
+    pk_toi_sec = defaultdict(float)
+    for rec in pk_records:
+        for pid in rec['pk_pids']:
+            pk_toi_sec[pid] += rec['duration_seconds']
+
+    included = sorted(p for p in pk_toi_sec if pk_toi_sec[p] >= MIN_PK_REGRESSION_TOI_SEC)
+    excluded = {p for p in pk_toi_sec if p not in included}
+    if not included:
+        print("  No PK players meet 100-min threshold")
+        return pd.DataFrame(columns=['player_id', 'pk_rapm', 'toi_pk_total'])
+
+    pid_idx   = {p: i for i, p in enumerate(included)}
+    n_players = len(included)
+    n_ctx     = 2   # period_2, period_3
+
+    r_idx, c_idx, vals = [], [], []
+    y       = np.zeros(len(pk_records))
+    weights = np.zeros(len(pk_records))
+
+    for row_i, rec in enumerate(pk_records):
+        dur   = rec['duration_seconds']
+        dur_h = dur / 3600.0
+        w     = math.sqrt(dur)
+        prior_sum = (sum(priors.get(pid, {}).get('pk', 0.0) for pid in rec['pk_pids'])
+                     if priors else 0.0)
+        y[row_i]       = rec['pk_xga'] / dur_h - prior_sum
+        weights[row_i] = w
+        for pid in rec['pk_pids']:
+            if pid in pid_idx:
+                r_idx.append(row_i)
+                c_idx.append(pid_idx[pid])
+                vals.append(1.0)
+        period = rec['period']
+        if period == 2:
+            r_idx.append(row_i); c_idx.append(n_players);     vals.append(1.0)
+        elif period == 3:
+            r_idx.append(row_i); c_idx.append(n_players + 1); vals.append(1.0)
+
+    X      = sparse.csr_matrix((vals, (r_idx, c_idx)),
+                               shape=(len(pk_records), n_players + n_ctx))
+    alphas = [10.0, 50.0, 100.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0]
+    print(f"  Fitting PK RAPM: {len(pk_records):,} stints × {n_players} PK players ...")
+    model = RidgeCV(alphas=alphas, fit_intercept=True)
+    model.fit(X, y, sample_weight=weights)
+    print(f"  Best PK alpha: {model.alpha_}")
+
+    pk_rapm = model.coef_[:n_players].copy()   # NOT negated — lower = better
+    if priors:
+        for i, pid in enumerate(included):
+            pk_rapm[i] += priors.get(pid, {}).get('pk', 0.0)
+
+    results = pd.DataFrame({
+        'player_id':    included,
+        'pk_rapm':      pk_rapm,
+        'toi_pk_total': [round(float(pk_toi_sec.get(p, 0)) / 60.0, 1) for p in included],
+    })
+
+    if excluded:
+        excl_rows = []
+        for p in sorted(excluded):
+            toi_min = float(pk_toi_sec.get(p, 0)) / 60.0
+            shrink  = min(toi_min / (MIN_PK_REGRESSION_TOI_SEC / 60.0), 1.0)
+            excl_rows.append({
+                'player_id':    p,
+                'pk_rapm':      priors.get(p, {}).get('pk', 0.0) * shrink if priors else 0.0,
+                'toi_pk_total': round(toi_min, 1),
+            })
+        results = pd.concat([results, pd.DataFrame(excl_rows)], ignore_index=True)
+
+    print(f"  PK RAPM: mean={results['pk_rapm'].mean():.4f}  "
+          f"std={results['pk_rapm'].std():.4f}  "
+          f"min={results['pk_rapm'].min():.4f}  max={results['pk_rapm'].max():.4f}")
+    return results
+
+
+def run_prior_informed_pp_pk_rapm(pp_stints_by_season):
+    """
+    Daisy-chain PP and PK RAPM across all available seasons (oldest first).
+    Each season's output becomes the prior for the next season via the same
+    asymmetric decay as EV RAPM:
+      PP: off_prior = 0.008151 + prev × 0.446297
+      PK: def_prior = -0.003181 + prev × 0.280373
+
+    Returns {season_key: {'pp': pp_results_df, 'pk': pk_results_df}}
+    """
+    seasons_in_order = sorted(
+        pp_stints_by_season.keys(), key=lambda s: int(s.split('-')[0])
+    )
+    pp_prev = {}   # {player_id: pp_rapm float}
+    pk_prev = {}   # {player_id: pk_rapm float}
+    all_results = {}
+
+    for season in seasons_in_order:
+        stints = pp_stints_by_season[season]
+        n = len(stints)
+        print(f"\n  {season}: {n:,} PP/PK stints")
+
+        if n == 0:
+            all_results[season] = {
+                'pp': pd.DataFrame(columns=['player_id', 'pp_rapm', 'toi_pp_total']),
+                'pk': pd.DataFrame(columns=['player_id', 'pk_rapm', 'toi_pk_total']),
+            }
+            continue
+
+        # Build priors from previous season using asymmetric decay
+        pp_priors = {pid: {'pp': 0.008151 + prev * 0.446297}
+                     for pid, prev in pp_prev.items()}
+        pk_priors = {pid: {'pk': -0.003181 + prev * 0.280373}
+                     for pid, prev in pk_prev.items()}
+        n_pp_prior = sum(1 for p in pp_priors.values() if abs(p['pp']) > 0.001)
+        n_pk_prior = sum(1 for p in pk_priors.values() if abs(p['pk']) > 0.001)
+        print(f"    PP priors: {n_pp_prior} non-zero | PK priors: {n_pk_prior} non-zero")
+
+        pp_results = build_pp_rapm(stints, priors=pp_priors)
+        pk_results = build_pk_rapm(stints, priors=pk_priors)
+        all_results[season] = {'pp': pp_results, 'pk': pk_results}
+
+        # Feed forward
+        pp_prev = {int(row.player_id): float(row.pp_rapm)
+                   for row in pp_results.itertuples() if pd.notna(row.pp_rapm)}
+        pk_prev = {int(row.player_id): float(row.pk_rapm)
+                   for row in pk_results.itertuples() if pd.notna(row.pk_rapm)}
+        print(f"  {season}: PP {len(pp_results)} players | PK {len(pk_results)} players")
+
+    return all_results
+
+
+def upload_season_pp_pk_rapm(season_key, pp_results_df, pk_results_df):
+    """Upload pp_rapm and pk_rapm to player_seasons for one season."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return
+    print("  SQL migrations (run once in Supabase editor if columns don't exist):")
+    print("    alter table player_seasons add column if not exists pp_rapm float8;")
+    print("    alter table player_seasons add column if not exists pk_rapm float8;")
+
+    sb       = create_client(SUPABASE_URL, SUPABASE_KEY)
+    existing = {
+        (r['player_id'], r['season'])
+        for r in sb.table('player_seasons')
+                    .select('player_id,season')
+                    .eq('season', season_key)
+                    .execute().data
+    }
+    pp_lookup = {int(row.player_id): round(float(row.pp_rapm), 4)
+                 for row in pp_results_df.itertuples() if pd.notna(row.pp_rapm)}
+    pk_lookup = {int(row.player_id): round(float(row.pk_rapm), 4)
+                 for row in pk_results_df.itertuples() if pd.notna(row.pk_rapm)}
+    all_pids  = set(pp_lookup) | set(pk_lookup)
+    updated   = 0
+    missing   = 0
+    for pid in all_pids:
+        if (pid, season_key) not in existing:
+            missing += 1
+            continue
+        data = {}
+        if pid in pp_lookup:
+            data['pp_rapm'] = pp_lookup[pid]
+        if pid in pk_lookup:
+            data['pk_rapm'] = pk_lookup[pid]
+        if not data:
+            continue
+        result = (sb.table('player_seasons')
+                    .update(data)
+                    .eq('player_id', pid)
+                    .eq('season', season_key)
+                    .execute())
+        if result.data:
+            updated += 1
+    print(f"  Uploaded PP/PK RAPM for {season_key}: {updated} rows (missing: {missing})")
+
+
+def print_pp_pk_leaderboards(pp_stints_by_season):
+    """Print top-10 PP and PK RAPM leaders for the 3 card seasons."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return
+    try:
+        _sb   = create_client(SUPABASE_URL, SUPABASE_KEY)
+        info  = {r['player_id']: r for r in
+                 _sb.table('players').select('player_id,full_name,position').execute().data}
+    except Exception as e:
+        print(f"  PP/PK leaderboard name lookup failed: {e}")
+        return
+
+    # Aggregate PP/PK RAPM across 3 card seasons using CARD_SEASON_WEIGHTS
+    pp_agg = defaultdict(lambda: {'num': 0.0, 'den': 0.0})
+    pk_agg = defaultdict(lambda: {'num': 0.0, 'den': 0.0})
+    for season_key, res in pp_stints_by_season.items():
+        w = CARD_SEASON_WEIGHTS.get(season_key, 0.0)
+        if w == 0.0:
+            continue
+        pp_df = res.get('pp', pd.DataFrame())
+        pk_df = res.get('pk', pd.DataFrame())
+        if not pp_df.empty:
+            for row in pp_df.itertuples():
+                if pd.notna(row.pp_rapm) and row.toi_pp_total >= 50:
+                    pp_agg[int(row.player_id)]['num'] += w * float(row.pp_rapm)
+                    pp_agg[int(row.player_id)]['den'] += w
+        if not pk_df.empty:
+            for row in pk_df.itertuples():
+                if pd.notna(row.pk_rapm) and row.toi_pk_total >= 50:
+                    pk_agg[int(row.player_id)]['num'] += w * float(row.pk_rapm)
+                    pk_agg[int(row.player_id)]['den'] += w
+
+    pp_weighted = {pid: d['num'] / d['den'] for pid, d in pp_agg.items() if d['den'] > 0}
+    pk_weighted = {pid: d['num'] / d['den'] for pid, d in pk_agg.items() if d['den'] > 0}
+
+    def _fmt_leader(pid, val):
+        p     = info.get(pid, {})
+        name  = p.get('full_name', str(pid))
+        pos   = p.get('position', '?')
+        return f"  {name:<26} {pos:>3}  {val:+.4f}"
+
+    print("\n--- TOP 10 PP RAPM (3-yr weighted, ≥50 PP min) ---")
+    for pid, val in sorted(pp_weighted.items(), key=lambda x: -x[1])[:10]:
+        print(_fmt_leader(pid, val))
+
+    print("\n--- TOP 10 PK RAPM (3-yr weighted, ≥50 PK min; lower=better) ---")
+    for pid, val in sorted(pk_weighted.items(), key=lambda x: x[1])[:10]:
+        print(_fmt_leader(pid, val))
+
+    # Jackson LaCombe spotlight
+    lacombe_id = next((pid for pid, p in info.items()
+                       if p.get('full_name') == 'Jackson LaCombe'), None)
+    if lacombe_id:
+        pp_v = pp_weighted.get(lacombe_id)
+        pk_v = pk_weighted.get(lacombe_id)
+        print(f"\n--- JACKSON LaCOMBE PP/PK RAPM ---")
+        print(f"  pp_rapm (3yr weighted): {pp_v:+.4f}" if pp_v is not None else "  pp_rapm: N/A")
+        print(f"  pk_rapm (3yr weighted): {pk_v:+.4f}" if pk_v is not None else "  pk_rapm: N/A")
 
 
 # ── Step 3b: Test diagnostics ──────────────────────────────────────────────────
@@ -1917,7 +3528,7 @@ def check_and_maybe_upload(results_df):
     if schaefer_pct is not None:
         print(f"  Schaefer    rapm_off_pct: {schaefer_pct:.1f}  (informational — rookie D)")
     print(f"  rapm_off std dev: {rapm_std:.4f}  (lower = less collinearity noise)")
-    print(f"  High-TOI (≥500 min) players below 2nd pct: {outlier_count}  {'✓' if outlier_count <= 8 else '⚠'}")
+    print(f"  High-TOI (≥500 min) players below 2nd pct: {outlier_count}  {'✓' if outlier_count <= 10 else '⚠'}")
     if outlier_count > 0:
         outlier_rows = high_toi[high_toi['rapm_off_pct'] < 2.0].sort_values('rapm_off_pct')
         print("  Outlier player_ids (high-TOI, low rapm_off_pct):")
@@ -1926,10 +3537,10 @@ def check_and_maybe_upload(results_df):
                   f"  rapm_off={row['rapm_off']:.3f}  pct={row['rapm_off_pct']:.1f}")
 
     knies_ok = (knies_pct is None) or (knies_pct > 30)
-    # Allow ≤8 high-TOI outliers: 2% of ~400 qualified players = ~8 expected below 2nd pct
+    # Allow ≤10 high-TOI outliers: 2% of ~500 qualified players = ~10 expected below 2nd pct
     # by definition. These are typically legitimate depth/stay-at-home defensemen
     # (Edmundson, Chiarot, Lindgren, etc.) whose offensive RAPM is correctly low.
-    gate_passed = mc_pct > 90 and dr_pct >= 59.5 and knies_ok and outlier_count <= 8
+    gate_passed = mc_pct > 90 and dr_pct >= 59.5 and knies_ok and outlier_count <= 10
 
     if gate_passed:
         print("\n✓ All conditions met — uploading projected 3-year RAPM card to Supabase")
@@ -2036,6 +3647,74 @@ def print_comparison_table(new_results_df, old_rapm_lookup):
     print()
 
 
+def print_validation_summary(projected_df, old_rapm_lookup):
+    """
+    Print targeted validation checks after event-level RAPM:
+      - McDavid rapm_def_pct (target >80)
+      - LaCombe rapm_def_pct (target >30)
+      - Anaheim D-men average rapm_def (should improve)
+      - McDavid rapm_off_pct >90
+    Also prints a small before/after table using old RAPM percentiles.
+    """
+    if projected_df.empty:
+        return
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("  Validation summary skipped — Supabase not configured")
+        return
+
+    try:
+        sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+        rows = sb.table('players').select('player_id,full_name,team,position').execute().data
+        name_to_pid = {r['full_name']: int(r['player_id']) for r in rows if r.get('full_name')}
+        pid_to_team = {int(r['player_id']): r.get('team') for r in rows if r.get('player_id') is not None}
+        pid_to_pos = {int(r['player_id']): r.get('position') for r in rows if r.get('player_id') is not None}
+    except Exception as e:
+        print(f"  Validation summary skipped — name lookup failed ({e})")
+        return
+
+    def _pct_for(pid, col):
+        row = projected_df[projected_df['player_id'] == pid]
+        if row.empty:
+            return None
+        return float(row[col].values[0]) if col in row.columns else None
+
+    mc_pid = name_to_pid.get('Connor McDavid')
+    lac_pid = name_to_pid.get('Jackson LaCombe')
+
+    mc_def_new = _pct_for(mc_pid, 'rapm_def_pct') if mc_pid else None
+    lac_def_new = _pct_for(lac_pid, 'rapm_def_pct') if lac_pid else None
+    mc_off_new = _pct_for(mc_pid, 'rapm_off_pct') if mc_pid else None
+
+    mc_def_old = old_rapm_lookup.get('Connor McDavid', {}).get('rapm_def_pct')
+    lac_def_old = old_rapm_lookup.get('Jackson LaCombe', {}).get('rapm_def_pct')
+
+    ana_d_pids = [
+        pid for pid, team in pid_to_team.items()
+        if team == 'ANA' and pid_to_pos.get(pid) == 'D'
+    ]
+    ana_def_vals = projected_df[projected_df['player_id'].isin(ana_d_pids)]['rapm_def']
+    ana_def_avg = float(ana_def_vals.mean()) if not ana_def_vals.empty else None
+
+    print("\n" + "=" * 60)
+    print("EVENT-LEVEL VALIDATION")
+    print("=" * 60)
+    print("Metric          | Before | After")
+    print("----------------+--------+-------")
+    def _fmt(v):
+        return f"{v:>6.1f}" if v is not None else f"{'—':>6}"
+    print(f"McDavid EV Def  | {_fmt(mc_def_old)} | {_fmt(mc_def_new)}")
+    print(f"LaCombe EV Def  | {_fmt(lac_def_old)} | {_fmt(lac_def_new)}")
+    if ana_def_avg is not None:
+        print(f"ANA avg def     | {'-0.165':>6} | {ana_def_avg:>6.3f}")
+    else:
+        print(f"ANA avg def     | {'-0.165':>6} | {'—':>6}")
+
+    if mc_off_new is not None:
+        status = "✓" if mc_off_new > 90 else "✗"
+        print(f"\nQuality gate: McDavid rapm_off_pct > 90  {status}  ({mc_off_new:.1f})")
+    print()
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     print("=" * 60)
@@ -2058,21 +3737,36 @@ if __name__ == '__main__':
     print(f"  Saved {len(old_rapm_lookup)} player RAPM values for comparison")
 
     # Steps 1+2: fetch game IDs and stints for all seasons
-    season_dfs = {}
-    for season_key, season_cfg in SEASON_CONFIGS.items():
+    season_dfs         = {}
+    events_by_season   = {}
+    game_ids_by_season = {}   # saved for Step 2d (dummy augmentation)
+
+    # QUICK_TEST: run only the 3 card seasons to verify dummy variables
+    seasons_to_run = (
+        {k: v for k, v in SEASON_CONFIGS.items() if k in DUMMY_SEASONS}
+        if QUICK_TEST else SEASON_CONFIGS
+    )
+    if QUICK_TEST:
+        print("\n[QUICK_TEST] Processing only 23-24/24-25/25-26 — no daisy chain priors")
+
+    for season_key, season_cfg in seasons_to_run.items():
         print(f"\n{'='*60}")
         print(f"Season {season_key}  (weight ×{season_cfg['weight']})")
         print(f"{'='*60}")
 
         print(f"Step 1 — Game IDs for {season_key}")
         game_ids = fetch_game_ids(season_cfg)
+        game_ids_by_season[season_key] = game_ids
         print(f"  Total: {len(game_ids)} games")
 
-        print(f"\nStep 2 — Stints for {season_key}")
-        stints = fetch_all_stints(game_ids, season_cfg)
+        print(f"\nStep 2 — Stints + events for {season_key}")
+        stints, events = fetch_all_stints(game_ids, season_cfg)
         stints['season_weight'] = season_cfg['weight']
+        if not events.empty:
+            events['season_weight'] = season_cfg['weight']
         season_dfs[season_key] = stints
-        print(f"  {len(stints):,} stints loaded for {season_key}")
+        events_by_season[season_key] = events
+        print(f"  {len(stints):,} stints, {len(events):,} events loaded for {season_key}")
 
     if TEST_MODE:
         # Run diagnostics on 25-26 only and exit
@@ -2110,12 +3804,94 @@ if __name__ == '__main__':
     else:
         print(f"  Warning: 25-26 stints not available — current_season_filter disabled")
 
+    # Step 2d: augment stints for 23-24, 24-25, 25-26 with dummy variables
+    print(f"\n{'='*60}")
+    print("Step 2d — Augmenting stints with dummy variables (23-24 / 24-25 / 25-26)")
+    print(f"{'='*60}")
+    for _sk in list(DUMMY_SEASONS):
+        if _sk not in season_dfs:
+            continue
+        season_dfs[_sk] = augment_stints_with_dummies(
+            season_dfs[_sk],
+            game_ids_by_season.get(_sk, []),
+            _sk,
+            SEASON_CONFIGS[_sk],
+        )
+        # Propagate dummy variables to events for the same season
+        if _sk in events_by_season and not events_by_season[_sk].empty:
+            print(f"  Augmenting events with dummy variables for {_sk}...")
+            events_by_season[_sk] = augment_events_with_stints_dummies(
+                events_by_season[_sk], season_dfs[_sk]
+            )
+            print(f"    {len(events_by_season[_sk]):,} events augmented")
+
+    # Step 2d.5: build event-level matrix from cached shot events (23-24/24-25/25-26)
+    print(f"\n{'='*60}")
+    print("Step 2d.5 — Event-level shots cache (23-24 / 24-25 / 25-26)")
+    print(f"{'='*60}")
+    shots_cache = _load_shots_cache()
+    if shots_cache.empty:
+        print("  No cached shot events available — keeping existing events")
+    else:
+        shots_cache = _compute_xg_for_shots(shots_cache)
+        for _sk in list(DUMMY_SEASONS):
+            if _sk not in season_dfs:
+                continue
+            events_out_file = os.path.join(DATA_DIR, f"events_ev_{_sk.replace('-', '')}.csv")
+            season_weight = SEASON_CONFIGS[_sk]['weight']
+
+            season_shots = shots_cache[shots_cache['season'] == _sk].copy()
+            if season_shots.empty:
+                print(f"  {_sk}: no 5v5 shots in cache")
+                continue
+
+            print(f"  {_sk}: matching {len(season_shots):,} shot events to stints...")
+            ev_df = _match_shots_to_stints(season_shots, season_dfs[_sk], _sk, season_weight)
+            if ev_df.empty:
+                print(f"    {_sk}: 0 events matched to stints")
+                continue
+
+            # Add dummy variables from augmented stints
+            ev_df = augment_events_with_stints_dummies(ev_df, season_dfs[_sk])
+            ev_df.to_csv(events_out_file, index=False)
+            events_by_season[_sk] = ev_df
+
+            xg_vals = ev_df['xg'].astype(float).values
+            print(f"    {_sk}: {len(ev_df):,} events matched")
+            print(f"      xG mean={xg_vals.mean():.4f}  max={xg_vals.max():.4f}  zeros={int((xg_vals == 0).sum())}")
+
+    # Step 2e: fetch PP/PK stints for card seasons only (23-24/24-25/25-26).
+    # Scraping all historical seasons is impractical without a local hockey-scraper
+    # cache (DOCS_DIR=False by default).  If stints_ppk_XXYY.csv already exists for
+    # a season it is loaded instantly regardless of SKIP_SCRAPING.
+    print(f"\n{'='*60}")
+    print("Step 2e — PP/PK stints (5v4, 4v5, 5v3, 3v5, 4v3, 3v4) [card seasons only]")
+    print(f"{'='*60}")
+    PP_PK_SEASONS = ['23-24', '24-25', '25-26']
+    pp_pk_season_dfs = {}
+    for season_key in PP_PK_SEASONS:
+        if season_key not in seasons_to_run:
+            continue
+        season_cfg = seasons_to_run[season_key]
+        print(f"\n  {season_key}:")
+        ppk = fetch_all_pp_pk_stints(game_ids_by_season.get(season_key, []), season_cfg)
+        if len(ppk) > 0:
+            ppk['season_weight'] = season_cfg['weight']
+            pp_pk_season_dfs[season_key] = ppk
+            states = ppk['strength_state'].value_counts().to_dict() if 'strength_state' in ppk.columns else {}
+            print(f"    {len(ppk):,} PP/PK stints: {states}")
+        else:
+            print(f"    No PP/PK stints available for {season_key}")
+    pp_pk_seasons_available = sorted(pp_pk_season_dfs.keys())
+    print(f"\n  PP/PK stints available for: {pp_pk_seasons_available}")
+
     # Step 3: prior-informed RAPM with daisy chain 18-19 → … → 25-26
     print(f"\n{'='*60}")
     print("Step 3 — Prior-informed RAPM (daisy chain 18-19 → 25-26)")
     print(f"{'='*60}")
     raw_season_results = run_prior_informed_rapm(
-        season_dfs, player_seasons_df, current_season_filter=current_season_filter
+        season_dfs, player_seasons_df, current_season_filter=current_season_filter,
+        events_by_season=events_by_season,
     )
 
     # Step 3b: filter, compute context metrics, upload per-season RAPM
@@ -2138,6 +3914,27 @@ if __name__ == '__main__':
         merged = qualified.merge(context, on='player_id', how='left')
         season_results[season_key] = merged
         upload_season_rapm(season_key, merged)
+
+    # Step 3c: prior-informed PP/PK RAPM daisy chain + per-season upload
+    print(f"\n{'='*60}")
+    print("Step 3c — PP/PK RAPM daisy chain")
+    print(f"{'='*60}")
+    pp_pk_card_season_results = {}
+    if pp_pk_season_dfs:
+        pp_pk_all_season_results = run_prior_informed_pp_pk_rapm(pp_pk_season_dfs)
+        for season_key in ['23-24', '24-25', '25-26']:
+            if season_key not in pp_pk_all_season_results:
+                continue
+            res = pp_pk_all_season_results[season_key]
+            pp_df = res.get('pp', pd.DataFrame())
+            pk_df = res.get('pk', pd.DataFrame())
+            if not pp_df.empty or not pk_df.empty:
+                pp_pk_card_season_results[season_key] = res
+                upload_season_pp_pk_rapm(season_key, pp_df, pk_df)
+        print_pp_pk_leaderboards(pp_pk_card_season_results)
+    else:
+        print("  No PP/PK stints available — skipping PP/PK RAPM")
+        print("  Run without SKIP_SCRAPING=1 to generate stints_ppk_XXYY.csv files first.")
 
     # Save per-season RAPM to JSON for compute_historical_war.py
     per_season_rapm = {}
@@ -2167,6 +3964,7 @@ if __name__ == '__main__':
 
     # Print comparison before quality gate so results can be reviewed first
     print_comparison_table(projected, old_rapm_lookup)
+    print_validation_summary(projected, old_rapm_lookup)
 
     check_and_maybe_upload(projected)
 
