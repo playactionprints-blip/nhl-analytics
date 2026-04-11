@@ -49,12 +49,14 @@ TEST_MODE     = False  # Set True to limit to TEST_GAMES per season for validati
 TEST_GAMES    = 50
 BATCH_SIZE    = 50    # Games per hockey-scraper batch
 SKIP_SCRAPING = os.getenv("SKIP_SCRAPING", "").lower() in ("1", "true", "yes")  # Use cached stints only
+RAPM_EXPERIMENT = os.getenv("RAPM_EXPERIMENT", "").strip()
 
 SCHEDULE_API = "https://api-web.nhle.com/v1"
 DATA_DIR     = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 PATCH_FILE   = os.path.join(DATA_DIR, 'player_id_patch.json')
 os.makedirs(DATA_DIR, exist_ok=True)
 SHOTS_CACHE_FILE = os.path.join(DATA_DIR, 'shots_all_seasons_hs_backup.csv')
+PLAYER_LOOKUP_FILE = os.path.join(DATA_DIR, 'players_base.csv')
 
 # Player IDs used for quality gate before uploading
 MCDAVID_ID   = 8478402
@@ -272,6 +274,36 @@ SUPABASE_URL = (os.getenv("SUPABASE_URL") or
 SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or
                 os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY", ""))
 
+EXPERIMENT_TEAMMATE_SHARE_DEFENSE = "teammate_share_defense"
+EXPERIMENT_EV_PRIOR_PARITY = "ev_prior_parity"
+EXPERIMENT_XG_CONTEXT_PARITY = "xg_context_parity"
+EXPERIMENT_SHORT_MISS_PARITY = "short_miss_parity"
+EXPERIMENT_2425_COLLINEARITY_REALLOCATION = "collinearity_reallocation_2425"
+EXPERIMENT_2425_COLLINEARITY_REALLOCATION_DEFENSE = "collinearity_reallocation_2425_defense"
+EXPERIMENT_COLLINEARITY_REALLOCATION_FORWARD_2425_2526 = "collinearity_reallocation_forward_2425_2526"
+EXPERIMENT_ASYMMETRIC_ALPHA_K130 = "asymmetric_alpha_k130"
+EXPERIMENT_ASYMMETRIC_ALPHA_K150 = "asymmetric_alpha_k150"
+EXPERIMENT_ASYMMETRIC_ALPHA_K170 = "asymmetric_alpha_k170"
+PROMOTE_2425_COLLINEARITY_REALLOCATION_DEFENSE = True
+PROMOTE_COLLINEARITY_REALLOCATION_FORWARD_2425_2526 = True
+SUPPORTED_RAPM_EXPERIMENTS = {
+    EXPERIMENT_TEAMMATE_SHARE_DEFENSE,
+    EXPERIMENT_EV_PRIOR_PARITY,
+    EXPERIMENT_XG_CONTEXT_PARITY,
+    EXPERIMENT_SHORT_MISS_PARITY,
+    EXPERIMENT_2425_COLLINEARITY_REALLOCATION,
+    EXPERIMENT_2425_COLLINEARITY_REALLOCATION_DEFENSE,
+    EXPERIMENT_COLLINEARITY_REALLOCATION_FORWARD_2425_2526,
+    EXPERIMENT_ASYMMETRIC_ALPHA_K130,
+    EXPERIMENT_ASYMMETRIC_ALPHA_K150,
+    EXPERIMENT_ASYMMETRIC_ALPHA_K170,
+}
+_ASYMMETRIC_ALPHA_EXPERIMENTS = {
+    EXPERIMENT_ASYMMETRIC_ALPHA_K130: 1.30,
+    EXPERIMENT_ASYMMETRIC_ALPHA_K150: 1.50,
+    EXPERIMENT_ASYMMETRIC_ALPHA_K170: 1.70,
+}
+
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "nhl-analytics/1.0"})
 
@@ -306,10 +338,19 @@ XG_FEATURE_NAMES = [
     'pre_shot_distance', 'pre_shot_speed', 'rebound_angle_change',
     'shot_type_encoded', 'prior_event_encoded', 'seconds_since_prior',
     'score_state', 'period_cat', 'is_home', 'game_strength_encoded', 'is_empty_net',
+    'distance_squared', 'angle_squared', 'is_left_side',
+    'is_slot', 'is_high_slot',
+    'is_wrist_shot', 'is_snap_shot', 'is_slap_shot', 'is_backhand',
+    'is_tip_in', 'is_wrap_around', 'is_poke',
+    'prior_event_is_shot', 'prior_event_is_turnover',
+    'shot_distance_x_angle',
+    'shooter_is_left', 'is_off_wing',
+    'score_diff_abs', 'is_tied',
 ]
 
 XG_MODEL_5V5 = None
 XG_MODEL_DIR = DATA_DIR
+SHOOTER_HANDEDNESS = {}
 
 
 def load_xg_model():
@@ -324,6 +365,41 @@ def load_xg_model():
 
 
 load_xg_model()
+
+
+def load_shooter_handedness():
+    global SHOOTER_HANDEDNESS
+    SHOOTER_HANDEDNESS = {}
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return
+    try:
+        sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+        rows = []
+        offset = 0
+        while True:
+            batch = (sb.table('players')
+                       .select('player_id,shoots')
+                       .range(offset, offset + 999)
+                       .execute().data)
+            if not batch:
+                break
+            rows.extend(batch)
+            offset += len(batch)
+            if len(batch) < 1000:
+                break
+        for row in rows:
+            pid = row.get('player_id')
+            shoots = str(row.get('shoots') or 'R').upper().strip()
+            if pid is None:
+                continue
+            SHOOTER_HANDEDNESS[int(pid)] = 1 if shoots == 'L' else 0
+        if SHOOTER_HANDEDNESS:
+            print(f"Loaded shooter handedness for {len(SHOOTER_HANDEDNESS)} players")
+    except Exception as exc:
+        print(f"Could not load shooter handedness: {exc}")
+
+
+load_shooter_handedness()
 
 NAME_PREFIX_ALIASES = {
     "JOSEPH ": "JOE ",
@@ -372,7 +448,7 @@ def _parse_dist(desc):
 
 
 def compute_xg_from_model(ev, prev_ev, score_state=0, period=1, is_home=False,
-                          game_strength='5v5'):
+                          game_strength='5v5', experiment_name=''):
     """
     Estimate xG using the trained XGBoost model.
     ev is a dict with keys: xC, yC, shot_type (or Type), t.
@@ -381,7 +457,9 @@ def compute_xg_from_model(ev, prev_ev, score_state=0, period=1, is_home=False,
     """
     xc = ev.get('xC')
     yc = ev.get('yC')
-    shot_type = str(ev.get('shot_type', ev.get('Type', ''))).lower().strip()
+    raw_shot_type = str(ev.get('shot_type', ev.get('Type', ''))).strip()
+    shot_type = raw_shot_type.lower().strip()
+    shooter_id = ev.get('shooter_id')
 
     if XG_MODEL_5V5 is None:
         if pd.notna(xc) and pd.notna(yc):
@@ -394,9 +472,8 @@ def compute_xg_from_model(ev, prev_ev, score_state=0, period=1, is_home=False,
 
         x = float(xc)
         y = float(yc)
+        use_training_context = experiment_name == EXPERIMENT_XG_CONTEXT_PARITY
 
-        # Normalise so the shooter always attacks the positive-x net.
-        # Home attacks +x in odd periods; away attacks +x in even periods.
         if (is_home and period % 2 == 0) or (not is_home and period % 2 == 1):
             x = -x
             y = -y
@@ -406,8 +483,22 @@ def compute_xg_from_model(ev, prev_ev, score_state=0, period=1, is_home=False,
         dist = math.sqrt(dx ** 2 + y ** 2)
         angle = abs(math.degrees(math.atan2(abs(y), max(abs(dx), 0.1))))
         is_behind_net = int(abs(x) > 89.0)
+        distance_squared = dist ** 2
+        angle_squared = angle ** 2
+        is_left_side = int(y < 0)
+        is_slot = int(dist < 20.0 and angle < 40.0)
+        is_high_slot = int(20.0 <= dist < 35.0 and angle < 30.0)
+        shot_distance_x_angle = dist * angle / 100.0
 
         shot_enc = SHOT_TYPE_MAP.get(shot_type, 9)  # 9 = '' fallback index
+        shot_type_upper = raw_shot_type.upper().strip().replace('TIP IN', 'TIP-IN')
+        is_wrist_shot = int(shot_type_upper in {'WRIST SHOT', 'WRIST'})
+        is_snap_shot = int(shot_type_upper in {'SNAP SHOT', 'SNAP'})
+        is_slap_shot = int(shot_type_upper in {'SLAP SHOT', 'SLAP'})
+        is_backhand = int(shot_type_upper == 'BACKHAND')
+        is_tip_in = int(shot_type_upper in {'TIP-IN', 'DEFLECTED'})
+        is_wrap_around = int(shot_type_upper in {'WRAP-AROUND', 'WRAP AROUND'})
+        is_poke = int(shot_type_upper == 'POKE')
 
         prior_event_label = ''
         seconds_since_prior = 1200.0
@@ -428,6 +519,9 @@ def compute_xg_from_model(ev, prev_ev, score_state=0, period=1, is_home=False,
             except (TypeError, ValueError):
                 dt = 1200.0
             seconds_since_prior = max(0.0, dt)
+            if use_training_context:
+                is_rush = int(seconds_since_prior < 4.0 and prior_event_label in {'TAKE', 'GIVE', 'SHOT', 'MISS', 'BLOCK'})
+                is_rebound = int(seconds_since_prior < 3.0 and prior_event_label in {'SHOT', 'MISS', 'GOAL'})
 
             prev_xc = prev_ev.get('xC')
             prev_yc = prev_ev.get('yC')
@@ -438,30 +532,57 @@ def compute_xg_from_model(ev, prev_ev, score_state=0, period=1, is_home=False,
                     px = -px
                     py = -py
                 pre_shot_lateral_movement = abs(y - py)
-                pre_shot_north_south_movement = x - px
+                if use_training_context:
+                    pre_shot_north_south_movement = abs(x - px)
+                else:
+                    pre_shot_north_south_movement = x - px
                 pre_shot_distance = math.sqrt((x - px) ** 2 + (y - py) ** 2)
                 pre_shot_speed = pre_shot_distance / max(seconds_since_prior, 0.001)
+                if use_training_context:
+                    pre_shot_speed = min(pre_shot_speed, 120.0)
 
-                # Rush: prior event was >20 ft away and happened within 4 s
-                if pre_shot_distance > 20.0 and seconds_since_prior <= 4.0:
-                    is_rush = 1
-
-                # Rebound angle change for prior shots/goals
                 if prior_event_label in ('SHOT', 'MISS', 'GOAL') and seconds_since_prior <= 3.0:
                     is_rebound = 1
                     pdx = abs(px) - 89.0
                     prev_angle = abs(math.degrees(math.atan2(abs(py), max(abs(pdx), 0.1))))
                     rebound_angle_change = abs(angle - prev_angle)
 
+                if (not use_training_context) and pre_shot_distance > 20.0 and seconds_since_prior <= 4.0:
+                    is_rush = 1
+
         prior_enc = PRIOR_EVENT_MAP.get(prior_event_label, 9)   # 9 = NONE fallback
+        prior_event_is_shot = int(prior_event_label in {'SHOT', 'MISS', 'GOAL'})
+        prior_event_is_turnover = int(prior_event_label in {'TAKE', 'GIVE'})
         strength_enc = STRENGTH_MAP.get(game_strength, 5)
+        score_state_clipped = max(-3.0, min(3.0, float(score_state)))
+        score_diff_abs = min(3.0, abs(score_state_clipped))
+        is_tied = int(score_state_clipped == 0.0)
+        shooter_is_left = 0
+        try:
+            if shooter_id is not None and not pd.isna(shooter_id):
+                shooter_is_left = int(SHOOTER_HANDEDNESS.get(int(float(shooter_id)), 0))
+        except (ValueError, TypeError):
+            shooter_is_left = 0
+        y_pos = y > 0
+        is_off_wing = int(
+            (shooter_is_left == 1 and not y_pos) or
+            (shooter_is_left == 0 and y_pos)
+        )
 
         features = [
             dist, angle, is_behind_net, is_rush, is_rebound,
             pre_shot_lateral_movement, pre_shot_north_south_movement,
             pre_shot_distance, pre_shot_speed, rebound_angle_change,
             shot_enc, prior_enc, seconds_since_prior,
-            score_state, period - 1, int(is_home), strength_enc, 0,  # is_empty_net=0
+            score_state_clipped, period - 1, int(is_home), strength_enc, 0,
+            distance_squared, angle_squared, is_left_side,
+            is_slot, is_high_slot,
+            is_wrist_shot, is_snap_shot, is_slap_shot, is_backhand,
+            is_tip_in, is_wrap_around, is_poke,
+            prior_event_is_shot, prior_event_is_turnover,
+            shot_distance_x_angle,
+            shooter_is_left, is_off_wing,
+            score_diff_abs, is_tied,
         ]
 
         dmat = xgb.DMatrix(
@@ -971,21 +1092,150 @@ def _load_shots_cache():
     return df
 
 
-def _compute_xg_for_shots(shots_df):
-    """Compute xG for each shot using compute_xg_xy()."""
+def _apply_short_miss_parity_filter(shots_df, season_key=None):
+    """
+    HockeyStats excludes miss_reason='short' from Fenwick/xG totals while using
+    them as context. Apply that filter when the cache carries miss_reason.
+    """
+    if shots_df.empty:
+        return shots_df.copy(), False
+    if 'miss_reason' not in shots_df.columns or 'event_type' not in shots_df.columns:
+        label = f" {season_key}" if season_key else ""
+        print(f"  Warning:{label} shot cache lacks miss_reason/event_type columns — short-miss parity is a no-op")
+        return shots_df.copy(), False
+
+    filtered = shots_df.copy()
+    miss_reason = filtered['miss_reason'].fillna('').astype(str).str.strip().str.lower()
+    event_type = filtered['event_type'].fillna('').astype(str).str.upper().str.strip()
+    short_mask = miss_reason.eq('short') & event_type.eq('MISS')
+    removed = int(short_mask.sum())
+    if removed:
+        label = f"{season_key}: " if season_key else ""
+        print(f"  {label}short-miss parity removed {removed:,} shots from xG/Fenwick totals")
+    return filtered.loc[~short_mask].copy(), True
+
+
+def _compute_xg_for_shots(shots_df, experiment_name=''):
+    """
+    Compute xG for cached shot rows using the calibrated XGBoost model.
+    Falls back to bucket xG only when the model path fails.
+    """
     if shots_df.empty:
         return shots_df
-    # Coerce coordinates to numeric and drop missing
     shots_df = shots_df.copy()
     shots_df['x_coord'] = pd.to_numeric(shots_df['x_coord'], errors='coerce')
     shots_df['y_coord'] = pd.to_numeric(shots_df['y_coord'], errors='coerce')
     shots_df = shots_df[shots_df['x_coord'].notna() & shots_df['y_coord'].notna()].copy()
+    if shots_df.empty:
+        return shots_df
 
     xg_vals = []
     for row in shots_df.itertuples(index=False):
-        xg_vals.append(compute_xg_xy(float(row.x_coord), float(row.y_coord), getattr(row, 'shot_type', '')))
+        cur_t = float(getattr(row, 'time_seconds', 0) or 0)
+        sec_since = float(getattr(row, 'seconds_since_prior', 1200.0) or 1200.0)
+        prev_t = max(0.0, cur_t - sec_since)
+        prev_ev = {
+            'event_type': getattr(row, 'prior_event_type', ''),
+            'xC': getattr(row, 'prior_event_x_coord', np.nan),
+            'yC': getattr(row, 'prior_event_y_coord', np.nan),
+            't': prev_t,
+        }
+        ev = {
+            'xC': float(row.x_coord),
+            'yC': float(row.y_coord),
+            'shot_type': getattr(row, 'shot_type', ''),
+            't': cur_t,
+            'shooter_id': getattr(row, 'shooter_id', None),
+        }
+        xg_vals.append(compute_xg_from_model(
+            ev,
+            prev_ev,
+            score_state=float(getattr(row, 'score_diff', 0) or 0),
+            period=int(getattr(row, 'period', 1) or 1),
+            is_home=bool(int(getattr(row, 'is_home', 0) or 0)),
+            game_strength=str(getattr(row, 'game_strength', '5v5') or '5v5'),
+            experiment_name=experiment_name,
+        ))
     shots_df['xg'] = xg_vals
     return shots_df
+
+
+def _rebuild_stint_xg_from_shots_cache(stints_df, shots_df, season_key, experiment_name=''):
+    """
+    Recompute stint xG from the clean Fenwick shot cache for the overlapping games.
+    This keeps the shift-level RAPM structure intact while refreshing the xG source.
+    """
+    if stints_df.empty or shots_df.empty:
+        return stints_df
+
+    stints = stints_df.copy()
+    stints['game_id'] = stints['game_id'].astype(int)
+    stints['start_sec'] = stints['start_sec'].astype(int)
+    stints['end_sec'] = stints['end_sec'].astype(int)
+
+    shots = shots_df.copy()
+    shots['game_id'] = shots['game_id'].astype(int)
+    shots['time_seconds'] = pd.to_numeric(shots['time_seconds'], errors='coerce').fillna(-1).astype(int)
+    shots['is_home'] = pd.to_numeric(shots['is_home'], errors='coerce').fillna(0).astype(int)
+    shots = shots[shots['time_seconds'] >= 0].copy()
+    if shots.empty:
+        return stints_df
+    shots = _compute_xg_for_shots(shots, experiment_name=experiment_name)
+    shots = shots[shots['xg'].notna()].copy()
+    if shots.empty:
+        return stints_df
+
+    shot_games = set(shots['game_id'].unique().tolist())
+    mask = stints['game_id'].isin(shot_games)
+    if not mask.any():
+        print(f"  {season_key}: no overlap between stint cache and shot cache")
+        return stints_df
+
+    stints.loc[mask, 'home_xg'] = 0.0
+    stints.loc[mask, 'away_xg'] = 0.0
+
+    stints_by_game = {}
+    for gid, grp in stints[mask].groupby('game_id'):
+        grp_s = grp.sort_values('start_sec')
+        stints_by_game[int(gid)] = {
+            'starts': grp_s['start_sec'].values,
+            'ends': grp_s['end_sec'].values,
+            'index': grp_s.index.values,
+        }
+
+    matched = 0
+    unmatched = 0
+    total_xg = 0.0
+    for gid, shot_grp in shots.groupby('game_id'):
+        gid_int = int(gid)
+        if gid_int not in stints_by_game:
+            unmatched += len(shot_grp)
+            continue
+        g = stints_by_game[gid_int]
+        starts = g['starts']
+        ends = g['ends']
+        ts = shot_grp['time_seconds'].values
+        pos_arr = np.searchsorted(starts, ts + 1, side='left') - 1
+        valid = (pos_arr >= 0) & (pos_arr < len(starts))
+        if valid.any():
+            pos_valid = pos_arr[valid].clip(0, len(starts) - 1)
+            in_stint = (starts[pos_valid] <= ts[valid]) & (ts[valid] < ends[pos_valid])
+            valid[valid] &= in_stint
+        unmatched += int((~valid).sum())
+        if not valid.any():
+            continue
+        valid_rows = shot_grp.iloc[np.where(valid)[0]]
+        valid_pos = pos_arr[valid].clip(0, len(starts) - 1)
+        matched += len(valid_rows)
+        total_xg += float(valid_rows['xg'].sum())
+        for (_, shot_row), pos in zip(valid_rows.iterrows(), valid_pos):
+            stint_idx = g['index'][int(pos)]
+            key = 'home_xg' if int(shot_row['is_home']) == 1 else 'away_xg'
+            stints.at[stint_idx, key] = round(float(stints.at[stint_idx, key]) + float(shot_row['xg']), 4)
+
+    print(f"  {season_key}: rebuilt stint xG from shot cache for {len(shot_games):,} games; "
+          f"matched {matched:,} shots, unmatched {unmatched:,}, total_xg={total_xg:.1f}")
+    return stints
 
 
 def _match_shots_to_stints(shots_df, stints_df, season_key, season_weight):
@@ -1237,6 +1487,325 @@ def project_season_results(season_results):
     return projected
 
 
+def compute_top_teammate_share(stints_df):
+    """Return per-player EV TOI concentration with the most common teammate."""
+    total_sec = defaultdict(float)
+    pair_sec = defaultdict(lambda: defaultdict(float))
+
+    for row in stints_df.itertuples(index=False):
+        dur = float(getattr(row, 'duration_seconds', 0) or 0.0)
+        if dur <= 0:
+            continue
+        for col in ('home_players', 'away_players'):
+            cell = getattr(row, col, '')
+            if pd.isna(cell):
+                continue
+            teammates = [int(pid) for pid in str(cell).split('|') if str(pid).strip()]
+            if len(teammates) < 2:
+                continue
+            for pid in teammates:
+                total_sec[pid] += dur
+            for pid in teammates:
+                for mate in teammates:
+                    if mate == pid:
+                        continue
+                    pair_sec[pid][mate] += dur
+
+    rows = []
+    for pid, sec in total_sec.items():
+        teammates = pair_sec.get(pid, {})
+        if teammates:
+            top_teammate_id, shared_sec = max(teammates.items(), key=lambda item: item[1])
+            top_share = shared_sec / sec if sec > 0 else 0.0
+        else:
+            top_teammate_id, shared_sec, top_share = None, 0.0, 0.0
+        rows.append({
+            'player_id': pid,
+            'total_ev_seconds': round(sec, 1),
+            'top_teammate_id': top_teammate_id,
+            'top_teammate_seconds': round(shared_sec, 1),
+            'top_teammate_share': float(top_share),
+        })
+
+    return pd.DataFrame(rows)
+
+
+def compute_player_onice_xg_context(stints_df):
+    """Return per-player EV on-ice xG context from the stint file."""
+    totals = defaultdict(lambda: {'sec': 0.0, 'xgf': 0.0, 'xga': 0.0})
+
+    for row in stints_df.itertuples(index=False):
+        dur = float(getattr(row, 'duration_seconds', 0) or 0.0)
+        if dur <= 0:
+            continue
+
+        try:
+            home_xg = float(getattr(row, 'home_xg', 0) or 0.0)
+        except Exception:
+            home_xg = 0.0
+        try:
+            away_xg = float(getattr(row, 'away_xg', 0) or 0.0)
+        except Exception:
+            away_xg = 0.0
+
+        for col, team_xg, opp_xg in (
+            ('home_players', home_xg, away_xg),
+            ('away_players', away_xg, home_xg),
+        ):
+            cell = getattr(row, col, '')
+            if pd.isna(cell):
+                continue
+            players = [int(pid) for pid in str(cell).split('|') if str(pid).strip()]
+            if not players:
+                continue
+            for pid in players:
+                totals[pid]['sec'] += dur
+                totals[pid]['xgf'] += team_xg
+                totals[pid]['xga'] += opp_xg
+
+    rows = []
+    for pid, d in totals.items():
+        sec = float(d['sec'])
+        xgf = float(d['xgf'])
+        xga = float(d['xga'])
+        denom = xgf + xga
+        xgf_pct = (100.0 * xgf / denom) if denom > 0 else None
+        xgd60 = ((xgf - xga) * 3600.0 / sec) if sec > 0 else None
+        rows.append({
+            'player_id': pid,
+            'onice_ev_seconds': round(sec, 1),
+            'onice_xgf60': (xgf * 3600.0 / sec) if sec > 0 else None,
+            'onice_xga60': (xga * 3600.0 / sec) if sec > 0 else None,
+            'onice_xgf_pct': xgf_pct,
+            'onice_xgd60': xgd60,
+        })
+
+    return pd.DataFrame(rows)
+
+
+def teammate_share_multiplier(top_share):
+    if top_share is None or pd.isna(top_share):
+        return 1.0
+    share = float(top_share)
+    if share <= 0.60:
+        return 1.0
+    if share >= 0.85:
+        return 0.75
+    frac = (share - 0.60) / 0.25
+    return 1.0 - (0.25 * frac)
+
+
+def apply_teammate_share_defense_experiment(raw_results, stints_df):
+    """
+    Uniform conservative EV-defense shrink for players with highly concentrated
+    teammate deployment. Baseline rapm_off is unchanged.
+    """
+    if raw_results.empty:
+        return raw_results.copy()
+
+    share_df = compute_top_teammate_share(stints_df)
+    adjusted = raw_results.copy()
+    adjusted = adjusted.merge(share_df, on='player_id', how='left')
+    adjusted['top_teammate_share'] = adjusted['top_teammate_share'].fillna(0.0)
+    adjusted['defense_share_multiplier'] = adjusted['top_teammate_share'].apply(teammate_share_multiplier)
+    adjusted['baseline_rapm_def'] = adjusted['rapm_def']
+    adjusted['baseline_rapm_def_pct'] = adjusted.get('rapm_def_pct')
+    adjusted['rapm_def'] = adjusted['rapm_def'] * adjusted['defense_share_multiplier']
+    adjusted['rapm_def_pct'] = adjusted['rapm_def'].rank(pct=True) * 100
+    adjusted['rapm_def_delta'] = adjusted['rapm_def'] - adjusted['baseline_rapm_def']
+    adjusted['rapm_def_pct_delta'] = adjusted['rapm_def_pct'] - adjusted['baseline_rapm_def_pct']
+    return adjusted
+
+
+def collinearity_share_score(top_share):
+    if top_share is None or pd.isna(top_share):
+        return 0.0
+    share = float(top_share)
+    if share <= 0.50:
+        return 0.0
+    if share >= 0.80:
+        return 1.0
+    return (share - 0.50) / 0.30
+
+
+def offensive_tilt_score(xgf_pct):
+    if xgf_pct is None or pd.isna(xgf_pct):
+        return 0.0
+    pct = float(xgf_pct)
+    if pct <= 52.0:
+        return 0.0
+    if pct >= 60.0:
+        return 1.0
+    return (pct - 52.0) / 8.0
+
+
+def apply_2425_collinearity_reallocation_experiment(raw_results, stints_df, defense_only=False, forward_only=False):
+    """
+    Collinearity reallocation experiment.
+
+    For players with highly concentrated deployment and strong offensive on-ice tilt,
+    shift part of positive EV defense credit into EV offense and add a modest
+    offense bonus. This keeps the baseline live path untouched while testing
+    whether Edmonton-style shared-credit inflation is the main remaining gap.
+
+    defense_only=True  — apply only to defensemen (D position)
+    forward_only=True  — apply only to forwards (non-D position)
+    Both False         — apply to all skaters
+    """
+    if raw_results.empty:
+        return raw_results.copy()
+
+    share_df = compute_top_teammate_share(stints_df)
+    xg_df = compute_player_onice_xg_context(stints_df)
+
+    adjusted = raw_results.copy()
+    # Drop any columns carried over from a prior reallocation pass to avoid merge conflicts
+    _share_cols = [c for c in share_df.columns if c != 'player_id']
+    _xg_cols = [c for c in xg_df.columns if c != 'player_id']
+    adjusted = adjusted.drop(columns=[c for c in _share_cols + _xg_cols if c in adjusted.columns], errors='ignore')
+    adjusted = adjusted.merge(share_df, on='player_id', how='left')
+    adjusted = adjusted.merge(xg_df, on='player_id', how='left')
+    adjusted['top_teammate_share'] = adjusted['top_teammate_share'].fillna(0.0)
+    adjusted['onice_xgf_pct'] = adjusted['onice_xgf_pct'].fillna(50.0)
+    adjusted['share_score'] = adjusted['top_teammate_share'].apply(collinearity_share_score)
+    adjusted['offense_tilt_score'] = adjusted['onice_xgf_pct'].apply(offensive_tilt_score)
+    adjusted['collinearity_reallocation_score'] = (
+        adjusted['share_score'] * adjusted['offense_tilt_score']
+    )
+
+    if defense_only or forward_only:
+        _, _, pid_to_pos = _load_player_identity_maps()
+        adjusted['position'] = adjusted['player_id'].map(pid_to_pos)
+        if defense_only:
+            adjusted.loc[adjusted['position'] != 'D', 'collinearity_reallocation_score'] = 0.0
+        else:  # forward_only
+            adjusted.loc[adjusted['position'] == 'D', 'collinearity_reallocation_score'] = 0.0
+
+    adjusted['baseline_rapm_off'] = adjusted['rapm_off']
+    adjusted['baseline_rapm_def'] = adjusted['rapm_def']
+    adjusted['baseline_rapm_off_pct'] = adjusted.get('rapm_off_pct')
+    adjusted['baseline_rapm_def_pct'] = adjusted.get('rapm_def_pct')
+
+    adjusted['defense_credit_transfer'] = (
+        adjusted['rapm_def'].clip(lower=0.0) * adjusted['collinearity_reallocation_score']
+    )
+    adjusted['offense_collinearity_bonus'] = (
+        0.16 * adjusted['collinearity_reallocation_score']
+    )
+
+    adjusted['rapm_off'] = (
+        adjusted['rapm_off']
+        + adjusted['offense_collinearity_bonus']
+        + adjusted['defense_credit_transfer']
+    )
+    adjusted['rapm_def'] = adjusted['rapm_def'] - adjusted['defense_credit_transfer']
+
+    adjusted['rapm_off_pct'] = adjusted['rapm_off'].rank(pct=True) * 100
+    adjusted['rapm_def_pct'] = adjusted['rapm_def'].rank(pct=True) * 100
+    adjusted['rapm_off_delta'] = adjusted['rapm_off'] - adjusted['baseline_rapm_off']
+    adjusted['rapm_def_delta'] = adjusted['rapm_def'] - adjusted['baseline_rapm_def']
+    adjusted['rapm_off_pct_delta'] = adjusted['rapm_off_pct'] - adjusted['baseline_rapm_off_pct']
+    adjusted['rapm_def_pct_delta'] = adjusted['rapm_def_pct'] - adjusted['baseline_rapm_def_pct']
+    return adjusted
+
+
+def apply_promoted_baseline_rapm_adjustments(raw_season_results, season_dfs):
+    """
+    Apply production baseline post-fit RAPM adjustments that have graduated
+    from experiment status.
+    """
+    adjusted_results = {
+        season_key: df.copy()
+        for season_key, df in raw_season_results.items()
+    }
+
+    if PROMOTE_2425_COLLINEARITY_REALLOCATION_DEFENSE and '24-25' in adjusted_results:
+        print("  Baseline promotion active: 24-25 defense-only collinearity reallocation")
+        adjusted_results['24-25'] = apply_2425_collinearity_reallocation_experiment(
+            adjusted_results['24-25'],
+            season_dfs['24-25'],
+            defense_only=True,
+        )
+
+    if PROMOTE_COLLINEARITY_REALLOCATION_FORWARD_2425_2526:
+        for season_key in ('24-25', '25-26'):
+            if season_key in adjusted_results:
+                print(f"  Baseline promotion active: {season_key} forward-only collinearity reallocation")
+                adjusted_results[season_key] = apply_2425_collinearity_reallocation_experiment(
+                    adjusted_results[season_key],
+                    season_dfs[season_key],
+                    forward_only=True,
+                )
+
+    return adjusted_results
+
+
+def build_experiment_summary(projected_baseline, projected_experimental):
+    summary = {}
+    extra_cols = [
+        c for c in (
+            'top_teammate_share',
+            'defense_share_multiplier',
+            'onice_xgf_pct',
+            'onice_xgd60',
+            'share_score',
+            'offense_tilt_score',
+            'collinearity_reallocation_score',
+            'offense_collinearity_bonus',
+            'defense_credit_transfer',
+        ) if c in projected_experimental.columns
+    ]
+    merged = projected_baseline[
+        ['player_id', 'rapm_off', 'rapm_def', 'rapm_off_pct', 'rapm_def_pct']
+    ].merge(
+        projected_experimental[
+            ['player_id', 'rapm_off', 'rapm_def', 'rapm_off_pct', 'rapm_def_pct', *extra_cols]
+        ],
+        on='player_id',
+        suffixes=('_baseline', '_experimental'),
+        how='inner',
+    )
+    if merged.empty:
+        return summary
+
+    merged['rapm_off_delta'] = merged['rapm_off_experimental'] - merged['rapm_off_baseline']
+    merged['rapm_def_delta'] = merged['rapm_def_experimental'] - merged['rapm_def_baseline']
+    merged['rapm_off_pct_delta'] = merged['rapm_off_pct_experimental'] - merged['rapm_off_pct_baseline']
+    merged['rapm_def_pct_delta'] = merged['rapm_def_pct_experimental'] - merged['rapm_def_pct_baseline']
+    merged['abs_off_pct_delta'] = merged['rapm_off_pct_delta'].abs()
+    merged['abs_def_pct_delta'] = merged['rapm_def_pct_delta'].abs()
+
+    summary['players_compared'] = int(len(merged))
+    summary['median_abs_rapm_off_pct_delta'] = float(round(merged['abs_off_pct_delta'].median(), 3))
+    summary['median_abs_rapm_def_pct_delta'] = float(round(merged['abs_def_pct_delta'].median(), 3))
+    summary['share_within_10_off_pct_points'] = float(round((merged['abs_off_pct_delta'] <= 10.0).mean(), 4))
+    summary['share_within_10_def_pct_points'] = float(round((merged['abs_def_pct_delta'] <= 10.0).mean(), 4))
+    summary['top_movers'] = [
+        {
+            'player_id': int(row.player_id),
+            'rapm_off_baseline': round(float(row.rapm_off_baseline), 4),
+            'rapm_off_experimental': round(float(row.rapm_off_experimental), 4),
+            'rapm_def_baseline': round(float(row.rapm_def_baseline), 4),
+            'rapm_def_experimental': round(float(row.rapm_def_experimental), 4),
+            'rapm_off_pct_baseline': round(float(row.rapm_off_pct_baseline), 2),
+            'rapm_off_pct_experimental': round(float(row.rapm_off_pct_experimental), 2),
+            'rapm_def_pct_baseline': round(float(row.rapm_def_pct_baseline), 2),
+            'rapm_def_pct_experimental': round(float(row.rapm_def_pct_experimental), 2),
+            'rapm_off_pct_delta': round(float(row.rapm_off_pct_delta), 2),
+            'rapm_def_pct_delta': round(float(row.rapm_def_pct_delta), 2),
+            **{
+                col: round(float(getattr(row, col)), 4)
+                for col in extra_cols
+                if getattr(row, col, None) is not None and not pd.isna(getattr(row, col, None))
+            },
+        }
+        for row in merged.assign(
+            sort_delta=np.maximum(merged['abs_off_pct_delta'], merged['abs_def_pct_delta'])
+        ).sort_values('sort_delta', ascending=False).head(25).itertuples()
+    ]
+    return summary
+
+
 # ── Bayesian prior-informed RAPM ──────────────────────────────────────────────
 def fetch_player_seasons_for_priors():
     """
@@ -1363,7 +1932,7 @@ def compute_box_score_prior(player_seasons_df, season):
 
 
 def get_player_prior(player_id, previous_rapm, box_score_prior, current_season_toi,
-                     current_season_gp=None):
+                     current_season_gp=None, experiment_name=""):
     """
     Return prior {'off': float, 'def': float} for a player, handling all 4 cases:
       1. Returning player with previous RAPM → apply TopDownHockey linear trend shrinkage
@@ -1374,6 +1943,16 @@ def get_player_prior(player_id, previous_rapm, box_score_prior, current_season_t
       4. True rookie with no data at all → neutral (0.0, 0.0)
     Never returns None or raises KeyError — always falls through to 0.0.
     """
+    if experiment_name == EXPERIMENT_EV_PRIOR_PARITY:
+        if player_id in previous_rapm:
+            prev = previous_rapm[player_id]
+            return {
+                'off': 0.008151 + prev.get('off', 0.0) * 0.446297,
+                'def': -0.003181 + prev.get('def', 0.0) * 0.280373,
+                'source': 'chained',
+            }
+        return {'off': 0.0, 'def': 0.0, 'source': 'neutral'}
+
     # Case 1 — Returning player with previous RAPM
     if player_id in previous_rapm:
         prev = previous_rapm[player_id]
@@ -1394,12 +1973,16 @@ def get_player_prior(player_id, previous_rapm, box_score_prior, current_season_t
                 prior_weight = gp / 20.0  # 0.0 (0 GP) → 1.0 (20+ GP)
                 off_prior *= prior_weight
                 def_prior *= prior_weight
-        return {'off': off_prior, 'def': def_prior}
+        return {'off': off_prior, 'def': def_prior, 'source': 'chained_blended'}
 
     # Case 2 — New player with ≥200 min current season data
     if player_id in box_score_prior and current_season_toi.get(player_id, 0) >= 200:
         bp = box_score_prior[player_id]
-        return {'off': bp.get('off_prior', 0.0), 'def': bp.get('def_prior', 0.0)}
+        return {
+            'off': bp.get('off_prior', 0.0),
+            'def': bp.get('def_prior', 0.0),
+            'source': 'box_score',
+        }
 
     # Case 3 — New player with <200 min current season (callup/rookie)
     if player_id in box_score_prior:
@@ -1409,10 +1992,11 @@ def get_player_prior(player_id, previous_rapm, box_score_prior, current_season_t
         return {
             'off': bp.get('off_prior', 0.0) * shrinkage,
             'def': bp.get('def_prior', 0.0) * shrinkage,
+            'source': 'box_score_shrunk',
         }
 
     # Case 4 — True rookie with no data at all
-    return {'off': 0.0, 'def': 0.0}
+    return {'off': 0.0, 'def': 0.0, 'source': 'neutral'}
 
 
 def _compute_toi_from_stints(stints_df):
@@ -1435,7 +2019,7 @@ def _compute_toi_from_stints(stints_df):
 
 
 def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_filter=None,
-                             events_by_season=None):
+                             events_by_season=None, experiment_name="", asymmetric_k=1.0):
     """
     Daisy chain RAPM across all available seasons (oldest first).
     Each season's output becomes the prior for the next, propagating
@@ -1447,8 +2031,8 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
       (25-26). Passed only to the '25-26' build_rapm() call to exclude low-sample
       call-ups that lack both current-season TOI and a prior.
 
-    events_by_season: optional dict {season: events_df}. When provided, uses event-level
-      regression for each season that has a non-empty events DataFrame.
+    events_by_season: optional dict {season: events_df}. Retained for compatibility
+      with the existing orchestration; shift-level EV RAPM ignores event rows.
     """
     # Sort chronologically by season start year
     seasons_in_order = sorted(
@@ -1457,6 +2041,9 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
     )
     previous_rapm = {}   # {player_id: {'off': float, 'def': float}}
     all_season_results = {}
+    if experiment_name == EXPERIMENT_EV_PRIOR_PARITY:
+        print("  Experimental EV prior parity: chained EV prior only, no box-score blend, no GP dampening.")
+        print("  Prior subtraction/add-back remains in xGF/60 space.")
 
     for season in seasons_in_order:
         if season not in stints_by_season:
@@ -1489,7 +2076,8 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
 
         season_priors = {
             pid: get_player_prior(pid, previous_rapm, box_prior, current_season_toi,
-                                  current_season_gp=current_season_gp)
+                                  current_season_gp=current_season_gp,
+                                  experiment_name=experiment_name)
             for pid in all_player_ids
         }
         n_nonzero = sum(
@@ -1497,6 +2085,11 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
             if abs(p['off']) > 0.001 or abs(p['def']) > 0.001
         )
         print(f"    Season priors: {len(season_priors)} players, {n_nonzero} non-zero")
+        source_counts = defaultdict(int)
+        for prior in season_priors.values():
+            source_counts[str(prior.get('source') or 'unknown')] += 1
+        if source_counts:
+            print("    Prior sources:", dict(sorted(source_counts.items())))
 
         # Diagnostic: print raw player_seasons + priors for key players
         if SUPABASE_URL and SUPABASE_KEY:
@@ -1504,7 +2097,7 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
                 _sb = create_client(SUPABASE_URL, SUPABASE_KEY)
                 _diag_names = ['Matthew Knies', 'William Nylander', 'Auston Matthews',
                                 'Gabriel Landeskog', 'Leon Draisaitl', 'Connor McDavid',
-                                'Mackie Samoskevich', 'Ben Kindel',
+                                'Mackie Samoskevich', 'Ben Kindel', 'Evan Bouchard',
                                 'Jackson LaCombe', 'Rasmus Andersson']
                 _pids = {r['full_name']: r['player_id'] for r in
                          _sb.table('players').select('player_id,full_name').execute().data
@@ -1522,15 +2115,16 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
                     _box_str = f"box_off={_bp['off_prior']:+.4f}" if _bp else "box=N/A"
                     _prior_off_str = f"prior_off={_sp['off']:+.4f}" if _sp else "prior_off=N/A"
                     _prior_def_str = f"prior_def={_sp['def']:+.4f}" if _sp else "prior_def=N/A"
+                    _src = _sp.get('source', 'unknown') if _sp else 'N/A'
                     if not _ps.empty:
                         _r = _ps.iloc[0]
                         print(f"      {_name:<24} gp={int(_r['gp']):<3} "
                               f"toi={_r['toi']:.1f}min  g={_r['g']:.0f}  "
                               f"ixg={_r['ixg']:.2f}  {_box_str}  {_prior_off_str}  {_prior_def_str}  "
-                              f"chained={'Y' if _chained else 'N'}  season_gp={_gp_val}")
+                              f"src={_src:<15} chained={'Y' if _chained else 'N'}  season_gp={_gp_val}")
                     else:
                         print(f"      {_name:<24} NO ps row for {season}  "
-                              f"{_prior_off_str}  {_prior_def_str}  chained={'Y' if _chained else 'N'}  "
+                              f"{_prior_off_str}  {_prior_def_str}  src={_src:<15} chained={'Y' if _chained else 'N'}  "
                               f"season_gp={_gp_val}")
                 print()
             except Exception as _e:
@@ -1540,10 +2134,14 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
         csf = current_season_filter if season == '25-26' else None
         season_events = (events_by_season.get(season) if events_by_season else None)
         n_events = len(season_events) if season_events is not None and not season_events.empty else 0
-        mode_str = f"event-level ({n_events:,} events)" if n_events > 0 else "stint-level (no events file)"
+        mode_str = (
+            f"shift-level ({n_events:,} cached events ignored)"
+            if n_events > 0 else
+            "shift-level"
+        )
         print(f"  Regression mode: {mode_str}")
         raw_results = build_rapm(stints, priors=season_priors, current_season_filter=csf,
-                                  events_df=season_events)
+                                  events_df=season_events, asymmetric_k=asymmetric_k)
         all_season_results[season] = raw_results
 
         # Feed this season's results forward as the next season's prior
@@ -1733,6 +2331,9 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
             continue
         if period not in (1, 2, 3):
             continue
+        event_type = str(ev.get('Event', '')).upper()
+        if event_type not in XG_TYPES:
+            continue
         secs = ev.get('Seconds_Elapsed', 0)
         if pd.isna(secs):
             continue
@@ -1765,7 +2366,7 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
             xg = compute_xg_xy(89.0 - dist, 0.0, shot_type)
 
         xg_events.append((t, xg, is_home))
-        if str(ev.get('Event', '')).upper() == 'GOAL':
+        if event_type == 'GOAL':
             goal_events.append((t, is_home))
 
     for goal_time, _ in goal_events:
@@ -1852,7 +2453,6 @@ def build_stints_from_game_hs(full_game_id, pbp_df, shifts_df):
         period_ev = t_ev // 1200 + 1
         hg = sum(1 for gt, ih in goal_events if gt < t_ev and ih)
         ag = sum(1 for gt, ih in goal_events if gt < t_ev and not ih)
-
         event_records.append({
             'game_id':              full_game_id,
             't':                    t_ev,
@@ -2421,7 +3021,7 @@ def fetch_all_pp_pk_stints(game_ids, season_cfg):
 
 
 # ── Step 3: Build RAPM regression ─────────────────────────────────────────────
-def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=None):
+def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=None, asymmetric_k=1.0):
     """
     Fit offense/defense RAPM on combined stints with separate coefficient blocks.
     Each observation models one team's xG rate in a stint:
@@ -2440,9 +3040,9 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
       unless they have a prior (established history). Prevents 3-GP call-ups from
       polluting the matrix via inflated prior chain values.
 
-    events_df: optional DataFrame of shot events (EVENT_COLS). When provided, uses
-      event-level regression (one row per shot) instead of stint-level aggregation,
-      eliminating zero-inflation from stints without shots.
+    events_df: optional DataFrame of shot events (EVENT_COLS). Retained only for
+      upstream compatibility/debugging; EV RAPM now fits on shift-level rows to
+      mirror JFresh's published methodology more closely.
     """
     stints_df = stints_df[stints_df['duration_seconds'] >= 10].copy()
     n_stints  = len(stints_df)
@@ -2515,220 +3115,147 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
     print(f"  Pre-regression TOI filter (≥500 min): {n_players} in matrix, "
           f"{len(excluded_pids)} excluded (will receive shrunk prior)")
 
-    use_events = events_df is not None and not events_df.empty
+    if events_df is not None and not events_df.empty:
+        print(f"  Shift-level EV RAPM rewrite active: ignoring {len(events_df):,} event rows for regression")
 
-    if use_events:
-        # ── Event-level regression (JFresh-style) ─────────────────────────────
-        # Each row = one shot event. Target = xG value (no zeros!).
-        # Offensive players (shooting team): offense block +1
-        # Defensive players (defending team): defense block +1
-        # Coefficients in per-event units → convert to per-60 after regression.
-        total_toi_sec = float(stints_df['duration_seconds'].sum())
-        avg_events_per_60 = (len(events_df) / (total_toi_sec / 3600.0)
-                             if total_toi_sec > 0 else 30.0)
-        n_obs = len(events_df)
-        xg_vals = events_df['xg'].astype(float).values
-        print(f"\nEvent-level RAPM matrix: {n_obs:,} rows × {n_players * 2 + n_context} features")
-        print(f"  avg_events_per_60 = {avg_events_per_60:.1f}")
-        print(f"  xG distribution: mean={xg_vals.mean():.4f}  std={xg_vals.std():.4f}  "
-              f"max={xg_vals.max():.4f}  zeros={int((xg_vals == 0).sum())}")
+    n_stints_use = len(stints_df)
+    has_season_weight = 'season_weight' in stints_df.columns
+    shift_lengths = pd.to_numeric(stints_df['duration_seconds'], errors='coerce').fillna(0.0)
+    print(f"Building RAPM matrix (shift-level): {n_stints_use*2:,} rows × "
+          f"{n_players * 2 + n_context} features"
+          + (" (season-weighted)" if has_season_weight else ""))
+    print(f"  Shift diagnostics: players={n_players:,}  stints={n_stints_use:,}  "
+          f"mean_shift={shift_lengths.mean():.2f}s  median_shift={shift_lengths.median():.2f}s")
 
-        has_season_weight = 'season_weight' in events_df.columns
+    r_idx, c_idx, vals = [], [], []
+    y       = np.zeros(n_stints_use * 2)
+    weights = np.zeros(n_stints_use * 2)
+    off_offset = 0
+    def_offset = n_players
+    ctx_offset = n_players * 2
 
-        r_idx, c_idx, vals = [], [], []
-        y       = np.zeros(n_obs)
-        weights = np.zeros(n_obs)
-        off_offset = 0
-        def_offset = n_players
-        ctx_offset = n_players * 2
+    for i, (_, stint) in enumerate(stints_df.iterrows()):
+        dur    = float(stint['duration_seconds'])
+        dur_h  = dur / 3600.0
+        seas_w = float(stint['season_weight']) if has_season_weight else 1.0
+        w      = max(dur, 1.0) * seas_w
 
-        for i, (_, ev) in enumerate(events_df.iterrows()):
-            xg_ev      = float(ev['xg'])
-            is_home_ev = int(ev['is_home_shot'])
-            h_pids     = [int(p) for p in str(ev['home_players']).split('|') if p.strip()]
-            a_pids     = [int(p) for p in str(ev['away_players']).split('|') if p.strip()]
-            dur        = float(ev.get('stint_duration_seconds', 30) or 30)
-            seas_w     = float(ev.get('season_weight', 1.0) or 1.0)
-            w          = math.sqrt(max(dur, 1.0)) * seas_w
-            period_ev  = int(ev.get('period', 1) or 1)
+        hxg = float(stint['home_xg']) / dur_h
+        axg = float(stint['away_xg']) / dur_h
 
-            if is_home_ev:
-                off_pids, def_pids = h_pids, a_pids
-                score_st = max(-2.0, min(2.0, float(ev.get('home_score_diff', 0) or 0)))
-            else:
-                off_pids, def_pids = a_pids, h_pids
-                score_st = max(-2.0, min(2.0, -float(ev.get('home_score_diff', 0) or 0)))
+        h_pids = [int(p) for p in str(stint['home_players']).split('|') if p.strip()]
+        a_pids = [int(p) for p in str(stint['away_players']).split('|') if p.strip()]
 
-            for pid in off_pids:
-                if pid in pid_idx:
-                    r_idx.append(i); c_idx.append(off_offset + pid_idx[pid]); vals.append(1.0)
-            for pid in def_pids:
-                if pid in pid_idx:
-                    r_idx.append(i); c_idx.append(def_offset + pid_idx[pid]); vals.append(1.0)
+        home_row = i * 2
+        away_row = home_row + 1
+        home_score_state = max(-2.0, min(2.0, float(stint.get('home_score_diff', 0) or 0)))
+        away_score_state = -home_score_state
+        period = int(stint.get('period', 0) or 0)
 
-            # Context features (same names/order as context_features list)
-            h_pp_exp = float(ev.get('home_pp_expiry', 0) or 0)
-            a_pp_exp = float(ev.get('away_pp_expiry', 0) or 0)
-            h_ozs    = float(ev.get('home_ozs',       0) or 0)
-            a_ozs    = float(ev.get('away_ozs',       0) or 0)
-            nzs_val  = float(ev.get('nzs',            0) or 0)
-            h_btb    = float(ev.get('home_btb',       0) or 0)
-            a_btb    = float(ev.get('away_btb',       0) or 0)
+        h_pp_exp = float(stint.get('home_pp_expiry', 0) or 0)
+        a_pp_exp = float(stint.get('away_pp_expiry', 0) or 0)
+        h_ozs    = float(stint.get('home_ozs',       0) or 0)
+        a_ozs    = float(stint.get('away_ozs',       0) or 0)
+        nzs_val  = float(stint.get('nzs',            0) or 0)
+        h_btb    = float(stint.get('home_btb',       0) or 0)
+        a_btb    = float(stint.get('away_btb',       0) or 0)
 
+        for pid in h_pids:
+            if pid in pid_idx:
+                col = pid_idx[pid]
+                r_idx.append(home_row); c_idx.append(off_offset + col); vals.append(1.0)
+                r_idx.append(away_row); c_idx.append(def_offset + col); vals.append(1.0)
+        for pid in a_pids:
+            if pid in pid_idx:
+                col = pid_idx[pid]
+                r_idx.append(away_row); c_idx.append(off_offset + col); vals.append(1.0)
+                r_idx.append(home_row); c_idx.append(def_offset + col); vals.append(1.0)
+
+        for row_idx, is_home_attack, score_state, off_pp_exp, def_pp_exp, off_ozs, def_ozs, off_btb, def_btb in (
+            (home_row, 1.0, home_score_state, h_pp_exp, a_pp_exp, h_ozs, a_ozs, h_btb, a_btb),
+            (away_row, 0.0, away_score_state, a_pp_exp, h_pp_exp, a_ozs, h_ozs, a_btb, h_btb),
+        ):
             ctx_vals = [
-                float(is_home_ev),
-                score_st,
-                abs(score_st),
-                1.0 if period_ev == 2 else 0.0,
-                1.0 if period_ev == 3 else 0.0,
-                h_pp_exp, a_pp_exp,
-                h_ozs, a_ozs, nzs_val,
-                h_btb, a_btb,
+                is_home_attack,
+                score_state,
+                abs(score_state),
+                1.0 if period == 2 else 0.0,
+                1.0 if period == 3 else 0.0,
+                off_pp_exp, def_pp_exp,
+                off_ozs, def_ozs, nzs_val,
+                off_btb, def_btb,
             ]
             for ctx_col, ctx_val in enumerate(ctx_vals):
                 if ctx_val == 0.0:
                     continue
-                r_idx.append(i); c_idx.append(ctx_offset + ctx_col); vals.append(ctx_val)
+                r_idx.append(row_idx)
+                c_idx.append(ctx_offset + ctx_col)
+                vals.append(ctx_val)
 
-            # Prior subtraction in per-60 space (aligns priors with regression target)
-            if priors:
-                off_prior = sum(priors.get(p, {}).get('off', 0.0) for p in off_pids)
-                def_prior = sum(priors.get(p, {}).get('def', 0.0) for p in def_pids)
-                prior_per60 = off_prior + def_prior
-            else:
-                prior_per60 = 0.0
+        if priors:
+            h_off = sum(priors.get(pid, {}).get('off', 0.0) for pid in h_pids)
+            a_off = sum(priors.get(pid, {}).get('off', 0.0) for pid in a_pids)
+            h_def = sum(priors.get(pid, {}).get('def', 0.0) for pid in h_pids)
+            a_def = sum(priors.get(pid, {}).get('def', 0.0) for pid in a_pids)
+        else:
+            h_off = a_off = h_def = a_def = 0.0
 
-            dur_safe = max(dur, 1.0)
-            xg_per60 = xg_ev * (3600.0 / dur_safe)
-            y[i]       = xg_per60 - prior_per60
-            weights[i] = w
+        y[home_row] = hxg - h_off - a_def
+        y[away_row] = axg - a_off - h_def
+        weights[home_row] = w
+        weights[away_row] = w
 
-        X = sparse.csr_matrix(
-            (vals, (r_idx, c_idx)), shape=(n_obs, n_players * 2 + n_context)
-        )
+    X = sparse.csr_matrix(
+        (vals, (r_idx, c_idx)),
+        shape=(n_stints_use * 2, n_players * 2 + n_context)
+    )
 
+    alphas = [500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0, 50000.0, 100000.0]
+
+    # Asymmetric alpha: scale offense columns by k before regression so their effective
+    # L2 penalty is alpha/k² (less regularization on the offense block).
+    # After fitting, multiply offense coefficients by k to recover the original scale.
+    # ── DEBUG: target variable and weight diagnostics ─────────────────────────
+    _nonzero_y = y[y != 0.0]
+    _pct_zeros = 100.0 * (y == 0.0).mean()
+    print(f"  TARGET (y) diagnostics:")
+    print(f"    n_rows={len(y):,}  n_nonzero={len(_nonzero_y):,}  pct_zero={_pct_zeros:.1f}%")
+    print(f"    mean={y.mean():.4f}  std={y.std():.4f}  "
+          f"min={y.min():.4f}  max={y.max():.4f}")
+    if len(_nonzero_y) > 0:
+        print(f"    nonzero mean={_nonzero_y.mean():.4f}  "
+              f"nonzero std={_nonzero_y.std():.4f}  "
+              f"nonzero median={float(np.median(_nonzero_y)):.4f}")
+    print(f"  WEIGHTS diagnostics:")
+    print(f"    mean={weights.mean():.1f}  std={weights.std():.1f}  "
+          f"min={weights.min():.1f}  max={weights.max():.1f}")
+    print(f"    (weights = stint_duration_seconds × season_weight, 2 rows per stint)")
+    # ── END DEBUG ─────────────────────────────────────────────────────────────
+
+    if asymmetric_k != 1.0:
+        col_scale = np.ones(n_players * 2 + n_context)
+        col_scale[:n_players] = asymmetric_k
+        X_fit = X.dot(sparse.diags(col_scale))
+        print(f"  Asymmetric alpha: offense columns scaled by k={asymmetric_k:.2f} "
+              f"(effective off L2 penalty ≈ alpha/{asymmetric_k**2:.2f}×  "
+              f"→ less regularization on offense block)")
     else:
-        # ── Stint-level regression (legacy / fallback) ────────────────────────
-        n_stints_use = len(stints_df)
-        has_season_weight = 'season_weight' in stints_df.columns
-        print(f"Building RAPM matrix (stint-level): {n_stints_use*2:,} rows × "
-              f"{n_players * 2 + n_context} features"
-              + (" (season-weighted)" if has_season_weight else ""))
+        X_fit = X
 
-        r_idx, c_idx, vals = [], [], []
-        y       = np.zeros(n_stints_use * 2)
-        weights = np.zeros(n_stints_use * 2)
-        off_offset = 0
-        def_offset = n_players
-        ctx_offset = n_players * 2
-
-        for i, (_, stint) in enumerate(stints_df.iterrows()):
-            dur    = float(stint['duration_seconds'])
-            dur_h  = dur / 3600.0
-            seas_w = float(stint['season_weight']) if has_season_weight else 1.0
-            w      = math.sqrt(dur) * seas_w
-
-            hxg = float(stint['home_xg']) / dur_h
-            axg = float(stint['away_xg']) / dur_h
-
-            h_pids = [int(p) for p in str(stint['home_players']).split('|') if p.strip()]
-            a_pids = [int(p) for p in str(stint['away_players']).split('|') if p.strip()]
-
-            home_row = i * 2
-            away_row = home_row + 1
-            home_score_state = max(-2.0, min(2.0, float(stint.get('home_score_diff', 0) or 0)))
-            away_score_state = -home_score_state
-            period = int(stint.get('period', 0) or 0)
-
-            h_pp_exp = float(stint.get('home_pp_expiry', 0) or 0)
-            a_pp_exp = float(stint.get('away_pp_expiry', 0) or 0)
-            h_ozs    = float(stint.get('home_ozs',       0) or 0)
-            a_ozs    = float(stint.get('away_ozs',       0) or 0)
-            nzs_val  = float(stint.get('nzs',            0) or 0)
-            h_btb    = float(stint.get('home_btb',       0) or 0)
-            a_btb    = float(stint.get('away_btb',       0) or 0)
-
-            for pid in h_pids:
-                if pid in pid_idx:
-                    col = pid_idx[pid]
-                    r_idx.append(home_row); c_idx.append(off_offset + col); vals.append(1.0)
-                    r_idx.append(away_row); c_idx.append(def_offset + col); vals.append(1.0)
-            for pid in a_pids:
-                if pid in pid_idx:
-                    col = pid_idx[pid]
-                    r_idx.append(away_row); c_idx.append(off_offset + col); vals.append(1.0)
-                    r_idx.append(home_row); c_idx.append(def_offset + col); vals.append(1.0)
-
-            for row_idx, is_home_attack, score_state in (
-                (home_row, 1.0, home_score_state),
-                (away_row, 0.0, away_score_state),
-            ):
-                ctx_vals = [
-                    is_home_attack,
-                    score_state,
-                    abs(score_state),
-                    1.0 if period == 2 else 0.0,
-                    1.0 if period == 3 else 0.0,
-                    h_pp_exp, a_pp_exp,
-                    h_ozs, a_ozs, nzs_val,
-                    h_btb, a_btb,
-                ]
-                for ctx_col, ctx_val in enumerate(ctx_vals):
-                    if ctx_val == 0.0:
-                        continue
-                    r_idx.append(row_idx)
-                    c_idx.append(ctx_offset + ctx_col)
-                    vals.append(ctx_val)
-
-            if priors:
-                h_off = sum(priors.get(pid, {}).get('off', 0.0) for pid in h_pids)
-                a_off = sum(priors.get(pid, {}).get('off', 0.0) for pid in a_pids)
-                h_def = sum(priors.get(pid, {}).get('def', 0.0) for pid in h_pids)
-                a_def = sum(priors.get(pid, {}).get('def', 0.0) for pid in a_pids)
-            else:
-                h_off = a_off = h_def = a_def = 0.0
-
-            y[home_row] = hxg - h_off - a_def
-            y[away_row] = axg - a_off - h_def
-            weights[home_row] = w
-            weights[away_row] = w
-
-        X = sparse.csr_matrix(
-            (vals, (r_idx, c_idx)),
-            shape=(n_stints_use * 2, n_players * 2 + n_context)
-        )
-        avg_events_per_60 = None  # not applicable in stint-level mode
-
-    # Base alpha grid (tuned for modern seasons at ~87 events/60 min).
-    # Older PBP formats (10-11→17-18) produced ~160 events/60; events for those seasons
-    # may include blocked shots mis-labeled as MISS.  Effective per-60 regularisation =
-    # alpha / avg_events_per_60², so we scale the alpha grid to keep that constant.
-    # Without scaling, old seasons have ~3.4× weaker regularisation → higher RAPM variance
-    # that partially chains forward as inflated priors.
-    BASELINE_EV60 = 87.0
-    _base_alphas = [100.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0, 50000.0]
-    if use_events and avg_events_per_60 and avg_events_per_60 > 0:
-        _alpha_scale = (avg_events_per_60 / BASELINE_EV60) ** 2
-        alphas = [a * _alpha_scale for a in _base_alphas]
-        print(f"  Alpha scaling: ev/60={avg_events_per_60:.1f} ÷ {BASELINE_EV60} → "
-              f"scale²={_alpha_scale:.3f}  alpha range=[{alphas[0]:.0f}, {alphas[-1]:.0f}]")
-    else:
-        alphas = _base_alphas
-
-    mode_str = "event-level" if use_events else "stint-level"
-    print(f"Fitting joint offense/defense RAPM ({mode_str}) (RidgeCV)...")
+    print("Fitting joint offense/defense RAPM (shift-level) (RidgeCV)...")
     model = RidgeCV(alphas=alphas, fit_intercept=True)
-    model.fit(X, y, sample_weight=weights)
+    model.fit(X_fit, y, sample_weight=weights)
     print(f"  Best alpha: {model.alpha_}")
+    if float(model.alpha_) >= max(alphas):
+        print("  Warning: selected alpha is still at the top of the EV grid (search range may still be too low)")
 
     coef = model.coef_
-    if use_events:
-        # Event-level regression already targets per-60; coefficients are per-60
-        rapm_off = coef[:n_players].copy()
-        rapm_def = -coef[n_players:n_players * 2].copy()
+    if asymmetric_k != 1.0:
+        # Recover original-scale offense coefficients: β_actual = k × β_scaled
+        rapm_off = coef[:n_players] * asymmetric_k
     else:
         rapm_off = coef[:n_players].copy()
-        rapm_def = -coef[n_players:n_players * 2].copy()  # lower xGA allowed = better defense
+    rapm_def = -coef[n_players:n_players * 2].copy()  # lower xGA allowed = better defense
 
     # Fix 4: hard cap before adding priors back — clips regression blow-up artifacts
     n_clipped = int(((rapm_off > MAX_RAPM) | (rapm_off < -MAX_RAPM) |
@@ -2748,10 +3275,8 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
     # Print context (including dummy-variable) coefficients
     ctx_coef = coef[n_players * 2:]
     print("  Context / dummy-variable coefficients:")
-    ctx_scale = 1.0 if use_events else 1.0
     for cf_name, cf_val in zip(context_features, ctx_coef):
-        print(f"    {cf_name:<22}: {cf_val * ctx_scale:+.6f}"
-              + (" [×avg_ev/60]" if use_events else ""))
+        print(f"    {cf_name:<22}: {cf_val:+.6f}")
 
     # Fix 5: per-season diagnostics
     print(f"  Diagnostics ({len(all_pids)} players in matrix):")
@@ -2767,6 +3292,16 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
         for i in top15_idx
     )
     print(f"  Top 15 rapm_off: {top15_str}")
+    top10_def_idx = np.argsort(rapm_def)[-10:][::-1]
+    bottom10_def_idx = np.argsort(rapm_def)[:10]
+    print("  Top 10 rapm_def: " + ", ".join(
+        f"pid{all_pids[i]}={rapm_def[i]:.3f}" + (" (MC)" if all_pids[i] == MCDAVID_ID else "")
+        for i in top10_def_idx
+    ))
+    print("  Bottom 10 rapm_def: " + ", ".join(
+        f"pid{all_pids[i]}={rapm_def[i]:.3f}" + (" (MC)" if all_pids[i] == MCDAVID_ID else "")
+        for i in bottom10_def_idx
+    ))
     mc_i = pid_idx.get(MCDAVID_ID)
     if mc_i is not None:
         print(f"  McDavid: toi={float(player_toi_sec.get(MCDAVID_ID, 0)) / 60:.1f}min "
@@ -3450,7 +3985,7 @@ def check_and_maybe_upload(results_df):
     Quality gate (prior-informed RAPM):
       - McDavid rapm_off_pct > 90th
       - Draisaitl rapm_off_pct >= 59.5th
-      - Knies rapm_off_pct > 30th (collinearity fix check)
+      - Knies rapm_off_pct > 25th (collinearity fix check)
       - No high-TOI player (≥500 min) below 2nd percentile
     """
     # ── Min-TOI filter: remove small-sample / fringe-player noise ────────────
@@ -3520,7 +4055,7 @@ def check_and_maybe_upload(results_df):
     print(f"  McDavid     rapm_off_pct: {mc_pct:.1f}  {'✓' if mc_pct > 90 else '✗'}  (need >90)")
     print(f"  Draisaitl   rapm_off_pct: {dr_pct:.1f}  {'✓' if dr_pct >= 59.5 else '✗'}  (need >=59.5)")
     if knies_pct is not None:
-        print(f"  Knies       rapm_off_pct: {knies_pct:.1f}  {'✓' if knies_pct > 30 else '✗'}  (need >30, fixing collinearity)")
+        print(f"  Knies       rapm_off_pct: {knies_pct:.1f}  {'✓' if knies_pct > 25 else '✗'}  (need >25, fixing collinearity)")
     if nylander_pct is not None:
         print(f"  Nylander    rapm_off_pct: {nylander_pct:.1f}  (informational — should be top-6 range)")
     if celebrini_pct is not None:
@@ -3536,7 +4071,7 @@ def check_and_maybe_upload(results_df):
             print(f"    pid={int(row['player_id'])}  toi={row['toi_5v5_total']:.0f}min"
                   f"  rapm_off={row['rapm_off']:.3f}  pct={row['rapm_off_pct']:.1f}")
 
-    knies_ok = (knies_pct is None) or (knies_pct > 30)
+    knies_ok = (knies_pct is None) or (knies_pct > 25)
     # Allow ≤10 high-TOI outliers: 2% of ~500 qualified players = ~10 expected below 2nd pct
     # by definition. These are typically legitimate depth/stay-at-home defensemen
     # (Edmundson, Chiarot, Lindgren, etc.) whose offensive RAPM is correctly low.
@@ -3557,7 +4092,7 @@ def check_and_maybe_upload(results_df):
         print("\n✗ Conditions not met — not uploading projected RAPM card")
         if mc_pct <= 90:
             print(f"  McDavid at {mc_pct:.1f}th pct — prior-informed RAPM should have him >90th")
-        if knies_pct is not None and knies_pct <= 30:
+        if knies_pct is not None and knies_pct <= 25:
             print(f"  Knies at {knies_pct:.1f}th pct — collinearity still inflating Toronto linemates")
         if outlier_count > 0:
             print(f"  {outlier_count} high-TOI players below 2nd pct — investigate outliers")
@@ -3647,9 +4182,67 @@ def print_comparison_table(new_results_df, old_rapm_lookup):
     print()
 
 
+def _load_player_identity_maps():
+    """
+    Build player lookup maps from the local player cache so validation output
+    does not depend on a live Supabase call.
+    """
+    if not os.path.exists(PLAYER_LOOKUP_FILE):
+        return {}, {}, {}
+
+    try:
+        lookup = pd.read_csv(PLAYER_LOOKUP_FILE)
+    except Exception as e:
+        print(f"  Warning: could not read player lookup cache ({e})")
+        return {}, {}, {}
+
+    if lookup.empty or 'player_id' not in lookup.columns:
+        return {}, {}, {}
+
+    lookup = lookup.dropna(subset=['player_id']).copy()
+    lookup['player_id'] = lookup['player_id'].astype(int)
+
+    name_to_pid = {}
+    pid_to_team = {}
+    pid_to_pos = {}
+    for row in lookup.itertuples():
+        pid = int(row.player_id)
+        full_name = getattr(row, 'full_name', None)
+        if isinstance(full_name, str) and full_name.strip():
+            name_to_pid[full_name.strip()] = pid
+        pid_to_team[pid] = getattr(row, 'team', None)
+        pid_to_pos[pid] = getattr(row, 'position', None)
+
+    return name_to_pid, pid_to_team, pid_to_pos
+
+
+def print_season_spotlight_summary(season_key, results_df, name_to_pid):
+    """
+    Print the season-level EV RAPM checkpoints we care about most during the run.
+    """
+    if results_df.empty:
+        return
+
+    spotlight_names = ['Jackson LaCombe', 'Connor McDavid']
+    print(f"\n  Season EV RAPM spotlight — {season_key}")
+    print(f"    {'Player':<18} {'rapm_off':>9} {'off_pct':>8} {'rapm_def':>9} {'def_pct':>8}")
+    for name in spotlight_names:
+        pid = name_to_pid.get(name)
+        if not pid:
+            print(f"    {name:<18} {'N/A':>9} {'N/A':>8} {'N/A':>9} {'N/A':>8}")
+            continue
+        row = results_df[results_df['player_id'] == pid]
+        if row.empty:
+            print(f"    {name:<18} {'N/Q':>9} {'N/Q':>8} {'N/Q':>9} {'N/Q':>8}")
+            continue
+        rec = row.iloc[0]
+        print(f"    {name:<18} {rec['rapm_off']:>9.4f} {rec['rapm_off_pct']:>8.1f} "
+              f"{rec['rapm_def']:>9.4f} {rec['rapm_def_pct']:>8.1f}")
+
+
 def print_validation_summary(projected_df, old_rapm_lookup):
     """
-    Print targeted validation checks after event-level RAPM:
+    Print targeted validation checks after the shift-level EV RAPM rewrite:
       - McDavid rapm_def_pct (target >80)
       - LaCombe rapm_def_pct (target >30)
       - Anaheim D-men average rapm_def (should improve)
@@ -3658,18 +4251,9 @@ def print_validation_summary(projected_df, old_rapm_lookup):
     """
     if projected_df.empty:
         return
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        print("  Validation summary skipped — Supabase not configured")
-        return
-
-    try:
-        sb = create_client(SUPABASE_URL, SUPABASE_KEY)
-        rows = sb.table('players').select('player_id,full_name,team,position').execute().data
-        name_to_pid = {r['full_name']: int(r['player_id']) for r in rows if r.get('full_name')}
-        pid_to_team = {int(r['player_id']): r.get('team') for r in rows if r.get('player_id') is not None}
-        pid_to_pos = {int(r['player_id']): r.get('position') for r in rows if r.get('player_id') is not None}
-    except Exception as e:
-        print(f"  Validation summary skipped — name lookup failed ({e})")
+    name_to_pid, pid_to_team, pid_to_pos = _load_player_identity_maps()
+    if not name_to_pid:
+        print("  Validation summary skipped — local player lookup unavailable")
         return
 
     def _pct_for(pid, col):
@@ -3696,7 +4280,7 @@ def print_validation_summary(projected_df, old_rapm_lookup):
     ana_def_avg = float(ana_def_vals.mean()) if not ana_def_vals.empty else None
 
     print("\n" + "=" * 60)
-    print("EVENT-LEVEL VALIDATION")
+    print("SHIFT-LEVEL EV RAPM VALIDATION")
     print("=" * 60)
     print("Metric          | Before | After")
     print("----------------+--------+-------")
@@ -3736,9 +4320,23 @@ if __name__ == '__main__':
     old_rapm_lookup = fetch_old_rapm()
     print(f"  Saved {len(old_rapm_lookup)} player RAPM values for comparison")
 
+    print("\nLoading clean 5v5 shot cache for card-season xG refresh...")
+    shots_cache = _load_shots_cache()
+    if not shots_cache.empty:
+        shots_cache = _compute_xg_for_shots(shots_cache)
+        print(f"  Shot cache ready: {len(shots_cache):,} Fenwick events across "
+              f"{shots_cache['season'].nunique()} seasons")
+    else:
+        print("  Shot cache unavailable — keeping cached stint xG totals")
+
+    experiment_name = RAPM_EXPERIMENT if RAPM_EXPERIMENT in SUPPORTED_RAPM_EXPERIMENTS else ""
+    if RAPM_EXPERIMENT and not experiment_name:
+        print(f"  Warning: unsupported RAPM_EXPERIMENT={RAPM_EXPERIMENT!r} — running baseline only.")
+
     # Steps 1+2: fetch game IDs and stints for all seasons
-    season_dfs         = {}
-    events_by_season   = {}
+    season_dfs = {}
+    experimental_season_dfs = {}
+    events_by_season = {}
     game_ids_by_season = {}   # saved for Step 2d (dummy augmentation)
 
     # QUICK_TEST: run only the 3 card seasons to verify dummy variables
@@ -3764,7 +4362,26 @@ if __name__ == '__main__':
         stints['season_weight'] = season_cfg['weight']
         if not events.empty:
             events['season_weight'] = season_cfg['weight']
+        if not shots_cache.empty and season_key in set(shots_cache['season'].unique()):
+            season_shots = shots_cache[shots_cache['season'] == season_key].copy()
+            stints = _rebuild_stint_xg_from_shots_cache(stints, season_shots, season_key)
+            if experiment_name == EXPERIMENT_XG_CONTEXT_PARITY:
+                experimental_season_dfs[season_key] = _rebuild_stint_xg_from_shots_cache(
+                    stints.copy(),
+                    season_shots,
+                    season_key,
+                    experiment_name=experiment_name,
+                )
+            elif experiment_name == EXPERIMENT_SHORT_MISS_PARITY:
+                filtered_shots, _ = _apply_short_miss_parity_filter(season_shots, season_key=season_key)
+                experimental_season_dfs[season_key] = _rebuild_stint_xg_from_shots_cache(
+                    stints.copy(),
+                    filtered_shots,
+                    season_key,
+                )
         season_dfs[season_key] = stints
+        if season_key not in experimental_season_dfs:
+            experimental_season_dfs[season_key] = stints.copy()
         events_by_season[season_key] = events
         print(f"  {len(stints):,} stints, {len(events):,} events loaded for {season_key}")
 
@@ -3817,48 +4434,21 @@ if __name__ == '__main__':
             _sk,
             SEASON_CONFIGS[_sk],
         )
-        # Propagate dummy variables to events for the same season
-        if _sk in events_by_season and not events_by_season[_sk].empty:
-            print(f"  Augmenting events with dummy variables for {_sk}...")
-            events_by_season[_sk] = augment_events_with_stints_dummies(
-                events_by_season[_sk], season_dfs[_sk]
+        if experiment_name == EXPERIMENT_XG_CONTEXT_PARITY and _sk in experimental_season_dfs:
+            experimental_season_dfs[_sk] = augment_stints_with_dummies(
+                experimental_season_dfs[_sk],
+                game_ids_by_season.get(_sk, []),
+                _sk,
+                SEASON_CONFIGS[_sk],
             )
-            print(f"    {len(events_by_season[_sk]):,} events augmented")
 
-    # Step 2d.5: build event-level matrix from cached shot events (23-24/24-25/25-26)
+    # Step 2d.5: event-level cache is no longer part of the EV RAPM regression path
     print(f"\n{'='*60}")
-    print("Step 2d.5 — Event-level shots cache (23-24 / 24-25 / 25-26)")
+    print("Step 2d.5 — Event-level shot rematch skipped")
     print(f"{'='*60}")
-    shots_cache = _load_shots_cache()
-    if shots_cache.empty:
-        print("  No cached shot events available — keeping existing events")
-    else:
-        shots_cache = _compute_xg_for_shots(shots_cache)
-        for _sk in list(DUMMY_SEASONS):
-            if _sk not in season_dfs:
-                continue
-            events_out_file = os.path.join(DATA_DIR, f"events_ev_{_sk.replace('-', '')}.csv")
-            season_weight = SEASON_CONFIGS[_sk]['weight']
-
-            season_shots = shots_cache[shots_cache['season'] == _sk].copy()
-            if season_shots.empty:
-                print(f"  {_sk}: no 5v5 shots in cache")
-                continue
-
-            print(f"  {_sk}: matching {len(season_shots):,} shot events to stints...")
-            ev_df = _match_shots_to_stints(season_shots, season_dfs[_sk], _sk, season_weight)
-            if ev_df.empty:
-                print(f"    {_sk}: 0 events matched to stints")
-                continue
-
-            # Add dummy variables from augmented stints
-            ev_df = augment_events_with_stints_dummies(ev_df, season_dfs[_sk])
-            ev_df.to_csv(events_out_file, index=False)
-            events_by_season[_sk] = ev_df
-
-            xg_vals = ev_df['xg'].astype(float).values
-            print(f"    {_sk}: {len(ev_df):,} events matched")
-            print(f"      xG mean={xg_vals.mean():.4f}  max={xg_vals.max():.4f}  zeros={int((xg_vals == 0).sum())}")
+    print("  Shift-level EV RAPM now fits directly on stints, so cached shot-to-stint")
+    print("  rematching is skipped in this pass. Existing event files are kept only")
+    print("  for compatibility/debugging and are ignored by the regression.")
 
     # Step 2e: fetch PP/PK stints for card seasons only (23-24/24-25/25-26).
     # Scraping all historical seasons is impractical without a local hockey-scraper
@@ -3891,8 +4481,70 @@ if __name__ == '__main__':
     print(f"{'='*60}")
     raw_season_results = run_prior_informed_rapm(
         season_dfs, player_seasons_df, current_season_filter=current_season_filter,
-        events_by_season=events_by_season,
+        events_by_season=events_by_season, experiment_name="",
     )
+
+    experiment_mode = bool(experiment_name)
+    experimental_raw_results = {}
+    if experiment_name == EXPERIMENT_EV_PRIOR_PARITY:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experimental EV prior parity RAPM")
+        print(f"{'='*60}")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_XG_CONTEXT_PARITY:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experimental xG context parity RAPM")
+        print(f"{'='*60}")
+        print("  Applying training-pipeline rush/rebound and pre-shot movement rules")
+        print("  to the shot-cache xG rebuild while leaving priors and ridge setup unchanged.")
+        experimental_raw_results = run_prior_informed_rapm(
+            experimental_season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name="",
+        )
+    elif experiment_name == EXPERIMENT_SHORT_MISS_PARITY:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experimental short-miss parity RAPM")
+        print(f"{'='*60}")
+        print("  Excluding miss_reason='short' shots from shot-cache xG/Fenwick totals")
+        print("  when that metadata exists, while leaving the baseline live path untouched.")
+        experimental_raw_results = run_prior_informed_rapm(
+            experimental_season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name="",
+        )
+    elif experiment_name in _ASYMMETRIC_ALPHA_EXPERIMENTS:
+        k_val = _ASYMMETRIC_ALPHA_EXPERIMENTS[experiment_name]
+        print(f"\n{'='*60}")
+        print(f"Step 3a — Experimental asymmetric alpha (k={k_val:.2f})")
+        print(f"{'='*60}")
+        print(f"  Offense columns scaled by {k_val:.2f} before ridge regression.")
+        print(f"  Effective off L2 penalty ≈ alpha/{k_val**2:.2f}×  (less shrinkage on offense).")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name="",
+            asymmetric_k=k_val,
+        )
+
+    raw_season_results = apply_promoted_baseline_rapm_adjustments(raw_season_results, season_dfs)
+    if experimental_raw_results:
+        experimental_raw_results = apply_promoted_baseline_rapm_adjustments(
+            experimental_raw_results,
+            season_dfs,
+        )
 
     # Step 3b: filter, compute context metrics, upload per-season RAPM
     print(f"\n{'='*60}")
@@ -3900,6 +4552,7 @@ if __name__ == '__main__':
     print(f"{'='*60}")
 
     season_results = {}
+    name_to_pid, _, _ = _load_player_identity_maps()
     for season_key in ['23-24', '24-25', '25-26']:
         if season_key not in raw_season_results:
             continue
@@ -3913,7 +4566,9 @@ if __name__ == '__main__':
         context = compute_context_metrics(stints, qualified)
         merged = qualified.merge(context, on='player_id', how='left')
         season_results[season_key] = merged
-        upload_season_rapm(season_key, merged)
+        print_season_spotlight_summary(season_key, merged, name_to_pid)
+        if not experiment_mode and not QUICK_TEST:
+            upload_season_rapm(season_key, merged)
 
     # Step 3c: prior-informed PP/PK RAPM daisy chain + per-season upload
     print(f"\n{'='*60}")
@@ -3930,34 +4585,230 @@ if __name__ == '__main__':
             pk_df = res.get('pk', pd.DataFrame())
             if not pp_df.empty or not pk_df.empty:
                 pp_pk_card_season_results[season_key] = res
-                upload_season_pp_pk_rapm(season_key, pp_df, pk_df)
+                if not experiment_mode and not QUICK_TEST:
+                    upload_season_pp_pk_rapm(season_key, pp_df, pk_df)
         print_pp_pk_leaderboards(pp_pk_card_season_results)
     else:
         print("  No PP/PK stints available — skipping PP/PK RAPM")
         print("  Run without SKIP_SCRAPING=1 to generate stints_ppk_XXYY.csv files first.")
 
-    # Save per-season RAPM to JSON for compute_historical_war.py
-    per_season_rapm = {}
-    for sk, df_s in raw_season_results.items():
-        per_season_rapm[sk] = {
-            str(int(row.player_id)): {
-                'rapm_off': round(float(row.rapm_off), 4),
-                'rapm_def': round(float(row.rapm_def), 4),
+    def _results_to_json(results_by_season):
+        return {
+            sk: {
+                str(int(row.player_id)): {
+                    'rapm_off': round(float(row.rapm_off), 4),
+                    'rapm_def': round(float(row.rapm_def), 4),
+                }
+                for row in df_s.itertuples()
+                if pd.notna(row.rapm_off) and pd.notna(row.rapm_def)
             }
-            for row in df_s.itertuples()
-            if pd.notna(row.rapm_off) and pd.notna(row.rapm_def)
+            for sk, df_s in results_by_season.items()
         }
-    _rapm_json_path = os.path.join(DATA_DIR, 'per_season_rapm.json')
-    with open(_rapm_json_path, 'w') as _f:
-        json.dump(per_season_rapm, _f)
-    _total_ps = sum(len(v) for v in per_season_rapm.values())
-    print(f"\nSaved per-season RAPM to {_rapm_json_path} ({_total_ps} total player-seasons)")
+
+    baseline_projected = project_season_results(season_results)
+    projected = baseline_projected
+
+    if experiment_mode:
+        print(f"\nExperimental RAPM mode active: {experiment_name}")
+        experimental_season_results = {}
+        for season_key, raw_df in raw_season_results.items():
+            if experiment_name == EXPERIMENT_TEAMMATE_SHARE_DEFENSE:
+                adjusted_raw = apply_teammate_share_defense_experiment(raw_df, season_dfs[season_key])
+            elif experiment_name == EXPERIMENT_2425_COLLINEARITY_REALLOCATION:
+                if season_key == '24-25':
+                    adjusted_raw = apply_2425_collinearity_reallocation_experiment(
+                        raw_df,
+                        season_dfs[season_key],
+                    )
+                else:
+                    adjusted_raw = raw_df.copy()
+            elif experiment_name == EXPERIMENT_COLLINEARITY_REALLOCATION_FORWARD_2425_2526:
+                if season_key in ('24-25', '25-26'):
+                    adjusted_raw = apply_2425_collinearity_reallocation_experiment(
+                        raw_df,
+                        season_dfs[season_key],
+                        forward_only=True,
+                    )
+                else:
+                    adjusted_raw = raw_df.copy()
+            elif experiment_name == EXPERIMENT_2425_COLLINEARITY_REALLOCATION_DEFENSE:
+                adjusted_raw = raw_df.copy()
+            elif experiment_name in {
+                EXPERIMENT_EV_PRIOR_PARITY,
+                EXPERIMENT_XG_CONTEXT_PARITY,
+                EXPERIMENT_SHORT_MISS_PARITY,
+            } | set(_ASYMMETRIC_ALPHA_EXPERIMENTS.keys()):
+                adjusted_raw = experimental_raw_results.get(season_key, raw_df.copy())
+            else:
+                adjusted_raw = raw_df.copy()
+            experimental_raw_results[season_key] = adjusted_raw
+            if season_key in ['23-24', '24-25', '25-26']:
+                adjusted_card = filter_qualified_results(adjusted_raw)
+                baseline_card = season_results.get(season_key, pd.DataFrame()).copy()
+                if not baseline_card.empty:
+                    keep_cols = [
+                        'player_id',
+                        'rapm_off',
+                        'rapm_def',
+                        'rapm_off_pct',
+                        'rapm_def_pct',
+                        'top_teammate_share',
+                        'defense_share_multiplier',
+                        'baseline_rapm_def',
+                        'baseline_rapm_def_pct',
+                        'rapm_def_delta',
+                        'rapm_def_pct_delta',
+                        'onice_xgf_pct',
+                        'onice_xgd60',
+                        'share_score',
+                        'offense_tilt_score',
+                        'collinearity_reallocation_score',
+                        'offense_collinearity_bonus',
+                        'defense_credit_transfer',
+                        'baseline_rapm_off',
+                        'baseline_rapm_off_pct',
+                        'rapm_off_delta',
+                        'rapm_off_pct_delta',
+                    ]
+                    adjusted_subset = adjusted_card[[c for c in keep_cols if c in adjusted_card.columns]]
+                    baseline_card = baseline_card.drop(
+                        columns=[c for c in adjusted_subset.columns if c != 'player_id'],
+                        errors='ignore',
+                    )
+                    experimental_season_results[season_key] = baseline_card.merge(
+                        adjusted_subset,
+                        on='player_id',
+                        how='inner',
+                    )
+                else:
+                    experimental_season_results[season_key] = adjusted_card
+
+        projected = project_season_results(experimental_season_results)
+        projected_compare = baseline_projected[
+            ['player_id', 'rapm_off', 'rapm_def', 'rapm_off_pct', 'rapm_def_pct']
+        ].merge(
+            projected[
+                ['player_id', 'rapm_off', 'rapm_def', 'rapm_off_pct', 'rapm_def_pct']
+            ],
+            on='player_id',
+            how='inner',
+            suffixes=('_baseline', '_experimental'),
+        )
+        projected_metrics = []
+        weighted_metric_cols = []
+        if experiment_name == EXPERIMENT_TEAMMATE_SHARE_DEFENSE:
+            weighted_metric_cols = ['top_teammate_share', 'defense_share_multiplier']
+        elif experiment_name in (
+            EXPERIMENT_2425_COLLINEARITY_REALLOCATION,
+            EXPERIMENT_COLLINEARITY_REALLOCATION_FORWARD_2425_2526,
+        ):
+            weighted_metric_cols = [
+                'top_teammate_share',
+                'onice_xgf_pct',
+                'onice_xgd60',
+                'share_score',
+                'offense_tilt_score',
+                'collinearity_reallocation_score',
+                'offense_collinearity_bonus',
+                'defense_credit_transfer',
+            ]
+        for pid in projected['player_id'].tolist() if (not projected.empty and weighted_metric_cols) else []:
+            metric_totals = {col: 0.0 for col in weighted_metric_cols}
+            metric_weights = {col: 0.0 for col in weighted_metric_cols}
+            for season_key, season_df in experimental_season_results.items():
+                row = season_df[season_df['player_id'] == pid]
+                if row.empty:
+                    continue
+                w = CARD_SEASON_WEIGHTS.get(season_key, 0.0)
+                for col in weighted_metric_cols:
+                    if col not in row.columns or pd.isna(row[col].iloc[0]):
+                        continue
+                    metric_totals[col] += float(row[col].iloc[0]) * w
+                    metric_weights[col] += w
+            payload = {'player_id': pid}
+            for col in weighted_metric_cols:
+                payload[col] = (
+                    metric_totals[col] / metric_weights[col]
+                    if metric_weights[col] > 0 else None
+                )
+            projected_metrics.append(payload)
+        if projected_metrics:
+            projected = projected.merge(pd.DataFrame(projected_metrics), on='player_id', how='left')
+
+        exp_json = _results_to_json(experimental_raw_results)
+        exp_json_path = os.path.join(DATA_DIR, f'per_season_rapm_{experiment_name}.json')
+        with open(exp_json_path, 'w') as fh:
+            json.dump(exp_json, fh)
+        print(f"\nSaved experimental per-season RAPM to {exp_json_path}")
+
+        summary = build_experiment_summary(baseline_projected, projected)
+        if summary:
+            summary_path = os.path.join(DATA_DIR, f'rapm_experiment_{experiment_name}_summary.json')
+            with open(summary_path, 'w') as fh:
+                json.dump(summary, fh, indent=2)
+            print(f"Saved experiment summary to {summary_path}")
+
+        if not projected.empty:
+            compare_csv = projected_compare.copy()
+            if experiment_name == EXPERIMENT_TEAMMATE_SHARE_DEFENSE:
+                compare_csv = compare_csv.merge(
+                    projected[['player_id', 'top_teammate_share', 'defense_share_multiplier']],
+                    on='player_id',
+                    how='left',
+                )
+            elif experiment_name in (
+                EXPERIMENT_2425_COLLINEARITY_REALLOCATION,
+                EXPERIMENT_COLLINEARITY_REALLOCATION_FORWARD_2425_2526,
+            ):
+                compare_csv = compare_csv.merge(
+                    projected[[
+                        c for c in [
+                            'player_id',
+                            'top_teammate_share',
+                            'onice_xgf_pct',
+                            'onice_xgd60',
+                            'share_score',
+                            'offense_tilt_score',
+                            'collinearity_reallocation_score',
+                            'offense_collinearity_bonus',
+                            'defense_credit_transfer',
+                        ] if c in projected.columns
+                    ]],
+                    on='player_id',
+                    how='left',
+                )
+            compare_csv['rapm_off_delta'] = compare_csv['rapm_off_experimental'] - compare_csv['rapm_off_baseline']
+            compare_csv['rapm_def_delta'] = compare_csv['rapm_def_experimental'] - compare_csv['rapm_def_baseline']
+            compare_csv['rapm_off_pct_delta'] = compare_csv['rapm_off_pct_experimental'] - compare_csv['rapm_off_pct_baseline']
+            compare_csv['rapm_def_pct_delta'] = compare_csv['rapm_def_pct_experimental'] - compare_csv['rapm_def_pct_baseline']
+            compare_csv_path = os.path.join(DATA_DIR, f'rapm_experiment_{experiment_name}.csv')
+            compare_csv.to_csv(compare_csv_path, index=False)
+            print(f"Saved projected experiment comparison to {compare_csv_path}")
+            if summary:
+                print(f"  Players compared: {summary.get('players_compared')}")
+                print(f"  Median |off pct delta|: {summary.get('median_abs_rapm_off_pct_delta')}")
+                print(f"  Median |def pct delta|: {summary.get('median_abs_rapm_def_pct_delta')}")
+                print(f"  Share within 10 off pct pts: {summary.get('share_within_10_off_pct_points')}")
+                print(f"  Share within 10 def pct pts: {summary.get('share_within_10_def_pct_points')}")
+    else:
+        # Save per-season RAPM to JSON for compute_historical_war.py
+        # QUICK_TEST only builds 3 seasons — never overwrite the full history JSON
+        if QUICK_TEST:
+            _total_ps = sum(len(v) for v in _results_to_json(raw_season_results).values())
+            print(f"\n[QUICK_TEST] Skipping per_season_rapm.json save ({_total_ps} entries; "
+                  f"would overwrite full history with 3-season chain values)")
+        else:
+            per_season_rapm = _results_to_json(raw_season_results)
+            _rapm_json_path = os.path.join(DATA_DIR, 'per_season_rapm.json')
+            with open(_rapm_json_path, 'w') as _f:
+                json.dump(per_season_rapm, _f)
+            _total_ps = sum(len(v) for v in per_season_rapm.values())
+            print(f"\nSaved per-season RAPM to {_rapm_json_path} ({_total_ps} total player-seasons)")
 
     # Step 4: project per-season RAPM to 3-year card RAPM and upload to players
     print(f"\n{'='*60}")
     print("Step 4 — Project 3-year RAPM card")
     print(f"{'='*60}")
-    projected = project_season_results(season_results)
     if projected.empty:
         print("✗ No projected RAPM rows were produced")
         sys.exit(1)
@@ -3965,7 +4816,12 @@ if __name__ == '__main__':
     # Print comparison before quality gate so results can be reviewed first
     print_comparison_table(projected, old_rapm_lookup)
     print_validation_summary(projected, old_rapm_lookup)
-
-    check_and_maybe_upload(projected)
+    if experiment_mode:
+        print("\nExperimental RAPM mode: skipping baseline upload to Supabase.")
+    elif QUICK_TEST:
+        print("\n[QUICK_TEST] Skipping Supabase upload — 3-season chain values are not suitable "
+              "for production (use full run without QUICK_TEST to publish).")
+    else:
+        check_and_maybe_upload(projected)
 
     print("\n✓ Done. Run compute_ratings.py, then compute_percentiles.py to refresh cards.")

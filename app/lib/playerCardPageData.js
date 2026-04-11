@@ -21,6 +21,7 @@ function mapSeasonRows(rows, playerLookup) {
     return {
       ...player,
       player_id: ps.player_id,
+      season: ps.season,
       team: ps.team || player.team || "",
       teamColor: TEAM_COLOR[ps.team] || TEAM_COLOR[player.team] || "#4a6a88",
       gp: ps.gp,
@@ -28,6 +29,7 @@ function mapSeasonRows(rows, playerLookup) {
       a: assists,
       pts,
       toi: formatAvgToi(ps.toi, ps.gp),
+      toi_total: ps.toi ?? null,
       toi_5v5: ps.toi_5v5 ?? null,
       cf_pct: ps.cf_pct,
       xgf_pct: ps.xgf_pct,
@@ -79,6 +81,7 @@ export async function fetchPlayerCardPageData() {
       .from("player_seasons")
       .select("player_id,team,war_total")
       .eq("season", CURRENT_SEASON)
+      .not("war_total", "is", null)
       .order("war_total", { ascending: false, nullsFirst: false })
       .limit(5),
   ]);
@@ -123,4 +126,3 @@ export async function fetchPlayerCardPageData() {
     defaultSearchPlayers,
   };
 }
-

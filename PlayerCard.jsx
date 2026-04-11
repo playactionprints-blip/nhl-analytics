@@ -1838,34 +1838,41 @@ function TeamGrid({ onSelectTeam, selectedTeam }) {
 }
 
 // ── Stats Table ───────────────────────────────────────────────────────────────
-const DEFAULT_TABLE_COLS = new Set(['full_name','team','position','gp','g','a','pts','overall_rating','war_total']);
+const AVAILABLE_SEASONS = ['25-26', '24-25', '23-24'];
+const DEFAULT_TABLE_COLS = new Set(['full_name','season','team','position','gp','toi','war_ev_off','war_ev_def','war_pp','war_pk','war_penalties','war_shooting','war_total']);
+
+function fmtTotalToi(totalMin) {
+  if (totalMin == null) return '—';
+  const mins = Math.floor(totalMin);
+  const secs = Math.round((totalMin - mins) * 60);
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
 
 function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
-  const [sortKey, setSortKey] = useState('pts');
+  const [sortKey, setSortKey] = useState('war_total');
   const [sortDir, setSortDir] = useState('desc');
   const [posFilter, setPosFilter] = useState('S');
   const [tableSearch, setTableSearch] = useState('');
-  const [selectedSeason, setSelectedSeason] = useState('players'); // 'players' | '25-26' | '24-25' | '23-24'
+  const [teamFilter, setTeamFilter] = useState('');
+  const [seasonFrom, setSeasonFrom] = useState('25-26');
+  const [seasonTo, setSeasonTo] = useState('25-26');
+  const [minToi, setMinToi] = useState(0);
+  const [minGp, setMinGp] = useState(0);
+  const [rateMode, setRateMode] = useState('raw');
+  const [aggregate, setAggregate] = useState(false);
   const [visibleCols, setVisibleCols] = useState(DEFAULT_TABLE_COLS);
   const [showColPicker, setShowColPicker] = useState(false);
 
-  // Use season-specific data when a historical season is selected
-  const activePlayers = useMemo(
-    () => (selectedSeason === 'players' ? players : (seasonStats?.[selectedSeason] || [])),
-    [players, seasonStats, selectedSeason]
-  );
-
   const ALL_COLS = [
     { key:'full_name',      sortKey:'full_name',      label:'Player',      align:'left',   alwaysVisible:true },
+    { key:'season',         sortKey:'season',          label:'Season',      align:'center', mobileHide:true },
     { key:'team',           sortKey:'team',            label:'Team',        align:'left',   mobileHide:true },
     { key:'position',       sortKey:'position',        label:'Pos',         align:'center', mobileHide:true },
     { key:'gp',             sortKey:'gp',              label:'GP',          align:'right',  mobileHide:true },
-    { key:'g',              sortKey:'g',               label:'G',           align:'right',  mobileHide:true },
-    { key:'a',              sortKey:'a',               label:'A',           align:'right',  mobileHide:true },
-    { key:'pts',            sortKey:'pts',             label:'PTS',         align:'right',  bold:true },
-    { key:'plus_minus',     sortKey:'plus_minus',      label:'+/-',         align:'right',  mobileHide:true, optional:true },
-    { key:'ppp',            sortKey:'ppp',             label:'PPP',         align:'right',  mobileHide:true, optional:true },
-    { key:'toi',            sortKey:'toi_min',         label:'TOI',         align:'right',  mobileHide:true, optional:true },
+    { key:'g',              sortKey:'g',               label:'G',           align:'right',  mobileHide:true, optional:true },
+    { key:'a',              sortKey:'a',               label:'A',           align:'right',  mobileHide:true, optional:true },
+    { key:'pts',            sortKey:'pts',             label:'PTS',         align:'right',  bold:true, optional:true },
+    { key:'toi',            sortKey:'toi_total',       label:'TOI',         align:'right',  mobileHide:true },
     { key:'cf_pct',         sortKey:'cf_pct',          label:'CF%',         align:'right',  pctStat:true, mobileHide:true, optional:true },
     { key:'xgf_pct',        sortKey:'xgf_pct',         label:'xGF%',        align:'right',  pctStat:true, mobileHide:true, optional:true },
     { key:'hdcf_pct',       sortKey:'hdcf_pct',        label:'HDCF%',       align:'right',  pctStat:true, mobileHide:true, optional:true },
@@ -1875,29 +1882,124 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
     { key:'rapm_def',       sortKey:'rapm_def',        label:'RAPM Def',    align:'right',  mobileHide:true, optional:true },
     { key:'off_rating',     sortKey:'off_rating',      label:'Off Rtg',     align:'right',  bold:true, rating:true, mobileHide:true, optional:true },
     { key:'def_rating',     sortKey:'def_rating',      label:'Def Rtg',     align:'right',  bold:true, rating:true, mobileHide:true, optional:true },
-    { key:'overall_rating', sortKey:'overall_rating',  label:'OVR',         align:'right',  bold:true, rating:true },
-    { key:'war_total',      sortKey:'war_total',       label:'WAR3',        align:'right'  },
+    { key:'overall_rating', sortKey:'overall_rating',  label:'OVR',         align:'right',  bold:true, rating:true, optional:true },
+    { key:'war_ev_off',     sortKey:'war_ev_off',      label:'EVO',         align:'right',  mobileHide:true, warStat:true },
+    { key:'war_ev_def',     sortKey:'war_ev_def',      label:'EVD',         align:'right',  mobileHide:true, warStat:true },
+    { key:'war_pp',         sortKey:'war_pp',          label:'PP',          align:'right',  mobileHide:true, warStat:true },
+    { key:'war_pk',         sortKey:'war_pk',          label:'PK',          align:'right',  mobileHide:true, warStat:true },
+    { key:'war_penalties',  sortKey:'war_penalties',   label:'Pens WAR',    align:'right',  mobileHide:true, warStat:true },
+    { key:'war_shooting',   sortKey:'war_shooting',    label:'Shoot WAR',   align:'right',  mobileHide:true, warStat:true },
+    { key:'war_total',      sortKey:'war_total',       label:'WAR',         align:'right',  warStat:true },
   ];
   const COLS = ALL_COLS.filter(col => visibleCols.has(col.key) || col.alwaysVisible);
 
-  function parseToi(toi) {
-    if (!toi) return null;
-    const parts = String(toi).split(':');
-    return parseInt(parts[0]) + (parseInt(parts[1]) || 0) / 60;
-  }
+  // Seasons included in the selected range
+  const selectedSeasons = useMemo(() => {
+    const fi = AVAILABLE_SEASONS.indexOf(seasonFrom);
+    const ti = AVAILABLE_SEASONS.indexOf(seasonTo);
+    if (fi === -1 || ti === -1) return [seasonFrom];
+    const s = Math.min(fi, ti), e = Math.max(fi, ti);
+    return AVAILABLE_SEASONS.slice(s, e + 1);
+  }, [seasonFrom, seasonTo]);
 
-  const enriched = useMemo(() => activePlayers.map(p => ({ ...p, toi_min: parseToi(p.toi) })), [activePlayers]);
+  // Collect rows for selected seasons — either flat (one row per player-season) or aggregated
+  const activePlayers = useMemo(() => {
+    // Flat mode: one row per player per season, with toi/display fields normalized
+    const flatRows = selectedSeasons.flatMap(s =>
+      (seasonStats?.[s] || []).map(row => ({
+        ...row,
+        toi_total: row.toi_total ?? 0,
+        toi: fmtTotalToi(row.toi_total),
+      }))
+    );
+
+    if (!aggregate) return flatRows;
+
+    // Aggregate mode: sum counting stats, TOI-weighted avg for pct/rapm
+    const byPlayer = {};
+    for (const row of flatRows) {
+      const pid = row.player_id;
+      if (!byPlayer[pid]) byPlayer[pid] = [];
+      byPlayer[pid].push(row);
+    }
+    const sumOf = (rows, key) => rows.reduce((acc, r) => acc + (r[key] ?? 0), 0);
+    const wavg = (rows, key, totalToi) => {
+      if (!totalToi) return null;
+      return rows.reduce((acc, r) => acc + (r[key] ?? 0) * (r.toi_total ?? 0), 0) / totalToi;
+    };
+    return Object.values(byPlayer).map(rows => {
+      const sorted = [...rows].sort((a, b) => AVAILABLE_SEASONS.indexOf(a.season) - AVAILABLE_SEASONS.indexOf(b.season));
+      const base = sorted[0];
+      const gpSum = sumOf(rows, 'gp');
+      const toiSum = sumOf(rows, 'toi_total');
+      const seasonLabel = rows.length === 1
+        ? base.season
+        : `${sorted[sorted.length-1].season.slice(0,2)}–${sorted[0].season.slice(-2)}`;
+      return {
+        ...base,
+        season: seasonLabel,
+        gp: gpSum,
+        toi_total: toiSum,
+        toi: fmtTotalToi(toiSum),
+        g: sumOf(rows, 'g'),
+        a: sumOf(rows, 'a'),
+        pts: sumOf(rows, 'pts'),
+        ixg: sumOf(rows, 'ixg'),
+        icf: sumOf(rows, 'icf'),
+        iff: sumOf(rows, 'iff'),
+        hits: sumOf(rows, 'hits'),
+        blk: sumOf(rows, 'blk'),
+        gva: sumOf(rows, 'gva'),
+        tka: sumOf(rows, 'tka'),
+        fow: sumOf(rows, 'fow'),
+        fol: sumOf(rows, 'fol'),
+        war_total:     sumOf(rows, 'war_total'),
+        war_ev_off:    sumOf(rows, 'war_ev_off'),
+        war_ev_def:    sumOf(rows, 'war_ev_def'),
+        war_pp:        sumOf(rows, 'war_pp'),
+        war_pk:        sumOf(rows, 'war_pk'),
+        war_shooting:  sumOf(rows, 'war_shooting'),
+        war_penalties: sumOf(rows, 'war_penalties'),
+        cf_pct:   wavg(rows, 'cf_pct',   toiSum),
+        xgf_pct:  wavg(rows, 'xgf_pct',  toiSum),
+        hdcf_pct: wavg(rows, 'hdcf_pct', toiSum),
+        rapm_off:  wavg(rows, 'rapm_off',  toiSum),
+        rapm_def:  wavg(rows, 'rapm_def',  toiSum),
+      };
+    });
+  }, [seasonStats, selectedSeasons, aggregate]);
+
+  // Apply rate mode to counting stats
+  const ratePlayers = useMemo(() => {
+    if (rateMode === 'raw') return activePlayers;
+    const COUNT_KEYS = ['g','a','pts','ixg','icf','iff','hits','blk','gva','tka'];
+    return activePlayers.map(p => {
+      const toi60 = (p.toi_total ?? 0) / 60;
+      const adj = rateMode === 'per60'
+        ? (v) => (v != null && toi60 > 0) ? v / toi60 : null
+        : (v) => (v != null && p.gp > 0) ? v / p.gp * 82 : null;
+      const rates = {};
+      for (const k of COUNT_KEYS) rates[k] = adj(p[k]);
+      return { ...p, ...rates };
+    });
+  }, [activePlayers, rateMode]);
 
   const filtered = useMemo(() => {
-    let list = enriched;
+    let list = ratePlayers;
     if (posFilter === 'S') list = list.filter(p => p.position !== 'G');
     else if (posFilter === 'F') list = list.filter(p => ['C','L','R'].includes(p.position));
     else if (posFilter === 'D') list = list.filter(p => p.position === 'D');
     else if (posFilter === 'G') list = list.filter(p => p.position === 'G');
     if (tableSearch.trim()) {
       const q = tableSearch.toLowerCase();
-      list = list.filter(p => (p.full_name||'').toLowerCase().includes(q) || (p.team||'').toLowerCase().includes(q));
+      list = list.filter(p => (p.full_name||'').toLowerCase().includes(q));
     }
+    if (teamFilter.trim()) {
+      const q = teamFilter.trim().toUpperCase();
+      list = list.filter(p => (p.team||'').toUpperCase().includes(q));
+    }
+    if (minToi > 0) list = list.filter(p => (p.toi_total ?? 0) >= minToi);
+    if (minGp  > 0) list = list.filter(p => (p.gp ?? 0) >= minGp);
     return [...list].sort((a, b) => {
       const av = a[sortKey], bv = b[sortKey];
       if (av == null && bv == null) return 0;
@@ -1906,7 +2008,7 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
       const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
       return sortDir === 'desc' ? -cmp : cmp;
     });
-  }, [enriched, posFilter, tableSearch, sortKey, sortDir]);
+  }, [ratePlayers, posFilter, tableSearch, teamFilter, minToi, minGp, sortKey, sortDir]);
 
   function handleSort(sk) {
     if (sortKey === sk) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
@@ -1915,15 +2017,14 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
 
   function fmtCell(p, col) {
     const v = p[col.key];
+    if (col.key === 'toi') return p.toi ?? '—';
     if (v == null) return '—';
-    if (col.key === 'plus_minus') return v > 0 ? `+${v}` : `${v}`;
     if (col.pctStat) return typeof v === 'number' ? v.toFixed(1) : v;
     if (col.rating) return typeof v === 'number' ? Math.round(v) : v;
-    if (col.key === 'ixg' || col.key === 'war_total') return typeof v === 'number' ? v.toFixed(1) : v;
-    if (col.key === 'rapm_off' || col.key === 'rapm_def') {
-      if (typeof v !== 'number') return v;
-      return `${v >= 0 ? '+' : ''}${v.toFixed(4)}`;
-    }
+    if (col.warStat) return typeof v === 'number' ? `${v >= 0 ? '+' : ''}${v.toFixed(2)}` : v;
+    if (col.key === 'ixg' || col.key === 'icf') return typeof v === 'number' ? v.toFixed(rateMode === 'raw' ? 1 : 2) : v;
+    if (col.key === 'g' || col.key === 'a' || col.key === 'pts') return typeof v === 'number' ? (rateMode === 'raw' ? Math.round(v) : v.toFixed(2)) : v;
+    if (col.key === 'rapm_off' || col.key === 'rapm_def') return typeof v === 'number' ? `${v >= 0 ? '+' : ''}${v.toFixed(4)}` : v;
     return v;
   }
 
@@ -1932,37 +2033,79 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
     if (v == null) return 'var(--text-muted)';
     if (col.pctStat) return statColor(v);
     if (col.rating) return pctColor(v);
+    if (col.warStat) return typeof v === 'number' ? (v > 0 ? '#00e5a0' : v < 0 ? '#e05050' : '#6a8aaa') : '#6a8aaa';
     if (col.key === 'full_name') return 'var(--text-primary)';
     if (col.key === 'team') return TEAM_COLOR[v] || '#4a6a88';
     if (col.key === 'rapm_off' || col.key === 'rapm_def') return typeof v === 'number' ? (v >= 0 ? '#00e5a0' : '#e05050') : '#6a8aaa';
     return '#6a8aaa';
   }
 
+  const selStyle = { padding:'6px 10px', background:'#0d1825', border:'1px solid var(--border-strong)', borderRadius:6, color:'var(--text-primary)', fontSize:11, fontFamily:"'DM Mono',monospace", cursor:'pointer', outline:'none' };
+  const inputStyle = { padding:'6px 8px', background:'#0d1825', border:'1px solid var(--border-strong)', borderRadius:6, color:'var(--text-primary)', fontSize:11, fontFamily:"'DM Mono',monospace", outline:'none', width:72 };
+  const modeBtnStyle = (active) => ({ padding:'5px 12px', background: active ? '#0080FF' : '#0d1825', border:`1px solid ${active ? '#0080FF' : '#1e2d40'}`, borderRadius:5, color: active ? 'white' : '#4a6a88', fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer' });
+
   return (
     <div style={{ width:'100%' }}>
-      <div style={{ display:'flex', gap:12, marginBottom:14, alignItems:'center', flexWrap:'wrap' }}>
-        <input type="text" placeholder="Filter players or teams..." value={tableSearch}
-          onChange={e => setTableSearch(e.target.value)}
-          style={{ padding:'8px 16px', background:'#0d1825', border:'1px solid var(--border-strong)', borderRadius:8, color:'#e8f4ff', fontSize:14, fontFamily:"'Barlow Condensed',sans-serif", outline:'none', width:260 }} />
-        <div style={{ display:'flex', gap:4 }}>
-          {[['S','Skaters'],['F','Forwards'],['D','Defense'],['G','Goalies'],['All','All']].map(([v,l]) => (
-            <button key={v} onClick={() => setPosFilter(v)}
-              style={{ padding:'6px 14px', background:posFilter===v?'#0080FF':'#0d1825', border:`1px solid ${posFilter===v?'#0080FF':'#1e2d40'}`, borderRadius:6, color:posFilter===v?'white':'#4a6a88', fontSize:12, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer', transition:'all 0.2s' }}>
-              {l}
-            </button>
-          ))}
+      {/* ── Row 1: Season + Filters ── */}
+      <div style={{ display:'flex', gap:16, marginBottom:10, alignItems:'flex-end', flexWrap:'wrap' }}>
+        <div>
+          <div style={{ fontSize:9, color:'#3a5a78', fontFamily:"'DM Mono',monospace", textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:4 }}>Season</div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <select value={seasonFrom} onChange={e => setSeasonFrom(e.target.value)} style={selStyle}>
+              {AVAILABLE_SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <span style={{ color:'#3a5a78', fontSize:11 }}>–</span>
+            <select value={seasonTo} onChange={e => setSeasonTo(e.target.value)} style={selStyle}>
+              {AVAILABLE_SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
         </div>
-        {/* Season selector */}
-        <div style={{ display:'flex', gap:4 }}>
-          {[['players','Current'],['25-26','25–26'],['24-25','24–25'],['23-24','23–24']].map(([v,l]) => (
-            <button key={v} onClick={() => { setSelectedSeason(v); setSortKey(v==='players'?'pts':'pts'); }}
-              style={{ padding:'6px 12px', background:selectedSeason===v?'#334466':'#0d1825', border:`1px solid ${selectedSeason===v?'#5577aa':'#1e2d40'}`, borderRadius:6, color:selectedSeason===v?'var(--text-primary)':'#4a6a88', fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer', transition:'all 0.2s' }}>
-              {l}
-            </button>
-          ))}
+        <div>
+          <div style={{ fontSize:9, color:'#3a5a78', fontFamily:"'DM Mono',monospace", textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:4 }}>Position</div>
+          <div style={{ display:'flex', gap:3 }}>
+            {[['S','Skaters'],['F','Fwd'],['D','Def'],['G','G'],['All','All']].map(([v,l]) => (
+              <button key={v} onClick={() => setPosFilter(v)} style={{ padding:'5px 10px', background:posFilter===v?'#0080FF':'#0d1825', border:`1px solid ${posFilter===v?'#0080FF':'#1e2d40'}`, borderRadius:5, color:posFilter===v?'white':'#4a6a88', fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer' }}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize:9, color:'#3a5a78', fontFamily:"'DM Mono',monospace", textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:4 }}>Team</div>
+          <input placeholder="e.g. EDM" value={teamFilter} onChange={e => setTeamFilter(e.target.value)}
+            style={{ ...inputStyle, width:80 }} />
+        </div>
+        <div>
+          <div style={{ fontSize:9, color:'#3a5a78', fontFamily:"'DM Mono',monospace", textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:4 }}>Player</div>
+          <input placeholder="Search..." value={tableSearch} onChange={e => setTableSearch(e.target.value)}
+            style={{ ...inputStyle, width:130 }} />
+        </div>
+        <div>
+          <div style={{ fontSize:9, color:'#3a5a78', fontFamily:"'DM Mono',monospace", textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:4 }}>Min GP</div>
+          <input type="number" min={0} value={minGp} onChange={e => setMinGp(Number(e.target.value) || 0)} style={inputStyle} />
+        </div>
+        <div>
+          <div style={{ fontSize:9, color:'#3a5a78', fontFamily:"'DM Mono',monospace", textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:4 }}>Min TOI (min)</div>
+          <input type="number" min={0} value={minToi} onChange={e => setMinToi(Number(e.target.value) || 0)} style={inputStyle} />
+        </div>
+      </div>
+
+      {/* ── Row 2: Rate mode + Columns + count ── */}
+      <div style={{ display:'flex', gap:12, marginBottom:14, alignItems:'center', flexWrap:'wrap' }}>
+        <div>
+          <div style={{ fontSize:9, color:'#3a5a78', fontFamily:"'DM Mono',monospace", textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:4 }}>Rate Mode</div>
+          <div style={{ display:'flex', gap:3 }}>
+            <button onClick={() => setRateMode('raw')}  style={modeBtnStyle(rateMode==='raw')}>Raw</button>
+            <button onClick={() => setRateMode('per60')} style={modeBtnStyle(rateMode==='per60')}>/60</button>
+            <button onClick={() => setRateMode('per82')} style={modeBtnStyle(rateMode==='per82')}>/82</button>
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize:9, color:'#3a5a78', fontFamily:"'DM Mono',monospace", textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:4 }}>Aggregate</div>
+          <button onClick={() => setAggregate(v => !v)} style={modeBtnStyle(aggregate)}>
+            {aggregate ? 'On' : 'Off'}
+          </button>
         </div>
         {/* Column picker */}
-        <div style={{ position:'relative' }}>
+        <div style={{ position:'relative', alignSelf:'flex-end' }}>
           <button onClick={() => setShowColPicker(v => !v)}
             style={{ padding:'6px 12px', background:showColPicker?'#334466':'#0d1825', border:`1px solid ${showColPicker?'#5577aa':'#1e2d40'}`, borderRadius:6, color:showColPicker?'var(--text-primary)':'#4a6a88', fontSize:11, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", cursor:'pointer' }}>
             Columns ⚙
@@ -1973,25 +2116,19 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
               {ALL_COLS.filter(c => !c.alwaysVisible).map(col => (
                 <label key={col.key} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, cursor:'pointer' }}>
                   <input type="checkbox" checked={visibleCols.has(col.key)}
-                    onChange={e => {
-                      const next = new Set(visibleCols);
-                      if (e.target.checked) next.add(col.key); else next.delete(col.key);
-                      setVisibleCols(next);
-                    }}
+                    onChange={e => { const next = new Set(visibleCols); if (e.target.checked) next.add(col.key); else next.delete(col.key); setVisibleCols(next); }}
                     style={{ accentColor:'#0080FF' }} />
                   <span style={{ fontSize:11, color:'#8899aa', fontFamily:"'DM Mono',monospace" }}>{col.label}</span>
                 </label>
               ))}
               <div style={{ marginTop:8, display:'flex', gap:6 }}>
-                <button onClick={() => setVisibleCols(DEFAULT_TABLE_COLS)}
-                  style={{ flex:1, padding:'4px 8px', background:'#0a1218', border:'1px solid var(--border-strong)', borderRadius:5, color:'#4a6a88', fontSize:10, fontFamily:"'DM Mono',monospace", cursor:'pointer' }}>Reset</button>
-                <button onClick={() => setVisibleCols(new Set(ALL_COLS.map(c => c.key)))}
-                  style={{ flex:1, padding:'4px 8px', background:'#0a1218', border:'1px solid var(--border-strong)', borderRadius:5, color:'#4a6a88', fontSize:10, fontFamily:"'DM Mono',monospace", cursor:'pointer' }}>All</button>
+                <button onClick={() => setVisibleCols(DEFAULT_TABLE_COLS)} style={{ flex:1, padding:'4px 8px', background:'#0a1218', border:'1px solid var(--border-strong)', borderRadius:5, color:'#4a6a88', fontSize:10, fontFamily:"'DM Mono',monospace", cursor:'pointer' }}>Reset</button>
+                <button onClick={() => setVisibleCols(new Set(ALL_COLS.map(c => c.key)))} style={{ flex:1, padding:'4px 8px', background:'#0a1218', border:'1px solid var(--border-strong)', borderRadius:5, color:'#4a6a88', fontSize:10, fontFamily:"'DM Mono',monospace", cursor:'pointer' }}>All</button>
               </div>
             </div>
           )}
         </div>
-        <span style={{ fontSize:11, color:'var(--text-muted)', fontFamily:"'DM Mono',monospace" }}>{filtered.length} players</span>
+        <span style={{ fontSize:11, color:'var(--text-muted)', fontFamily:"'DM Mono',monospace", alignSelf:'flex-end', paddingBottom:2 }}>{filtered.length} rows</span>
       </div>
 
       <div style={{ overflowX:'auto', border:'1px solid var(--border-strong)', borderRadius:10, maxHeight:720, overflowY:'auto' }}>
@@ -2014,7 +2151,7 @@ function StatsTable({ players, seasonStats, onSelectPlayer, selectedId }) {
               const isTop10 = i < 10;
               const teamAccent = TEAM_COLOR[p.team] || '#4a6a88';
               return (
-                <tr key={p.player_id} onClick={() => onSelectPlayer(p)}
+                <tr key={`${p.player_id}-${p.season}`} onClick={() => onSelectPlayer(p)}
                   style={{ borderBottom:'1px solid #0a1218', cursor:'pointer', background: isSelected ? '#0d2a1a' : i%2===0 ? 'var(--bg-primary)' : '#060b12', borderLeft: isTop10 ? `3px solid ${teamAccent}` : '3px solid transparent' }}
                   onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#0d1825'; }}
                   onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? '#0d2a1a' : i%2===0 ? 'var(--bg-primary)' : '#060b12'; }}>
@@ -2172,6 +2309,7 @@ export default function App({ players: propPlayers, seasonStats, defaultSearchPl
           .select("player_id,team,war_total")
           .eq("season", CURRENT_SEASON)
           .in("player_id", matchingIds)
+          .not("war_total", "is", null)
           .order("war_total", { ascending: false, nullsFirst: false })
           .limit(20);
 
