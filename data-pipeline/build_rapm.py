@@ -49,6 +49,7 @@ TEST_MODE     = False  # Set True to limit to TEST_GAMES per season for validati
 TEST_GAMES    = 50
 BATCH_SIZE    = 50    # Games per hockey-scraper batch
 SKIP_SCRAPING = os.getenv("SKIP_SCRAPING", "").lower() in ("1", "true", "yes")  # Use cached stints only
+DRY_RUN_ONLY  = os.getenv("DRY_RUN_ONLY", "").lower() in ("1", "true", "yes")   # Skip Supabase writes
 RAPM_EXPERIMENT = os.getenv("RAPM_EXPERIMENT", "").strip()
 
 SCHEDULE_API = "https://api-web.nhle.com/v1"
@@ -57,6 +58,11 @@ PATCH_FILE   = os.path.join(DATA_DIR, 'player_id_patch.json')
 os.makedirs(DATA_DIR, exist_ok=True)
 SHOTS_CACHE_FILE = os.path.join(DATA_DIR, 'shots_all_seasons_hs_backup.csv')
 PLAYER_LOOKUP_FILE = os.path.join(DATA_DIR, 'players_base.csv')
+RETIRED_PLAYER_LOOKUP_FILE = os.path.join(DATA_DIR, 'retired_player_names_cache.json')
+EH_SKATERS_FILE = os.path.join(DATA_DIR, 'eh_skaters_all_seasons.csv')
+EH_ONICE_FILE = os.path.join(DATA_DIR, 'eh_onice_all_seasons.csv')
+OWN_IXG_FILE = os.path.join(DATA_DIR, 'own_ixg_by_player_season.csv')
+SHOOTER_HANDEDNESS_CACHE_FILE = os.path.join(DATA_DIR, 'shooter_handedness_cache.json')
 
 # Player IDs used for quality gate before uploading
 MCDAVID_ID   = 8478402
@@ -284,6 +290,19 @@ EXPERIMENT_COLLINEARITY_REALLOCATION_FORWARD_2425_2526 = "collinearity_reallocat
 EXPERIMENT_ASYMMETRIC_ALPHA_K130 = "asymmetric_alpha_k130"
 EXPERIMENT_ASYMMETRIC_ALPHA_K150 = "asymmetric_alpha_k150"
 EXPERIMENT_ASYMMETRIC_ALPHA_K170 = "asymmetric_alpha_k170"
+EXPERIMENT_INDIVIDUAL_BOX_PRIOR = "individual_box_prior"
+EXPERIMENT_STRONGER_ELITE_PRIOR = "stronger_elite_prior"
+EXPERIMENT_LOWER_ALPHA_CAP = "lower_alpha_cap"
+EXPERIMENT_TEAM_DEFENSE_INTERCEPTS = "team_defense_intercepts"
+EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP = "team_defense_intercepts_lower_alpha_cap"
+EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSEMEN_DEF_ALPHA = "team_defense_intercepts_defensemen_def_alpha"
+EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_ALL_DEF_ALPHA = "team_defense_intercepts_all_def_alpha"
+EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_SPLIT_FIT = "team_defense_intercepts_split_fit"
+EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT = "team_defense_intercepts_defense_refit"
+EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_HIGH_ALPHA = "team_defense_intercepts_defense_refit_high_alpha"
+EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_DEF_CHAIN_DAMPEN = "team_defense_intercepts_defense_refit_def_chain_dampen"
+EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP_DEFENSE_REALLOCATION = "team_defense_intercepts_lower_alpha_cap_defense_reallocation"
+EXPERIMENT_SCORE_STATE_BUCKET_PARITY = "score_state_bucket_parity"
 PROMOTE_2425_COLLINEARITY_REALLOCATION_DEFENSE = True
 PROMOTE_COLLINEARITY_REALLOCATION_FORWARD_2425_2526 = True
 SUPPORTED_RAPM_EXPERIMENTS = {
@@ -297,6 +316,19 @@ SUPPORTED_RAPM_EXPERIMENTS = {
     EXPERIMENT_ASYMMETRIC_ALPHA_K130,
     EXPERIMENT_ASYMMETRIC_ALPHA_K150,
     EXPERIMENT_ASYMMETRIC_ALPHA_K170,
+    EXPERIMENT_INDIVIDUAL_BOX_PRIOR,
+    EXPERIMENT_STRONGER_ELITE_PRIOR,
+    EXPERIMENT_LOWER_ALPHA_CAP,
+    EXPERIMENT_TEAM_DEFENSE_INTERCEPTS,
+    EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP,
+    EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSEMEN_DEF_ALPHA,
+    EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_ALL_DEF_ALPHA,
+    EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_SPLIT_FIT,
+    EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT,
+    EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_HIGH_ALPHA,
+    EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_DEF_CHAIN_DAMPEN,
+    EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP_DEFENSE_REALLOCATION,
+    EXPERIMENT_SCORE_STATE_BUCKET_PARITY,
 }
 _ASYMMETRIC_ALPHA_EXPERIMENTS = {
     EXPERIMENT_ASYMMETRIC_ALPHA_K130: 1.30,
@@ -306,6 +338,310 @@ _ASYMMETRIC_ALPHA_EXPERIMENTS = {
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "nhl-analytics/1.0"})
+
+
+def _experiment_uses_team_intercepts(experiment_name):
+    return experiment_name in {
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSEMEN_DEF_ALPHA,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_ALL_DEF_ALPHA,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_SPLIT_FIT,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_HIGH_ALPHA,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_DEF_CHAIN_DAMPEN,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP_DEFENSE_REALLOCATION,
+    }
+
+
+def _experiment_uses_lower_alpha_cap(experiment_name):
+    return experiment_name in {
+        EXPERIMENT_LOWER_ALPHA_CAP,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP_DEFENSE_REALLOCATION,
+    }
+
+
+def _experiment_defensemen_def_block_scale(experiment_name):
+    if experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSEMEN_DEF_ALPHA:
+        return 1.50
+    return 1.0
+
+
+def _experiment_all_def_block_scale(experiment_name):
+    if experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_ALL_DEF_ALPHA:
+        return 1.50
+    return 1.0
+
+
+def _experiment_uses_split_block_fit(experiment_name):
+    return experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_SPLIT_FIT
+
+
+def _experiment_uses_fixed_offense_defense_refit(experiment_name):
+    return experiment_name in {
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_HIGH_ALPHA,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_DEF_CHAIN_DAMPEN,
+    }
+
+
+def _defense_refit_alpha_grids(experiment_name):
+    ctx_alphas = [200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0]
+    def_alphas = ctx_alphas
+    if experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_HIGH_ALPHA:
+        # Let the defense refit keep shrinking if the capped grid is still too loose.
+        def_alphas = [500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0, 50000.0, 100000.0]
+    return ctx_alphas, def_alphas
+
+
+def _defense_chain_prior_blend_weights(experiment_name):
+    off_chain_w = 0.6
+    def_chain_w = 0.6
+    if experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_DEF_CHAIN_DAMPEN:
+        # Damp defensive carryover so prior-season cluster artifacts do not get re-added
+        # on top of the cleaner defense refit. Keep offense priors unchanged.
+        def_chain_w = 0.3
+    return off_chain_w, def_chain_w
+
+
+def _experiment_uses_score_state_buckets(experiment_name):
+    return experiment_name == EXPERIMENT_SCORE_STATE_BUCKET_PARITY
+
+
+def _experiment_uses_precomputed_raw_results(experiment_name):
+    return experiment_name in {
+        EXPERIMENT_EV_PRIOR_PARITY,
+        EXPERIMENT_XG_CONTEXT_PARITY,
+        EXPERIMENT_SHORT_MISS_PARITY,
+        EXPERIMENT_INDIVIDUAL_BOX_PRIOR,
+        EXPERIMENT_STRONGER_ELITE_PRIOR,
+        EXPERIMENT_LOWER_ALPHA_CAP,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSEMEN_DEF_ALPHA,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_ALL_DEF_ALPHA,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_SPLIT_FIT,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_HIGH_ALPHA,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_DEF_CHAIN_DAMPEN,
+        EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP_DEFENSE_REALLOCATION,
+        EXPERIMENT_SCORE_STATE_BUCKET_PARITY,
+    } or experiment_name in _ASYMMETRIC_ALPHA_EXPERIMENTS
+
+
+def _base_context_features_for_experiment(experiment_name):
+    if _experiment_uses_score_state_buckets(experiment_name):
+        return [
+            'is_home_attack',
+            'score_up_1', 'score_up_2', 'score_up_3',
+            'score_down_1', 'score_down_2', 'score_down_3',
+            'period_2', 'period_3',
+            'home_pp_expiry', 'away_pp_expiry',
+            'home_ozs', 'away_ozs', 'nzs',
+            'home_btb', 'away_btb',
+        ]
+    return [
+        'is_home_attack', 'score_state', 'score_state_abs', 'period_2', 'period_3',
+        'home_pp_expiry', 'away_pp_expiry',
+        'home_ozs', 'away_ozs', 'nzs',
+        'home_btb', 'away_btb',
+    ]
+
+
+def _score_state_context_values(score_state, period, off_pp_exp, def_pp_exp, off_ozs, def_ozs,
+                                nzs_val, off_btb, def_btb, experiment_name):
+    if _experiment_uses_score_state_buckets(experiment_name):
+        score_bucket = int(max(-3, min(3, round(float(score_state)))))
+        return [
+            1.0,
+            1.0 if score_bucket == 1 else 0.0,
+            1.0 if score_bucket == 2 else 0.0,
+            1.0 if score_bucket >= 3 else 0.0,
+            1.0 if score_bucket == -1 else 0.0,
+            1.0 if score_bucket == -2 else 0.0,
+            1.0 if score_bucket <= -3 else 0.0,
+            1.0 if period == 2 else 0.0,
+            1.0 if period == 3 else 0.0,
+            off_pp_exp, def_pp_exp,
+            off_ozs, def_ozs, nzs_val,
+            off_btb, def_btb,
+        ]
+    return [
+        1.0,
+        score_state,
+        abs(score_state),
+        1.0 if period == 2 else 0.0,
+        1.0 if period == 3 else 0.0,
+        off_pp_exp, def_pp_exp,
+        off_ozs, def_ozs, nzs_val,
+        off_btb, def_btb,
+    ]
+
+
+def _weighted_mse(y_true, y_pred, weights):
+    resid = y_true - y_pred
+    denom = float(np.sum(weights))
+    if denom <= 0:
+        return float(np.mean(resid ** 2))
+    return float(np.dot(weights, resid ** 2) / denom)
+
+
+def _count_lineup_players(cell):
+    return len([x for x in str(cell or '').split('|') if x.strip()])
+
+
+def _filter_clean_ev_stints(stints_df, min_duration_seconds=10, verbose=False):
+    """
+    Keep the exact EV stint rows used by the regression: minimum duration,
+    5v5 strength, and exactly five skaters listed per side.
+    """
+    df = stints_df.copy()
+    if min_duration_seconds is not None:
+        n_before = len(df)
+        df = df[df['duration_seconds'] >= min_duration_seconds].copy()
+        n_filtered = n_before - len(df)
+        if verbose and n_filtered > 0:
+            print(f"    [filter] Dropped {n_filtered} stints under {min_duration_seconds}s")
+
+    if 'strength_state' in df.columns:
+        n_before = len(df)
+        df = df[df['strength_state'] == '5v5'].copy()
+        n_filtered = n_before - len(df)
+        if verbose and n_filtered > 0:
+            print(f"    [filter] Dropped {n_filtered} non-5v5 stints (strength_state != '5v5')")
+
+    n_before = len(df)
+    df = df[
+        (df['home_players'].apply(_count_lineup_players) == 5) &
+        (df['away_players'].apply(_count_lineup_players) == 5)
+    ].copy()
+    n_bad = n_before - len(df)
+    if verbose and n_bad > 0:
+        print(f"    [filter] Dropped {n_bad} stints with lineup != 5×5 (corrupted PBP inference)")
+    return df
+
+
+def _fit_split_ev_models(X_off, X_def, X_ctx, y, weights, alphas, fit_intercept_ctx=True, max_iter=4):
+    """
+    Shared-context alternating ridge fit with separate alpha selection for offense and defense.
+
+    Context is re-fit each iteration on the residual after subtracting the current offense and
+    defense block predictions. Offense and defense are then fit separately on the remaining
+    residuals, allowing each block to pick its own alpha without changing the other block.
+    """
+    beta_off = np.zeros(X_off.shape[1], dtype=float)
+    beta_def = np.zeros(X_def.shape[1], dtype=float)
+    ctx_coef = np.zeros(X_ctx.shape[1], dtype=float)
+    ctx_intercept = 0.0
+    ctx_pred = np.zeros_like(y, dtype=float)
+    best = None
+
+    for iteration in range(1, max_iter + 1):
+        if X_ctx.shape[1] > 0:
+            ctx_target = y - X_off.dot(beta_off) - X_def.dot(beta_def)
+            ctx_model = RidgeCV(alphas=alphas, fit_intercept=fit_intercept_ctx)
+            ctx_model.fit(X_ctx, ctx_target, sample_weight=weights)
+            ctx_coef = np.asarray(ctx_model.coef_, dtype=float)
+            ctx_intercept = float(ctx_model.intercept_)
+            ctx_pred = X_ctx.dot(ctx_coef) + ctx_intercept
+            ctx_alpha = float(ctx_model.alpha_)
+        else:
+            ctx_coef = np.zeros(0, dtype=float)
+            ctx_intercept = 0.0
+            ctx_pred = np.zeros_like(y, dtype=float)
+            ctx_alpha = None
+
+        off_target = y - ctx_pred - X_def.dot(beta_def)
+        off_model = RidgeCV(alphas=alphas, fit_intercept=False)
+        off_model.fit(X_off, off_target, sample_weight=weights)
+        beta_off = np.asarray(off_model.coef_, dtype=float)
+        off_alpha = float(off_model.alpha_)
+
+        def_target = y - ctx_pred - X_off.dot(beta_off)
+        def_model = RidgeCV(alphas=alphas, fit_intercept=False)
+        def_model.fit(X_def, def_target, sample_weight=weights)
+        beta_def = np.asarray(def_model.coef_, dtype=float)
+        def_alpha = float(def_model.alpha_)
+
+        full_pred = ctx_pred + X_off.dot(beta_off) + X_def.dot(beta_def)
+        mse = _weighted_mse(y, full_pred, weights)
+        print(
+            "  [Exp Split] "
+            f"iter={iteration}  alpha_ctx={ctx_alpha if ctx_alpha is not None else 'n/a'}  "
+            f"alpha_off={off_alpha:.1f}  alpha_def={def_alpha:.1f}  weighted_mse={mse:.6f}"
+        )
+        candidate = {
+            'ctx_coef': ctx_coef.copy(),
+            'ctx_intercept': ctx_intercept,
+            'beta_off': beta_off.copy(),
+            'beta_def': beta_def.copy(),
+            'ctx_alpha': ctx_alpha,
+            'off_alpha': off_alpha,
+            'def_alpha': def_alpha,
+            'weighted_mse': mse,
+        }
+        if best is None or mse < best['weighted_mse']:
+            best = candidate
+
+    return best
+
+
+def _fit_defense_refit_fixed_offense(X_off, X_def, X_ctx, y, weights, beta_off_fixed,
+                                     alphas_ctx, alphas_def, max_iter=4):
+    """
+    Keep offense coefficients fixed, then alternately re-fit shared context and defense.
+
+    This is meant to preserve the healthier offense fit while giving the defensive block
+    a dedicated re-fit pass with more permissive regularization.
+    """
+    beta_def = np.zeros(X_def.shape[1], dtype=float)
+    ctx_coef = np.zeros(X_ctx.shape[1], dtype=float)
+    ctx_intercept = 0.0
+    ctx_pred = np.zeros_like(y, dtype=float)
+    off_pred = X_off.dot(beta_off_fixed)
+    best = None
+
+    for iteration in range(1, max_iter + 1):
+        if X_ctx.shape[1] > 0:
+            ctx_target = y - off_pred - X_def.dot(beta_def)
+            ctx_model = RidgeCV(alphas=alphas_ctx, fit_intercept=True)
+            ctx_model.fit(X_ctx, ctx_target, sample_weight=weights)
+            ctx_coef = np.asarray(ctx_model.coef_, dtype=float)
+            ctx_intercept = float(ctx_model.intercept_)
+            ctx_pred = X_ctx.dot(ctx_coef) + ctx_intercept
+            ctx_alpha = float(ctx_model.alpha_)
+        else:
+            ctx_coef = np.zeros(0, dtype=float)
+            ctx_intercept = 0.0
+            ctx_pred = np.zeros_like(y, dtype=float)
+            ctx_alpha = None
+
+        def_target = y - off_pred - ctx_pred
+        def_model = RidgeCV(alphas=alphas_def, fit_intercept=False)
+        def_model.fit(X_def, def_target, sample_weight=weights)
+        beta_def = np.asarray(def_model.coef_, dtype=float)
+        def_alpha = float(def_model.alpha_)
+
+        full_pred = off_pred + ctx_pred + X_def.dot(beta_def)
+        mse = _weighted_mse(y, full_pred, weights)
+        print(
+            "  [Exp DRefit] "
+            f"iter={iteration}  alpha_ctx={ctx_alpha if ctx_alpha is not None else 'n/a'}  "
+            f"alpha_def={def_alpha:.1f}  weighted_mse={mse:.6f}"
+        )
+        candidate = {
+            'ctx_coef': ctx_coef.copy(),
+            'ctx_intercept': ctx_intercept,
+            'beta_def': beta_def.copy(),
+            'ctx_alpha': ctx_alpha,
+            'def_alpha': def_alpha,
+            'weighted_mse': mse,
+        }
+        if best is None or mse < best['weighted_mse']:
+            best = candidate
+
+    return best
 
 # Load player ID patch (name → ID for hockey-scraper PBP name mismatches)
 PLAYER_ID_PATCH = {}
@@ -370,7 +706,27 @@ load_xg_model()
 def load_shooter_handedness():
     global SHOOTER_HANDEDNESS
     SHOOTER_HANDEDNESS = {}
+
+    def _load_cache():
+        if not os.path.exists(SHOOTER_HANDEDNESS_CACHE_FILE):
+            return False
+        try:
+            with open(SHOOTER_HANDEDNESS_CACHE_FILE, 'r', encoding='utf-8') as fh:
+                cached = json.load(fh)
+            for pid_str, handed_val in cached.items():
+                try:
+                    SHOOTER_HANDEDNESS[int(pid_str)] = int(handed_val)
+                except (TypeError, ValueError):
+                    continue
+            if SHOOTER_HANDEDNESS:
+                print(f"Loaded shooter handedness cache for {len(SHOOTER_HANDEDNESS)} players")
+                return True
+        except Exception as exc:
+            print(f"Could not read shooter handedness cache: {exc}")
+        return False
+
     if not SUPABASE_URL or not SUPABASE_KEY:
+        _load_cache()
         return
     try:
         sb = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -395,8 +751,14 @@ def load_shooter_handedness():
             SHOOTER_HANDEDNESS[int(pid)] = 1 if shoots == 'L' else 0
         if SHOOTER_HANDEDNESS:
             print(f"Loaded shooter handedness for {len(SHOOTER_HANDEDNESS)} players")
+            try:
+                with open(SHOOTER_HANDEDNESS_CACHE_FILE, 'w', encoding='utf-8') as fh:
+                    json.dump({str(pid): int(val) for pid, val in SHOOTER_HANDEDNESS.items()}, fh)
+            except Exception as cache_exc:
+                print(f"Could not write shooter handedness cache: {cache_exc}")
     except Exception as exc:
         print(f"Could not load shooter handedness: {exc}")
+        _load_cache()
 
 
 load_shooter_handedness()
@@ -1812,9 +2174,120 @@ def fetch_player_seasons_for_priors():
     Fetch player_seasons from Supabase with the stats needed for box-score priors.
     Returns a DataFrame with columns: player_id, season, toi, g, a1, ixg, cf_pct.
     """
+    def _load_local_player_seasons_fallback():
+        required_files = [EH_SKATERS_FILE, EH_ONICE_FILE, OWN_IXG_FILE]
+        if any(not os.path.exists(path) for path in required_files):
+            return pd.DataFrame()
+
+        try:
+            skaters = pd.read_csv(
+                EH_SKATERS_FILE,
+                usecols=['Player', 'Season', 'Team', 'GP', 'TOI', 'G', 'A1', 'ixG'],
+            )
+            onice = pd.read_csv(
+                EH_ONICE_FILE,
+                usecols=['Player', 'Season', 'Team', 'CF%'],
+            )
+            own_ixg = pd.read_csv(
+                OWN_IXG_FILE,
+                usecols=['player_id', 'season', 'ixg_own'],
+            )
+
+            lookup_frames = []
+            if os.path.exists(PLAYER_LOOKUP_FILE):
+                lookup_frames.append(pd.read_csv(PLAYER_LOOKUP_FILE, usecols=['player_id', 'full_name']))
+            if os.path.exists(RETIRED_PLAYER_LOOKUP_FILE):
+                with open(RETIRED_PLAYER_LOOKUP_FILE, 'r', encoding='utf-8') as fh:
+                    retired_rows = json.load(fh)
+                retired_df = pd.DataFrame(retired_rows)
+                if not retired_df.empty and {'player_id', 'full_name'}.issubset(retired_df.columns):
+                    lookup_frames.append(retired_df[['player_id', 'full_name']])
+            if not lookup_frames:
+                return pd.DataFrame()
+
+            lookup = pd.concat(lookup_frames, ignore_index=True)
+            lookup = lookup.dropna(subset=['player_id', 'full_name']).copy()
+            lookup['player_id'] = pd.to_numeric(lookup['player_id'], errors='coerce')
+            lookup = lookup.dropna(subset=['player_id']).copy()
+            lookup['player_id'] = lookup['player_id'].astype(int)
+            lookup['full_name'] = lookup['full_name'].astype(str).str.strip()
+            lookup = lookup[lookup['full_name'] != ''].copy()
+
+            exact_counts = lookup['full_name'].value_counts()
+            exact_lookup = (
+                lookup[lookup['full_name'].map(exact_counts) == 1]
+                .drop_duplicates(subset=['full_name'])
+                .set_index('full_name')['player_id']
+                .to_dict()
+            )
+
+            lookup['_norm_name'] = lookup['full_name'].apply(_normalize_player_name)
+            norm_counts = lookup['_norm_name'].value_counts()
+            norm_lookup = (
+                lookup[lookup['_norm_name'].map(norm_counts) == 1]
+                .drop_duplicates(subset=['_norm_name'])
+                .set_index('_norm_name')['player_id']
+                .to_dict()
+            )
+
+            merged = skaters.merge(onice, on=['Player', 'Season', 'Team'], how='left')
+            merged['player_id'] = merged['Player'].map(exact_lookup)
+            missing_mask = merged['player_id'].isna()
+            if missing_mask.any():
+                merged.loc[missing_mask, 'player_id'] = (
+                    merged.loc[missing_mask, 'Player']
+                    .apply(_normalize_player_name)
+                    .map(norm_lookup)
+                )
+            missing_mask = merged['player_id'].isna()
+            if missing_mask.any():
+                merged.loc[missing_mask, 'player_id'] = (
+                    merged.loc[missing_mask, 'Player'].apply(_lookup_player_patch)
+                )
+
+            merged = merged.dropna(subset=['player_id']).copy()
+            if merged.empty:
+                return pd.DataFrame()
+
+            merged['player_id'] = merged['player_id'].astype(int)
+            merged = merged.rename(
+                columns={
+                    'Season': 'season',
+                    'Team': 'team',
+                    'GP': 'gp',
+                    'TOI': 'toi',
+                    'G': 'g',
+                    'A1': 'a1',
+                    'ixG': 'ixg',
+                    'CF%': 'cf_pct',
+                }
+            )
+            merged = merged[['player_id', 'season', 'team', 'gp', 'toi', 'g', 'a1', 'ixg', 'cf_pct']]
+
+            for col in ('gp', 'toi', 'g', 'a1', 'ixg', 'cf_pct'):
+                merged[col] = pd.to_numeric(merged[col], errors='coerce').fillna(0.0)
+            merged['team'] = merged['team'].fillna('UNK').astype(str).str.upper().str.strip()
+            merged['season'] = merged['season'].astype(str).str.strip()
+
+            own_ixg['player_id'] = pd.to_numeric(own_ixg['player_id'], errors='coerce')
+            own_ixg = own_ixg.dropna(subset=['player_id']).copy()
+            own_ixg['player_id'] = own_ixg['player_id'].astype(int)
+            own_ixg['season'] = own_ixg['season'].astype(str).str.strip()
+            own_ixg['ixg_own'] = pd.to_numeric(own_ixg['ixg_own'], errors='coerce').fillna(0.0)
+
+            merged = merged.merge(own_ixg, on=['player_id', 'season'], how='left')
+            merged['ixg_own'] = pd.to_numeric(merged['ixg_own'], errors='coerce').fillna(0.0)
+
+            print(f"  Local priors fallback: {len(merged)} rows "
+                  f"({merged['season'].nunique()} seasons, {merged['player_id'].nunique()} players)")
+            return merged
+        except Exception as e:
+            print(f"  Warning: local priors fallback failed: {e}")
+            return pd.DataFrame()
+
     if not SUPABASE_URL or not SUPABASE_KEY:
-        print("  Warning: SUPABASE_URL/KEY not set — skipping box-score priors")
-        return pd.DataFrame()
+        print("  Warning: SUPABASE_URL/KEY not set — using local priors fallback")
+        return _load_local_player_seasons_fallback()
     try:
         sb = create_client(SUPABASE_URL, SUPABASE_KEY)
         # Paginate to avoid the 1000-row default cap (player_seasons has ~2000 rows)
@@ -1822,7 +2295,7 @@ def fetch_player_seasons_for_priors():
         offset = 0
         while True:
             batch = (sb.table('player_seasons')
-                     .select('player_id,season,gp,toi,g,a1,ixg,ixg_own,cf_pct')
+                     .select('player_id,season,team,gp,toi,g,a1,ixg,ixg_own,cf_pct')
                      .range(offset, offset + 999)
                      .execute().data)
             if not batch:
@@ -1834,6 +2307,8 @@ def fetch_player_seasons_for_priors():
         df = pd.DataFrame(rows)
         for col in ('gp', 'toi', 'g', 'a1', 'ixg', 'cf_pct'):
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+        if 'team' not in df.columns:
+            df['team'] = None
         # ixg_own may be NULL if build_xg_model.py hasn't run yet — keep 0.0 as fallback
         if 'ixg_own' in df.columns:
             df['ixg_own'] = pd.to_numeric(df['ixg_own'], errors='coerce').fillna(0.0)
@@ -1847,10 +2322,10 @@ def fetch_player_seasons_for_priors():
         return df
     except Exception as e:
         print(f"  Warning: could not fetch player_seasons for priors: {e}")
-        return pd.DataFrame()
+        return _load_local_player_seasons_fallback()
 
 
-def compute_box_score_prior(player_seasons_df, season):
+def compute_box_score_prior(player_seasons_df, season, experiment_name=""):
     """
     Compute a simple box-score prior for each player in a given season.
     Returns dict: {player_id: {'off_prior': float, 'def_prior': float}}
@@ -1918,9 +2393,17 @@ def compute_box_score_prior(player_seasons_df, season):
         (season_df['pts_60'] - avg_pts_60) * 0.3
     ) * 0.4  # shrink toward zero — prior is a hint not a certainty
 
-    season_df['def_prior'] = (
-        (season_df['cf_pct'].fillna(avg_cf) - avg_cf) / 100.0
-    ) * 0.2  # very small defensive prior
+    if experiment_name == EXPERIMENT_INDIVIDUAL_BOX_PRIOR:
+        # Exp A: use ONLY individual stats for box-score prior.
+        # cf_pct is an on-ice team stat shared between linemates, reinforcing
+        # collinearity in the prior. Zero it out so elite line-mates get
+        # independent priors based solely on their own production.
+        season_df['def_prior'] = 0.0
+        print(f"    [Exp A] def_prior zeroed (no cf_pct): using individual-only box-score prior")
+    else:
+        season_df['def_prior'] = (
+            (season_df['cf_pct'].fillna(avg_cf) - avg_cf) / 100.0
+        ) * 0.2  # very small defensive prior
 
     priors = {}
     for _, row in season_df.iterrows():
@@ -1963,8 +2446,19 @@ def get_player_prior(player_id, previous_rapm, box_score_prior, current_season_t
         # Matthews/Nylander). Blending anchors the prior to observed production.
         if player_id in box_score_prior:
             bp = box_score_prior[player_id]
-            off_prior = 0.6 * off_prior + 0.4 * bp.get('off_prior', 0.0)
-            def_prior = 0.6 * def_prior + 0.4 * bp.get('def_prior', 0.0)
+            off_chain_w, def_chain_w = _defense_chain_prior_blend_weights(experiment_name)
+            if experiment_name == EXPERIMENT_STRONGER_ELITE_PRIOR:
+                # Exp B: increase chain prior weight to 0.75 for elite high-TOI players
+                # (top 20% of prior_off AND current season TOI > 1200 min).
+                # Elite players have reliable prior chains; anchoring them more strongly
+                # to the chain prior reduces compression from the box-score blend.
+                toi_min = current_season_toi.get(player_id, 0)
+                ELITE_PRIOR_THRESH = 0.15  # approximate top-20% rapm_off prior threshold
+                is_elite = (off_prior > ELITE_PRIOR_THRESH and toi_min > 1200)
+                off_chain_w = 0.75 if is_elite else off_chain_w
+                def_chain_w = 0.75 if is_elite else def_chain_w
+            off_prior = off_chain_w * off_prior + (1.0 - off_chain_w) * bp.get('off_prior', 0.0)
+            def_prior = def_chain_w * def_prior + (1.0 - def_chain_w) * bp.get('def_prior', 0.0)
         # GP-based dampening: players with < 20 GP this season have stale/unreliable priors
         # (covers injured returners like Landeskog who chain old RAPM forward)
         if current_season_gp is not None:
@@ -2018,6 +2512,79 @@ def _compute_toi_from_stints(stints_df):
     return {pid: t / 60.0 for pid, t in toi_sec.items()}
 
 
+def _build_season_player_team_lookup(player_seasons_df, season):
+    """
+    Best-effort season-specific player -> team lookup.
+    Prefers non-TOT rows with the highest GP when duplicates exist.
+    """
+    if player_seasons_df.empty or 'team' not in player_seasons_df.columns:
+        return {}
+
+    season_df = player_seasons_df[player_seasons_df['season'] == season].copy()
+    if season_df.empty or 'player_id' not in season_df.columns:
+        return {}
+
+    season_df['team'] = season_df['team'].astype(str).str.upper().str.strip()
+    season_df = season_df[season_df['team'].ne('') & season_df['team'].ne('NAN')].copy()
+    if season_df.empty:
+        return {}
+
+    season_df['_is_tot'] = season_df['team'].eq('TOT')
+    season_df['_gp_sort'] = pd.to_numeric(season_df.get('gp', 0), errors='coerce').fillna(0.0)
+    season_df = (season_df
+                 .sort_values(['player_id', '_is_tot', '_gp_sort'], ascending=[True, True, False])
+                 .drop_duplicates('player_id', keep='first'))
+    return {
+        int(row.player_id): str(row.team).upper().strip()
+        for row in season_df.itertuples()
+        if isinstance(row.team, str) and row.team.strip()
+    }
+
+
+def _attach_team_keys_to_stints(stints_df, player_seasons_df, season):
+    """
+    Infer each stint side's team abbreviation from the on-ice player IDs.
+    Used only by model experiments that need team-level context features.
+    """
+    if stints_df.empty:
+        return stints_df.copy()
+
+    pid_to_team = _build_season_player_team_lookup(player_seasons_df, season)
+    if not pid_to_team:
+        out = stints_df.copy()
+        out['home_team_key'] = 'UNK'
+        out['away_team_key'] = 'UNK'
+        return out
+
+    def _infer(cell):
+        counts = defaultdict(int)
+        for p in str(cell or '').split('|'):
+            p = p.strip()
+            if not p or not p.isdigit():
+                continue
+            team = pid_to_team.get(int(p))
+            if team:
+                counts[team] += 1
+        if not counts:
+            return 'UNK'
+        return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+
+    out = stints_df.copy()
+    out['home_team_key'] = out['home_players'].apply(_infer)
+    out['away_team_key'] = out['away_players'].apply(_infer)
+
+    same_mask = (
+        out['home_team_key'].ne('UNK') &
+        out['away_team_key'].ne('UNK') &
+        out['home_team_key'].eq(out['away_team_key'])
+    )
+    if same_mask.any():
+        out.loc[same_mask, 'home_team_key'] = 'UNK'
+        out.loc[same_mask, 'away_team_key'] = 'UNK'
+
+    return out
+
+
 def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_filter=None,
                              events_by_season=None, experiment_name="", asymmetric_k=1.0):
     """
@@ -2051,8 +2618,10 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
             continue
 
         stints = stints_by_season[season]
+        if _experiment_uses_team_intercepts(experiment_name):
+            stints = _attach_team_keys_to_stints(stints, player_seasons_df, season)
         print(f"\n  Building box-score prior for {season}...")
-        box_prior = compute_box_score_prior(player_seasons_df, season)
+        box_prior = compute_box_score_prior(player_seasons_df, season, experiment_name=experiment_name)
         print(f"    Box-score prior computed for {len(box_prior)} players")
 
         # Build current-season GP lookup for GP-based prior dampening
@@ -2141,7 +2710,8 @@ def run_prior_informed_rapm(stints_by_season, player_seasons_df, current_season_
         )
         print(f"  Regression mode: {mode_str}")
         raw_results = build_rapm(stints, priors=season_priors, current_season_filter=csf,
-                                  events_df=season_events, asymmetric_k=asymmetric_k)
+                                  events_df=season_events, asymmetric_k=asymmetric_k,
+                                  experiment_name=experiment_name)
         all_season_results[season] = raw_results
 
         # Feed this season's results forward as the next season's prior
@@ -3021,7 +3591,7 @@ def fetch_all_pp_pk_stints(game_ids, season_cfg):
 
 
 # ── Step 3: Build RAPM regression ─────────────────────────────────────────────
-def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=None, asymmetric_k=1.0):
+def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=None, asymmetric_k=1.0, experiment_name=""):
     """
     Fit offense/defense RAPM on combined stints with separate coefficient blocks.
     Each observation models one team's xG rate in a stint:
@@ -3044,7 +3614,8 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
       upstream compatibility/debugging; EV RAPM now fits on shift-level rows to
       mirror JFresh's published methodology more closely.
     """
-    stints_df = stints_df[stints_df['duration_seconds'] >= 10].copy()
+    stints_df = _filter_clean_ev_stints(stints_df, min_duration_seconds=10, verbose=True)
+
     n_stints  = len(stints_df)
     if n_stints == 0:
         raise ValueError("No stints to fit — check game fetch above")
@@ -3059,14 +3630,34 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
     all_pids  = sorted(all_pids)
     pid_idx   = {p: i for i, p in enumerate(all_pids)}
     n_players = len(all_pids)
-    context_features = [
-        'is_home_attack', 'score_state', 'score_state_abs', 'period_2', 'period_3',
-        # Dummy variables (Tasks 1, 2, 3) — present only for DUMMY_SEASONS;
-        # absent in older seasons (treated as 0 via .get())
-        'home_pp_expiry', 'away_pp_expiry',
-        'home_ozs', 'away_ozs', 'nzs',
-        'home_btb', 'away_btb',
-    ]
+    _, _, pid_to_pos = _load_player_identity_maps()
+    base_context_features = _base_context_features_for_experiment(experiment_name)
+    context_features = list(base_context_features)
+    team_feature_meta = None
+    if (_experiment_uses_team_intercepts(experiment_name) and
+            {'home_team_key', 'away_team_key'}.issubset(stints_df.columns)):
+        teams = sorted({
+            str(t).upper().strip()
+            for t in pd.concat([stints_df['home_team_key'], stints_df['away_team_key']]).dropna().tolist()
+            if str(t).upper().strip() not in ('', 'UNK', 'NAN')
+        })
+        if len(teams) >= 2:
+            ref_team = teams[0]
+            modeled_teams = teams[1:]
+            attack_names = [f'attack_team_{team}' for team in modeled_teams]
+            defend_names = [f'defend_team_{team}' for team in modeled_teams]
+            context_features.extend(attack_names + defend_names)
+            team_feature_meta = {
+                'reference_team': ref_team,
+                'modeled_teams': modeled_teams,
+                'team_to_idx': {team: idx for idx, team in enumerate(modeled_teams)},
+                'attack_names': attack_names,
+                'defend_names': defend_names,
+            }
+            print(f"  [Exp TD] Team intercepts active: {len(modeled_teams)} modeled teams "
+                  f"(reference={ref_team})")
+        else:
+            print("  [Exp TD] Team intercepts skipped — could not infer enough distinct teams")
     n_context = len(context_features)
 
     # Vectorised per-player 5v5 TOI (seconds) — used later for min-TOI filter
@@ -3148,7 +3739,7 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
 
         home_row = i * 2
         away_row = home_row + 1
-        home_score_state = max(-2.0, min(2.0, float(stint.get('home_score_diff', 0) or 0)))
+        home_score_state = max(-3.0, min(3.0, float(stint.get('home_score_diff', 0) or 0)))
         away_score_state = -home_score_state
         period = int(stint.get('period', 0) or 0)
 
@@ -3171,26 +3762,46 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
                 r_idx.append(away_row); c_idx.append(off_offset + col); vals.append(1.0)
                 r_idx.append(home_row); c_idx.append(def_offset + col); vals.append(1.0)
 
-        for row_idx, is_home_attack, score_state, off_pp_exp, def_pp_exp, off_ozs, def_ozs, off_btb, def_btb in (
-            (home_row, 1.0, home_score_state, h_pp_exp, a_pp_exp, h_ozs, a_ozs, h_btb, a_btb),
-            (away_row, 0.0, away_score_state, a_pp_exp, h_pp_exp, a_ozs, h_ozs, a_btb, h_btb),
+        home_team_key = str(stint.get('home_team_key', '') or '').upper().strip()
+        away_team_key = str(stint.get('away_team_key', '') or '').upper().strip()
+
+        for row_idx, is_home_attack, score_state, off_pp_exp, def_pp_exp, off_ozs, def_ozs, off_btb, def_btb, attack_team_key, defend_team_key in (
+            (home_row, 1.0, home_score_state, h_pp_exp, a_pp_exp, h_ozs, a_ozs, h_btb, a_btb, home_team_key, away_team_key),
+            (away_row, 0.0, away_score_state, a_pp_exp, h_pp_exp, a_ozs, h_ozs, a_btb, h_btb, away_team_key, home_team_key),
         ):
-            ctx_vals = [
-                is_home_attack,
-                score_state,
-                abs(score_state),
-                1.0 if period == 2 else 0.0,
-                1.0 if period == 3 else 0.0,
-                off_pp_exp, def_pp_exp,
-                off_ozs, def_ozs, nzs_val,
-                off_btb, def_btb,
-            ]
+            ctx_vals = _score_state_context_values(
+                score_state=score_state,
+                period=period,
+                off_pp_exp=off_pp_exp,
+                def_pp_exp=def_pp_exp,
+                off_ozs=off_ozs,
+                def_ozs=def_ozs,
+                nzs_val=nzs_val,
+                off_btb=off_btb,
+                def_btb=def_btb,
+                experiment_name=experiment_name,
+            )
             for ctx_col, ctx_val in enumerate(ctx_vals):
                 if ctx_val == 0.0:
                     continue
                 r_idx.append(row_idx)
                 c_idx.append(ctx_offset + ctx_col)
                 vals.append(ctx_val)
+
+            if team_feature_meta:
+                team_to_idx = team_feature_meta['team_to_idx']
+                attack_idx = team_to_idx.get(attack_team_key)
+                defend_idx = team_to_idx.get(defend_team_key)
+                base_offset = ctx_offset + len(base_context_features)
+                n_modeled = len(team_feature_meta['modeled_teams'])
+                if attack_idx is not None:
+                    r_idx.append(row_idx)
+                    c_idx.append(base_offset + attack_idx)
+                    vals.append(1.0)
+                if defend_idx is not None:
+                    r_idx.append(row_idx)
+                    c_idx.append(base_offset + n_modeled + defend_idx)
+                    vals.append(1.0)
 
         if priors:
             h_off = sum(priors.get(pid, {}).get('off', 0.0) for pid in h_pids)
@@ -3210,7 +3821,15 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
         shape=(n_stints_use * 2, n_players * 2 + n_context)
     )
 
-    alphas = [500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0, 50000.0, 100000.0]
+    if _experiment_uses_lower_alpha_cap(experiment_name):
+        # Exp C: cap alpha at 20000 to prevent over-regularization.
+        # Analysis shows 24-25 picks alpha=50000 → λ≈0.011, at JFresh's lower bound.
+        # Lower cap forces CV to select from a range where separation is better.
+        alphas = [200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0]
+        label = "[Exp C]" if experiment_name == EXPERIMENT_LOWER_ALPHA_CAP else "[Exp TD+C]"
+        print(f"  {label} Lower alpha cap: alphas={alphas}")
+    else:
+        alphas = [500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0, 50000.0, 100000.0]
 
     # Asymmetric alpha: scale offense columns by k before regression so their effective
     # L2 penalty is alpha/k² (less regularization on the offense block).
@@ -3232,30 +3851,106 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
     print(f"    (weights = stint_duration_seconds × season_weight, 2 rows per stint)")
     # ── END DEBUG ─────────────────────────────────────────────────────────────
 
-    if asymmetric_k != 1.0:
+    if _experiment_uses_split_block_fit(experiment_name):
+        X_off = X[:, :n_players]
+        X_def = X[:, n_players:n_players * 2]
+        X_ctx = X[:, n_players * 2:]
+        print("Fitting split offense/defense RAPM (shared context + separate RidgeCV blocks)...")
+        split_fit = _fit_split_ev_models(
+            X_off=X_off,
+            X_def=X_def,
+            X_ctx=X_ctx,
+            y=y,
+            weights=weights,
+            alphas=alphas,
+            fit_intercept_ctx=True,
+            max_iter=4,
+        )
+        ctx_coef = split_fit['ctx_coef']
+        rapm_off = split_fit['beta_off'].copy()
+        rapm_def = -split_fit['beta_def'].copy()
+        print(
+            "  [Exp Split] final alphas: "
+            f"ctx={split_fit['ctx_alpha'] if split_fit['ctx_alpha'] is not None else 'n/a'}  "
+            f"off={split_fit['off_alpha']:.1f}  def={split_fit['def_alpha']:.1f}"
+        )
+        if split_fit['off_alpha'] >= max(alphas) or split_fit['def_alpha'] >= max(alphas):
+            print("  Warning: split-fit block alpha is at the top of the EV grid (search range may still be too low)")
+    else:
         col_scale = np.ones(n_players * 2 + n_context)
-        col_scale[:n_players] = asymmetric_k
-        X_fit = X.dot(sparse.diags(col_scale))
-        print(f"  Asymmetric alpha: offense columns scaled by k={asymmetric_k:.2f} "
-              f"(effective off L2 penalty ≈ alpha/{asymmetric_k**2:.2f}×  "
-              f"→ less regularization on offense block)")
-    else:
-        X_fit = X
+        if asymmetric_k != 1.0:
+            col_scale[:n_players] = asymmetric_k
+            print(f"  Asymmetric alpha: offense columns scaled by k={asymmetric_k:.2f} "
+                  f"(effective off L2 penalty ≈ alpha/{asymmetric_k**2:.2f}×  "
+                  f"→ less regularization on offense block)")
 
-    print("Fitting joint offense/defense RAPM (shift-level) (RidgeCV)...")
-    model = RidgeCV(alphas=alphas, fit_intercept=True)
-    model.fit(X_fit, y, sample_weight=weights)
-    print(f"  Best alpha: {model.alpha_}")
-    if float(model.alpha_) >= max(alphas):
-        print("  Warning: selected alpha is still at the top of the EV grid (search range may still be too low)")
+        defensemen_def_scale = _experiment_defensemen_def_block_scale(experiment_name)
+        if defensemen_def_scale != 1.0:
+            def_d_indices = [
+                n_players + i
+                for i, pid in enumerate(all_pids)
+                if str(pid_to_pos.get(pid, '') or '').upper() == 'D'
+            ]
+            if def_d_indices:
+                col_scale[def_d_indices] = defensemen_def_scale
+                print(f"  [Exp TD+D] Defensemen defensive columns scaled by k={defensemen_def_scale:.2f} "
+                      f"(effective D-def L2 penalty ≈ alpha/{defensemen_def_scale**2:.2f}×) "
+                      f"for {len(def_d_indices)} defensemen")
 
-    coef = model.coef_
-    if asymmetric_k != 1.0:
-        # Recover original-scale offense coefficients: β_actual = k × β_scaled
-        rapm_off = coef[:n_players] * asymmetric_k
-    else:
-        rapm_off = coef[:n_players].copy()
-    rapm_def = -coef[n_players:n_players * 2].copy()  # lower xGA allowed = better defense
+        all_def_scale = _experiment_all_def_block_scale(experiment_name)
+        if all_def_scale != 1.0:
+            def_indices = np.arange(n_players, n_players * 2)
+            col_scale[def_indices] = all_def_scale
+            print(f"  [Exp TD+AD] All defensive columns scaled by k={all_def_scale:.2f} "
+                  f"(effective defensive-block L2 penalty ≈ alpha/{all_def_scale**2:.2f}×) "
+                  f"for {len(def_indices)} skaters")
+
+        if np.any(col_scale != 1.0):
+            X_fit = X.dot(sparse.diags(col_scale))
+        else:
+            X_fit = X
+
+        print("Fitting joint offense/defense RAPM (shift-level) (RidgeCV)...")
+        model = RidgeCV(alphas=alphas, fit_intercept=True)
+        model.fit(X_fit, y, sample_weight=weights)
+        print(f"  Best alpha: {model.alpha_}")
+        if float(model.alpha_) >= max(alphas):
+            print("  Warning: selected alpha is still at the top of the EV grid (search range may still be too low)")
+
+        coef = model.coef_
+        scaled_coef = coef * col_scale
+        rapm_off = scaled_coef[:n_players].copy()
+        rapm_def = -scaled_coef[n_players:n_players * 2].copy()  # lower xGA allowed = better defense
+        ctx_coef = coef[n_players * 2:]
+
+        if _experiment_uses_fixed_offense_defense_refit(experiment_name):
+            X_off = X[:, :n_players]
+            X_def = X[:, n_players:n_players * 2]
+            X_ctx = X[:, n_players * 2:]
+            ctx_refit_alphas, def_refit_alphas = _defense_refit_alpha_grids(experiment_name)
+            print("  [Exp DRefit] Re-fitting defense with offense fixed from initial joint fit.")
+            print(f"  [Exp DRefit] alpha grid (ctx): {ctx_refit_alphas}")
+            print(f"  [Exp DRefit] alpha grid (def): {def_refit_alphas}")
+            refit = _fit_defense_refit_fixed_offense(
+                X_off=X_off,
+                X_def=X_def,
+                X_ctx=X_ctx,
+                y=y,
+                weights=weights,
+                beta_off_fixed=rapm_off.copy(),
+                alphas_ctx=ctx_refit_alphas,
+                alphas_def=def_refit_alphas,
+                max_iter=4,
+            )
+            ctx_coef = refit['ctx_coef']
+            rapm_def = -refit['beta_def'].copy()
+            print(
+                "  [Exp DRefit] final alphas: "
+                f"ctx={refit['ctx_alpha'] if refit['ctx_alpha'] is not None else 'n/a'}  "
+                f"def={refit['def_alpha']:.1f}"
+            )
+            if refit['def_alpha'] >= max(def_refit_alphas):
+                print("  Warning: defense-refit alpha hit the top of the capped grid")
 
     # Fix 4: hard cap before adding priors back — clips regression blow-up artifacts
     n_clipped = int(((rapm_off > MAX_RAPM) | (rapm_off < -MAX_RAPM) |
@@ -3273,10 +3968,23 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
             rapm_def[i] += p.get('def', 0.0)
 
     # Print context (including dummy-variable) coefficients
-    ctx_coef = coef[n_players * 2:]
     print("  Context / dummy-variable coefficients:")
-    for cf_name, cf_val in zip(context_features, ctx_coef):
+    for cf_name, cf_val in zip(base_context_features, ctx_coef[:len(base_context_features)]):
         print(f"    {cf_name:<22}: {cf_val:+.6f}")
+    if team_feature_meta:
+        base_n = len(base_context_features)
+        n_modeled = len(team_feature_meta['modeled_teams'])
+        attack_coef = ctx_coef[base_n:base_n + n_modeled]
+        defend_coef = ctx_coef[base_n + n_modeled:base_n + 2 * n_modeled]
+        defend_pairs = list(zip(team_feature_meta['modeled_teams'], defend_coef))
+        defend_pairs.sort(key=lambda kv: kv[1], reverse=True)
+        print(f"    [Exp TD] reference team: {team_feature_meta['reference_team']}")
+        print("    [Exp TD] top defend-team intercepts:")
+        for team, coef_val in defend_pairs[:5]:
+            print(f"      {team:<4}: {coef_val:+.6f}")
+        print("    [Exp TD] bottom defend-team intercepts:")
+        for team, coef_val in defend_pairs[-5:]:
+            print(f"      {team:<4}: {coef_val:+.6f}")
 
     # Fix 5: per-season diagnostics
     print(f"  Diagnostics ({len(all_pids)} players in matrix):")
@@ -3318,7 +4026,7 @@ def build_rapm(stints_df, priors=None, current_season_filter=None, events_df=Non
     results['rapm_off_pct'] = results['rapm_off'].rank(pct=True) * 100
     results['rapm_def_pct'] = results['rapm_def'].rank(pct=True) * 100
 
-    # Add excluded players (< 300 min) back.  When priors are available, use a
+    # Add excluded players back. When priors are available, use a
     # sample-size-shrunk prior instead of hard zero so mid-season callups and
     # low-minute players get a reasonable estimate instead of league-average.
     if excluded_pids:
@@ -4078,14 +4786,23 @@ def check_and_maybe_upload(results_df):
     gate_passed = mc_pct > 90 and dr_pct >= 59.5 and knies_ok and outlier_count <= 10
 
     if gate_passed:
-        print("\n✓ All conditions met — uploading projected 3-year RAPM card to Supabase")
-        if SUPABASE_URL and SUPABASE_KEY:
-            sb = create_client(SUPABASE_URL, SUPABASE_KEY)
-            null_impossible_rapm(sb)
-        upload_rapm(results_df)
+        action_msg = (
+            "uploading projected 3-year RAPM card to Supabase"
+            if not DRY_RUN_ONLY else
+            "DRY_RUN_ONLY active — skipping projected RAPM upload"
+        )
+        print(f"\n✓ All conditions met — {action_msg}")
+        if not DRY_RUN_ONLY:
+            if SUPABASE_URL and SUPABASE_KEY:
+                sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+                null_impossible_rapm(sb)
+            upload_rapm(results_df)
         print_leaderboards(results_df)
         print("\nNext steps:")
-        print("  1. Season RAPM is stored on player_seasons; projected RAPM is refreshed on players")
+        if DRY_RUN_ONLY:
+            print("  1. Dry run completed without writing season/player RAPM to Supabase")
+        else:
+            print("  1. Season RAPM is stored on player_seasons; projected RAPM is refreshed on players")
         print("  2. Re-run: python compute_ratings.py")
         return True
     else:
@@ -4096,7 +4813,7 @@ def check_and_maybe_upload(results_df):
             print(f"  Knies at {knies_pct:.1f}th pct — collinearity still inflating Toronto linemates")
         if outlier_count > 0:
             print(f"  {outlier_count} high-TOI players below 2nd pct — investigate outliers")
-        if SUPABASE_URL and SUPABASE_KEY:
+        if not DRY_RUN_ONLY and SUPABASE_URL and SUPABASE_KEY:
             sb = create_client(SUPABASE_URL, SUPABASE_KEY)
             null_impossible_rapm(sb)
         print_leaderboards(results_df)
@@ -4404,19 +5121,20 @@ if __name__ == '__main__':
     current_season_filter = None
     stints_2526_path = SEASON_CONFIGS['25-26']['stints_file']
     if os.path.exists(stints_2526_path) and '25-26' in season_dfs:
-        cs_stints = season_dfs['25-26']
+        cs_stints = _filter_clean_ev_stints(season_dfs['25-26'], min_duration_seconds=10, verbose=False)
         cs_toi = defaultdict(float)
         for _col in ('home_players', 'away_players'):
             _exp = cs_stints[['duration_seconds', _col]].copy()
             _exp[_col] = _exp[_col].astype(str).str.split('|')
             _exp = _exp.explode(_col)
-            _exp = _exp[_exp[_col].str.strip() != '']
+            _exp[_col] = _exp[_col].astype(str).str.strip()
+            _exp = _exp[_exp[_col].str.match(r'^\d+$')]
             _exp[_col] = _exp[_col].astype(int)
             for _pid, _toi in _exp.groupby(_col)['duration_seconds'].sum().items():
                 cs_toi[_pid] += float(_toi)
         MIN_CURRENT_TOI_SEC = 200 * 60
         current_season_filter = {p for p, t in cs_toi.items() if t >= MIN_CURRENT_TOI_SEC}
-        print(f"  {len(current_season_filter)} players with ≥200 min in 25-26 stints "
+        print(f"  {len(current_season_filter)} players with ≥200 min in clean 25-26 5v5 stints "
               f"(out of {len(cs_toi)} total seen)")
     else:
         print(f"  Warning: 25-26 stints not available — current_season_filter disabled")
@@ -4538,6 +5256,188 @@ if __name__ == '__main__':
             experiment_name="",
             asymmetric_k=k_val,
         )
+    elif experiment_name == EXPERIMENT_INDIVIDUAL_BOX_PRIOR:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment A: individual-only box-score prior")
+        print(f"{'='*60}")
+        print("  Removing cf_pct from the defensive box-score prior.")
+        print("  cf_pct is an on-ice team stat shared between linemates,")
+        print("  which reinforces collinearity in the prior chain.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_STRONGER_ELITE_PRIOR:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment B: stronger elite prior chain weight")
+        print(f"{'='*60}")
+        print("  For players in top-20% prior_off AND ≥1200 min current TOI:")
+        print("  increase chain prior weight from 0.60 to 0.75.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_LOWER_ALPHA_CAP:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment C: lower alpha cap for CV")
+        print(f"{'='*60}")
+        print("  Alpha grid capped at 20000: [200,500,1000,2000,5000,10000,20000].")
+        print("  Forces CV to select from a range where separation is better.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment D: team defense intercepts")
+        print(f"{'='*60}")
+        print("  Adding season-specific team attack/defense intercepts inferred from")
+        print("  the players on each side of the stint, so team suppression environment")
+        print("  is not forced entirely into individual defensemen coefficients.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment E: team defense intercepts + lower alpha cap")
+        print(f"{'='*60}")
+        print("  Combining season-specific team attack/defense intercepts with")
+        print("  the capped alpha grid [200,500,1000,2000,5000,10000,20000].")
+        print("  Goal: separate team suppression from individual defenders while")
+        print("  avoiding the strongest over-shrinkage cases in the defensive block.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSEMEN_DEF_ALPHA:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment F: team defense intercepts + defensemen def alpha")
+        print(f"{'='*60}")
+        print("  Keeping team-level attack/defense intercepts, while reducing ridge")
+        print("  shrinkage only on defensemen defensive coefficients.")
+        print("  Goal: help shutdown defenders without loosening offense or forward blocks.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_ALL_DEF_ALPHA:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment F2: team defense intercepts + all-defense alpha")
+        print(f"{'='*60}")
+        print("  Keeping team-level attack/defense intercepts, while reducing ridge")
+        print("  shrinkage for the entire defensive block only.")
+        print("  Goal: improve raw defensive separation without loosening offense.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_SPLIT_FIT:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment F3: team defense intercepts + split off/def fit")
+        print(f"{'='*60}")
+        print("  Shared context is fit first, then offense and defense blocks are")
+        print("  fit separately with their own RidgeCV alpha selection.")
+        print("  Goal: improve defensive credit allocation without dragging offense.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment F4: TD intercepts + defense refit")
+        print(f"{'='*60}")
+        print("  Fit the normal joint model first, keep offense fixed, then re-fit")
+        print("  shared context and the defensive block on the residual with a")
+        print("  capped alpha grid. Goal: preserve offense while improving EVD.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_HIGH_ALPHA:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment F5: TD intercepts + defense refit (wide D alpha)")
+        print(f"{'='*60}")
+        print("  Same fixed-offense defense refit as F4, but with a much wider")
+        print("  defense alpha grid so the defensive block can shrink harder if")
+        print("  the capped range is still too loose.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_DEFENSE_REFIT_DEF_CHAIN_DAMPEN:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment F6: TD intercepts + defense refit + def-chain dampen")
+        print(f"{'='*60}")
+        print("  Keep the F4 defense refit, but weaken the defensive chained prior")
+        print("  blend toward current-season box context. Goal: preserve Pelech/Seider")
+        print("  gains while cutting prior-driven blue-line cluster carryover.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP_DEFENSE_REALLOCATION:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment G: TD intercepts + lower alpha + D reallocation")
+        print(f"{'='*60}")
+        print("  Using the best raw-fit branch so far, then applying defense-only")
+        print("  collinearity reallocation across all three card seasons.")
+        print("  Goal: reduce same-team blue-line inflation without loosening the")
+        print("  entire model beyond the current best experimental branch.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
+    elif experiment_name == EXPERIMENT_SCORE_STATE_BUCKET_PARITY:
+        print(f"\n{'='*60}")
+        print("Step 3a — Experiment H: JFresh-style score-state buckets")
+        print(f"{'='*60}")
+        print("  Replacing linear score_state + abs(score_state) context with")
+        print("  attack-perspective lead/trail dummies: Up_1/2/3, Down_1/2/3.")
+        print("  Tied remains the reference bucket, matching the public R example.")
+        experimental_raw_results = run_prior_informed_rapm(
+            season_dfs,
+            player_seasons_df,
+            current_season_filter=current_season_filter,
+            events_by_season=events_by_season,
+            experiment_name=experiment_name,
+        )
 
     raw_season_results = apply_promoted_baseline_rapm_adjustments(raw_season_results, season_dfs)
     if experimental_raw_results:
@@ -4567,7 +5467,7 @@ if __name__ == '__main__':
         merged = qualified.merge(context, on='player_id', how='left')
         season_results[season_key] = merged
         print_season_spotlight_summary(season_key, merged, name_to_pid)
-        if not experiment_mode and not QUICK_TEST:
+        if not experiment_mode and not QUICK_TEST and not DRY_RUN_ONLY:
             upload_season_rapm(season_key, merged)
 
     # Step 3c: prior-informed PP/PK RAPM daisy chain + per-season upload
@@ -4585,7 +5485,7 @@ if __name__ == '__main__':
             pk_df = res.get('pk', pd.DataFrame())
             if not pp_df.empty or not pk_df.empty:
                 pp_pk_card_season_results[season_key] = res
-                if not experiment_mode and not QUICK_TEST:
+                if not experiment_mode and not QUICK_TEST and not DRY_RUN_ONLY:
                     upload_season_pp_pk_rapm(season_key, pp_df, pk_df)
         print_pp_pk_leaderboards(pp_pk_card_season_results)
     else:
@@ -4633,14 +5533,18 @@ if __name__ == '__main__':
                     adjusted_raw = raw_df.copy()
             elif experiment_name == EXPERIMENT_2425_COLLINEARITY_REALLOCATION_DEFENSE:
                 adjusted_raw = raw_df.copy()
-            elif experiment_name in {
-                EXPERIMENT_EV_PRIOR_PARITY,
-                EXPERIMENT_XG_CONTEXT_PARITY,
-                EXPERIMENT_SHORT_MISS_PARITY,
-            } | set(_ASYMMETRIC_ALPHA_EXPERIMENTS.keys()):
+            elif _experiment_uses_precomputed_raw_results(experiment_name):
                 adjusted_raw = experimental_raw_results.get(season_key, raw_df.copy())
             else:
                 adjusted_raw = raw_df.copy()
+
+            if experiment_name == EXPERIMENT_TEAM_DEFENSE_INTERCEPTS_LOWER_ALPHA_CAP_DEFENSE_REALLOCATION:
+                if season_key in ('23-24', '24-25', '25-26'):
+                    adjusted_raw = apply_2425_collinearity_reallocation_experiment(
+                        adjusted_raw,
+                        season_dfs[season_key],
+                        defense_only=True,
+                    )
             experimental_raw_results[season_key] = adjusted_raw
             if season_key in ['23-24', '24-25', '25-26']:
                 adjusted_card = filter_qualified_results(adjusted_raw)
@@ -4823,5 +5727,7 @@ if __name__ == '__main__':
               "for production (use full run without QUICK_TEST to publish).")
     else:
         check_and_maybe_upload(projected)
+    if DRY_RUN_ONLY and not experiment_mode and not QUICK_TEST:
+        print("\n[DRY_RUN_ONLY] Season/player writes were skipped during validation.")
 
     print("\n✓ Done. Run compute_ratings.py, then compute_percentiles.py to refresh cards.")
